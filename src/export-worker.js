@@ -12,7 +12,7 @@ import {
   TRUE_PEAK_ORIENTATION
 } from "./dsp-core.js";
 
-const ENGINE_VERSION = "0.10.0";
+const ENGINE_VERSION = "0.11.0";
 const DEFAULT_CHUNK_BYTES = 8 * 1024 * 1024;
 const MEMORY_WARNING_BYTES = 512 * 1024 * 1024;
 const GAIN_EPSILON_DB = 1e-9;

@@ -145,6 +145,45 @@
                 <small>Du kan lämna skärmen på, men undvik att stänga fliken under analysen.</small>
               </div>
 
+              <section class="assessment-context" aria-labelledby="assessmentContextTitle">
+                <div class="assessment-context-copy">
+                  <span class="objective-badge">Regelbaserad vägledning</span>
+                  <div>
+                    <h2 id="assessmentContextTitle">Vad ska mätningen bedömas som?</h2>
+                    <p>Valet ändrar bara förklaringen. Ljudet och mätvärdena påverkas aldrig.</p>
+                  </div>
+                </div>
+                <div class="assessment-selects">
+                  <label>Inspelningstyp
+                    <select id="recordingType">
+                      <option value="soundscape-quiet" selected>Lågmält soundscape</option>
+                      <option value="soundscape-active">Stadsmiljö eller evenemang</option>
+                      <option value="interview">Intervju eller tal</option>
+                      <option value="music">Musikframträdande</option>
+                      <option value="other">Annan inspelning</option>
+                      <option value="objective">Endast objektiv mätning</option>
+                    </select>
+                  </label>
+                  <label>Bedöm för
+                    <select id="assessmentPurpose">
+                      <option value="distribution" selected>Publicering</option>
+                      <option value="preservation">Original eller arkivmaster</option>
+                    </select>
+                  </label>
+                  <button class="info-dot info-dot-large" type="button" data-help-topic="assessment" aria-label="Om regelbaserad vägledning">i</button>
+                </div>
+              </section>
+
+              <article class="assessment-reflection" id="assessmentReflection" aria-live="polite">
+                <div class="assessment-reflection-heading">
+                  <span class="reflection-status" id="assessmentStatus">Väntar på analys</span>
+                  <button class="text-button" type="button" data-help-topic="assessment">Så bedöms värdena</button>
+                </div>
+                <h2 id="assessmentHeadline">Första reflektion visas efter analysen</h2>
+                <p id="assessmentSummary">Verktyget väger samman nivå, dynamik, toppmarginal och signalintegritet enligt tydliga regler.</p>
+                <div class="assessment-actions" id="assessmentActions"></div>
+              </article>
+
               <article class="timeline-card">
                 <div class="card-toolbar">
                   <div>
@@ -211,38 +250,38 @@
                     <section class="measurement-group">
                       <h3>Loudness och dynamik</h3>
                       <dl>
-                        <div><dt>Max LUFS-M</dt><dd id="deepMomentary">saknas</dd></div>
-                        <div><dt>Max LUFS-S</dt><dd id="deepShortTerm">saknas</dd></div>
-                        <div><dt>LUFS-I</dt><dd id="deepIntegrated">saknas</dd></div>
-                        <div><dt>LRA</dt><dd id="deepLra">saknas</dd></div>
-                        <div><dt>PLR</dt><dd id="deepPlr">saknas</dd></div>
+                        <div><dt><span>Max LUFS-M</span><button class="info-dot" type="button" data-help-topic="momentary" aria-label="Om Max LUFS-M">i</button></dt><dd id="deepMomentary">saknas</dd></div>
+                        <div><dt><span>Max LUFS-S</span><button class="info-dot" type="button" data-help-topic="short-term" aria-label="Om Max LUFS-S">i</button></dt><dd id="deepShortTerm">saknas</dd></div>
+                        <div><dt><span>LUFS-I</span><button class="info-dot" type="button" data-help-topic="lufs" aria-label="Om LUFS-I">i</button></dt><dd id="deepIntegrated">saknas</dd></div>
+                        <div><dt><span>LRA</span><button class="info-dot" type="button" data-help-topic="lra" aria-label="Om LRA">i</button></dt><dd id="deepLra">saknas</dd></div>
+                        <div><dt><span>PLR</span><button class="info-dot" type="button" data-help-topic="plr" aria-label="Om PLR">i</button></dt><dd id="deepPlr">saknas</dd></div>
                       </dl>
                     </section>
                     <section class="measurement-group">
                       <h3>Toppar och energi</h3>
                       <dl>
-                        <div><dt>Sample peak</dt><dd id="deepSamplePeak">saknas</dd></div>
-                        <div><dt>Tid för sample peak</dt><dd id="deepSamplePeakTime">saknas</dd></div>
-                        <div><dt>True Peak-estimat</dt><dd id="deepTruePeak">saknas</dd></div>
-                        <div><dt>RMS</dt><dd id="deepRms">saknas</dd></div>
-                        <div><dt>Crest factor</dt><dd id="deepCrest">saknas</dd></div>
+                        <div><dt><span>Sample peak</span><button class="info-dot" type="button" data-help-topic="sample-peak" aria-label="Om Sample peak">i</button></dt><dd id="deepSamplePeak">saknas</dd></div>
+                        <div><dt><span>Tid för sample peak</span><button class="info-dot" type="button" data-help-topic="peak-time" aria-label="Om tid för sample peak">i</button></dt><dd id="deepSamplePeakTime">saknas</dd></div>
+                        <div><dt><span>True Peak-estimat</span><button class="info-dot" type="button" data-help-topic="peak" aria-label="Om True Peak-estimat">i</button></dt><dd id="deepTruePeak">saknas</dd></div>
+                        <div><dt><span>RMS</span><button class="info-dot" type="button" data-help-topic="rms" aria-label="Om RMS">i</button></dt><dd id="deepRms">saknas</dd></div>
+                        <div><dt><span>Crest factor</span><button class="info-dot" type="button" data-help-topic="crest" aria-label="Om Crest factor">i</button></dt><dd id="deepCrest">saknas</dd></div>
                       </dl>
                     </section>
                     <section class="measurement-group">
                       <h3>Stereo</h3>
                       <dl>
-                        <div><dt>Korrelation</dt><dd id="deepCorrelation">saknas</dd></div>
-                        <div><dt>Kanalbalans L/R</dt><dd id="deepChannelBalance">saknas</dd></div>
-                        <div><dt>Mid/Side-förhållande</dt><dd id="deepMidSide">saknas</dd></div>
+                        <div><dt><span>Korrelation</span><button class="info-dot" type="button" data-help-topic="correlation" aria-label="Om stereokorrelation">i</button></dt><dd id="deepCorrelation">saknas</dd></div>
+                        <div><dt><span>Kanalbalans L/R</span><button class="info-dot" type="button" data-help-topic="stereo" aria-label="Om kanalbalans">i</button></dt><dd id="deepChannelBalance">saknas</dd></div>
+                        <div><dt><span>Mid/Side-förhållande</span><button class="info-dot" type="button" data-help-topic="mid-side" aria-label="Om Mid Side-förhållande">i</button></dt><dd id="deepMidSide">saknas</dd></div>
                       </dl>
                     </section>
                     <section class="measurement-group">
                       <h3>Signalintegritet</h3>
                       <dl>
-                        <div><dt>DC vänster</dt><dd id="deepDcLeft">saknas</dd></div>
-                        <div><dt>DC höger</dt><dd id="deepDcRight">saknas</dd></div>
-                        <div><dt>Över full skala</dt><dd id="deepOverrange">saknas</dd></div>
-                        <div><dt>Ogiltiga floatvärden</dt><dd id="deepInvalid">saknas</dd></div>
+                        <div><dt><span>DC vänster</span><button class="info-dot" type="button" data-help-topic="dc" aria-label="Om DC vänster">i</button></dt><dd id="deepDcLeft">saknas</dd></div>
+                        <div><dt><span>DC höger</span><button class="info-dot" type="button" data-help-topic="dc" aria-label="Om DC höger">i</button></dt><dd id="deepDcRight">saknas</dd></div>
+                        <div><dt><span>Över full skala</span><button class="info-dot" type="button" data-help-topic="overrange" aria-label="Om samplingar över full skala">i</button></dt><dd id="deepOverrange">saknas</dd></div>
+                        <div><dt><span>Ogiltiga floatvärden</span><button class="info-dot" type="button" data-help-topic="invalid-float" aria-label="Om ogiltiga floatvärden">i</button></dt><dd id="deepInvalid">saknas</dd></div>
                       </dl>
                     </section>
                   </div>
@@ -345,7 +384,7 @@
 
             <aside class="inspector" aria-label="Trimningsinställningar">
               <section class="inspector-section fade-section">
-                <h2>Linjära toningar</h2>
+                <div class="inspector-heading"><h2>Linjära toningar</h2><button class="info-dot" type="button" data-help-topic="fades" aria-label="Om linjära toningar">i</button></div>
                 <p class="section-description">Av är förvalt. Medhörning och export använder samma linjära amplitudkurva.</p>
 
                 <div class="fade-editor">
@@ -381,7 +420,7 @@
               </section>
 
               <section class="inspector-section gain-section">
-                <div class="inspector-heading"><h2>Gain för hela verket</h2><button class="text-button" id="resetGainButton" type="button">Återställ</button></div>
+                <div class="inspector-heading"><div class="heading-with-help"><h2>Gain för hela verket</h2><button class="info-dot" type="button" data-help-topic="gain" aria-label="Om global gain">i</button></div><button class="text-button" id="resetGainButton" type="button">Återställ</button></div>
                 <p class="section-description">Samma nivåändring över hela inspelningen. Ingen kompressor eller limiter används.</p>
                 <div class="gain-value"><input id="gainNumber" type="number" min="-24" max="24" step="0.1" value="0.0" aria-label="Gain i decibel"><span>dB</span></div>
                 <input id="gainRange" class="accent-range" type="range" min="-24" max="24" step="0.1" value="0" aria-label="Gain i decibel">
@@ -394,7 +433,7 @@
 
               <section class="inspector-section peak-section">
                 <div class="inspector-heading">
-                  <div><h2>Global toppmarginal</h2><span class="method-badge">Orienterande True Peak</span></div>
+                  <div><div class="heading-with-help"><h2>Global toppmarginal</h2><button class="info-dot" type="button" data-help-topic="peak-handling" aria-label="Om global toppmarginal">i</button></div><span class="method-badge">Orienterande True Peak</span></div>
                 </div>
                 <p class="section-description">Om funktionen behövs sänks hela verket lika mycket. Enskilda toppar formas inte.</p>
                 <label class="switch-row peak-switch"><span><strong>Håll global toppmarginal</strong><small>Av som standard</small></span><input type="checkbox" id="peakHandlingToggle"><i aria-hidden="true"></i></label>
@@ -419,7 +458,7 @@
               </section>
 
               <section class="inspector-section">
-                <h2>Jämför lyssning</h2>
+                <div class="inspector-heading"><h2>Jämför lyssning</h2><button class="info-dot" type="button" data-help-topic="monitoring" aria-label="Om utjämnad medhörning">i</button></div>
                 <label class="switch-row"><span><strong>Utjämnad medhörning</strong><small>Jämför klang utan nivåskillnaden</small></span><input type="checkbox" id="levelMatchToggle"><i aria-hidden="true"></i></label>
                 <p class="fine-print">Medhörningsvolymen och utjämnad lyssning påverkar aldrig exportfilen.</p>
               </section>
@@ -446,25 +485,25 @@
               </article>
 
               <fieldset class="profile-fieldset">
-                <legend>Välj exportprofil</legend>
-                <label class="profile-option">
+                <legend><span>Välj exportprofil</span><button class="info-dot" type="button" data-help-topic="export-profiles" aria-label="Om exportprofiler">i</button></legend>
+                <div class="profile-option-wrap"><label class="profile-option">
                   <input type="radio" name="exportProfile" value="preservation" checked>
                   <span class="radio-visual"></span>
                   <span class="profile-icon profile-blue"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4V5Zm3 3v8h2V8H7Zm4-2v12h2V6h-2Zm4 3v6h2V9h-2Z"/></svg></span>
-                  <span class="profile-copy"><strong>Bevarande master</strong><small>WAV med källans samplingsfrekvens och format. För arkiv och fortsatt redigering.</small><span class="profile-tags"><i>WAV</i><i>Förlustfri</i><i>Rekommenderad</i></span></span>
-                </label>
-                <label class="profile-option">
+                  <span class="profile-copy"><span class="profile-title"><strong>Bevarande master</strong></span><small>WAV med källans samplingsfrekvens och format. För arkiv och fortsatt redigering.</small><span class="profile-tags"><i>WAV</i><i>Förlustfri</i><i>Rekommenderad</i></span></span>
+                </label><button class="info-dot profile-info" type="button" data-help-topic="preservation-export" aria-label="Om bevarande master">i</button></div>
+                <div class="profile-option-wrap"><label class="profile-option">
                   <input type="radio" name="exportProfile" value="distribution">
                   <span class="radio-visual"></span>
                   <span class="profile-icon profile-violet"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v10.3a4 4 0 1 0 2 3.46V8h5V3h-7Z"/></svg></span>
-                  <span class="profile-copy"><strong>Redigerad distributionsmaster</strong><small>WAV för leverans. Vid formatändring visas exakt vad som sker före export.</small><span class="profile-tags"><i>WAV</i><i>Leverans</i></span></span>
-                </label>
-                <label class="profile-option" id="listeningProfile">
+                  <span class="profile-copy"><span class="profile-title"><strong>Redigerad distributionsmaster</strong></span><small>WAV för leverans. Vid formatändring visas exakt vad som sker före export.</small><span class="profile-tags"><i>WAV</i><i>Leverans</i></span></span>
+                </label><button class="info-dot profile-info" type="button" data-help-topic="distribution-export" aria-label="Om distributionsmaster">i</button></div>
+                <div class="profile-option-wrap" id="listeningProfile"><label class="profile-option">
                   <input type="radio" name="exportProfile" value="listening" disabled>
                   <span class="radio-visual"></span>
                   <span class="profile-icon profile-gold"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10a5 5 0 0 1 10 0v7h-2v-7a3 3 0 0 0-6 0v7H7v-7Zm-3 2h2v7H4v-7Zm14 0h2v7h-2v-7Z"/></svg></span>
-                  <span class="profile-copy"><strong>Lyssningskopia</strong><small>AAC eller MP3 aktiveras först när storfilsexporten är verifierad på iPad.</small><span class="profile-tags"><i>Kommer senare</i></span></span>
-                </label>
+                  <span class="profile-copy"><span class="profile-title"><strong>Lyssningskopia</strong></span><small>AAC eller MP3 aktiveras först när storfilsexporten är verifierad på iPad.</small><span class="profile-tags"><i>Kommer senare</i></span></span>
+                </label><button class="info-dot profile-info" type="button" data-help-topic="listening-export" aria-label="Om lyssningskopia">i</button></div>
               </fieldset>
 
               <div class="export-progress" id="exportProgress" hidden aria-live="polite">
@@ -508,11 +547,15 @@
               </section>
 
               <section class="inspector-section capability-section">
-                <div class="inspector-heading"><h2>Teknisk status</h2><span class="status-pill" id="capabilityStatus">Kontrollerar</span></div>
+                <div class="inspector-heading"><div class="heading-with-help"><h2>Teknisk status</h2><button class="info-dot" type="button" data-help-topic="export-status" aria-label="Om teknisk exportstatus">i</button></div><span class="status-pill" id="capabilityStatus">Kontrollerar</span></div>
                 <ul id="capabilityList"><li><span>Analysmotor</span><strong>Kontrollerar</strong></li><li><span>WAV-export</span><strong>Kontrollerar</strong></li><li><span>Projektfil</span><strong>Inbyggd reserv</strong></li></ul>
               </section>
 
               <section class="export-action-panel">
+                <div class="export-recommendation" id="exportRecommendation">
+                  <div><strong>Exportkontroll</strong><button class="info-dot" type="button" data-help-topic="export-safety" aria-label="Om exportkontrollen">i</button></div>
+                  <p id="exportRecommendationText">Analysera filen för en rekommendation före export.</p>
+                </div>
                 <button class="button button-primary button-large button-full" id="exportAudioButton" type="button">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 3h2v10.2l3.6-3.6L18 11l-6 6-6-6 1.4-1.4 3.6 3.6V3ZM5 19h14v2H5v-2Z"/></svg>
                   Exportera ljudfil
@@ -540,6 +583,9 @@
         <nav class="help-nav" aria-label="Hjälpavsnitt">
           <button class="is-active" type="button" data-help-section="principles">Grundprinciper</button>
           <button type="button" data-help-section="lufs">LUFS och dynamik</button>
+          <button type="button" data-help-section="measurements">Alla mätvärden</button>
+          <button type="button" data-help-section="processing">Bearbetningar</button>
+          <button type="button" data-help-section="export">Export</button>
           <button type="button" data-help-section="trim">Trimning</button>
           <button type="button" data-help-section="privacy">Integritet</button>
         </nav>

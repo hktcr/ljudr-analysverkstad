@@ -6,12 +6,12 @@ Denna fil beskriver verifieringskedjan för LjudR Analysverkstad. En release är
 
 Kontrollerat lokalt den 14 augusti 2026:
 
-- [x] 39 av 39 automatiska tester godkända, inklusive 35 funktions- och regressionstester samt 4 särskilda releaseprov.
+- [x] 44 av 44 automatiska tester godkända, inklusive vägledning, informationsrutor och exportskydd för PCM 16, 24 och 32 bit samt float 32 bit.
 - [x] Syntaxkontroll godkänd för app, WAV-motor, DSP-motor, workers, projektmodul och service worker.
 - [x] Samtliga resurser i appskalet svarar med HTTP 200 från lokal webbserver.
 - [x] PWA-ikonerna är giltiga PNG-filer i 192 x 192 och 512 x 512 bildpunkter.
 - [x] Alla publicerade sökvägar använder ASCII-tecken.
-- [x] Releaseversionen 0.10.0 är bekräftad i paketdata, projektmodul, DSP-motor, exportmotor, service worker och dokumentation.
+- [x] Releaseversionen 0.11.0 är bekräftad i paketdata, projektmodul, DSP-motor, exportmotor, service worker och dokumentation.
 - [x] CSP blockerar externa anslutningar genom `connect-src 'none'`.
 - [x] Inga externa script, typsnitt, spårare eller analysverktyg används.
 - [x] Inga ljudfiler ingår i den återställda källan.

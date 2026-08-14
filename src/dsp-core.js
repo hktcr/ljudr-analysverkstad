@@ -5,7 +5,7 @@
  * Ljudfilen ändras inte. Mätvärdena är avsedda som sakliga beslutsunderlag.
  */
 
-export const ENGINE_VERSION = "0.10.0";
+export const ENGINE_VERSION = "0.11.0";
 
 export const DEFAULT_PEAK_HANDLING = Object.freeze({
   enabled: false,

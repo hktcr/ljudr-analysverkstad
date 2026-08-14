@@ -1,5 +1,25 @@
 # Ändringslogg
 
+## 0.11.0, 2026-08-14
+
+### Tillagt
+
+- regelbaserad första reflektion för soundscape, evenemang, intervju, musik och annan inspelning
+- separat bedömning för publicering respektive original eller arkivmaster
+- femgradig nivåorientering med tydliga metodbegränsningar
+- informationsrutor för samtliga fördjupade mätvärden
+- informationsrutor och rekommendationer för toningar, gain, toppmarginal och medhörning
+- informationsrutor för exportprofiler, teknisk status och exportkontroll
+- aktuellt värde ställt i relation till andra relevanta mått i varje informationsruta
+- större och mer yteffektiv hjälpdialog för bred skärm och iPad
+- 44 automatiska regressionstester
+
+### Förtydligat
+
+- vägledningen är deterministisk och använder ingen AI
+- referensintervallen är vägledning, inte standarder eller kvalitetsbetyg
+- varje rekommendation kräver lyssning innan ljudet ändras
+
 ## 0.10.0, 2026-08-14
 
 Första planerade publika valideringskandidaten.

@@ -29,6 +29,10 @@ const state = {
     volume: 0.8,
     levelMatched: false,
   },
+  assessment: {
+    recordingType: "soundscape-quiet",
+    purpose: "distribution",
+  },
   playback: {
     currentSeconds: 0,
     playing: false,
@@ -156,6 +160,13 @@ const elements = {
   exportProgressFill: $("#exportProgressFill"),
   capabilityStatus: $("#capabilityStatus"),
   capabilityList: $("#capabilityList"),
+  recordingType: $("#recordingType"),
+  assessmentPurpose: $("#assessmentPurpose"),
+  assessmentStatus: $("#assessmentStatus"),
+  assessmentHeadline: $("#assessmentHeadline"),
+  assessmentSummary: $("#assessmentSummary"),
+  assessmentActions: $("#assessmentActions"),
+  exportRecommendationText: $("#exportRecommendationText"),
   helpDialog: $("#helpDialog"),
   helpCopy: $("#helpCopy"),
   toastRegion: $("#toastRegion"),
@@ -182,6 +193,41 @@ const helpContent = {
       <p>I ett ljudlandskap kan tysta partier, plötsliga läten och stora avstånd vara själva innehållet. Ett lågt LUFS-värde är därför inte automatiskt ett problem.</p>
       <p>True Peak är en uppskattning av toppar mellan samplen. Se alltid rapportens valideringsstatus innan ett värde används som leveranskrav.</p>`,
   },
+  measurements: {
+    title: "Mätvärdena i sitt sammanhang",
+    body: `
+      <p class="help-lead">Klicka på informationsknappen bredvid ett värde för att se dess aktuella värde, vad det betyder, vilka andra mått det ska jämföras med och vad som inte kan utläsas av måttet.</p>
+      <ul>
+        <li>Loudness bedöms tillsammans med toppnivå, PLR och fördelningen över tid.</li>
+        <li>Dynamik bedöms med LRA, crest factor och skillnaden mellan korta och integrerade nivåer.</li>
+        <li>Stereo bedöms med kanalbalans, korrelation och Mid Side-förhållande tillsammans.</li>
+        <li>Signalintegritet beskriver tekniska avvikelser. Den avgör inte om miljöljudet är estetiskt önskvärt.</li>
+      </ul>`,
+  },
+  processing: {
+    title: "Bearbetningar och deras konsekvenser",
+    body: `
+      <p class="help-lead">LjudR erbjuder bara ingrepp som är tydliga, globala och möjliga att redovisa exakt.</p>
+      <ul>
+        <li>Trimning tar bort material före startgränsen och efter slutgränsen.</li>
+        <li>Linjära toningar påverkar endast ytterkanterna på det valda utsnittet.</li>
+        <li>Gain ändrar samtliga samplingar lika mycket.</li>
+        <li>Global toppmarginal kan endast sänka hela verket. Den är inte en limiter.</li>
+        <li>Utjämnad medhörning påverkar bara det du hör under jämförelsen.</li>
+      </ul>`,
+  },
+  export: {
+    title: "Export, format och säkerhetskontroller",
+    body: `
+      <p class="help-lead">Exportmotorn läser och skriver långa filer blockvis. Före omräkning kontrolleras det valda utsnittet efter toningar och före gain.</p>
+      <ul>
+        <li>Ren trimning utan gain eller toningar bevarar ljuddatat bitidentiskt.</li>
+        <li>PCM får TPDF dither när samplingarna måste räknas om.</li>
+        <li>IEEE float behöver inte kvantiseringsdither.</li>
+        <li>Positiv gain som skulle klampa PCM stoppas före export.</li>
+        <li>True Peak är fortfarande ett orienterande estimat och ingen formell leveransgaranti.</li>
+      </ul>`,
+  },
   trim: {
     title: "Trimma varsamt vid ytterkanterna",
     body: `
@@ -195,6 +241,198 @@ const helpContent = {
       <p>Filen läses i små block av webbläsaren. Den skickas inte till GitHub, gAIa, någon analystjänst eller någon annan mottagare.</p>
       <p>Projektfiler och rapporter innehåller mätvärden, trimgränser, markörer och metadata, men inga ljudsamplingar. En ljudfil lämnar verktyget endast när du själv väljer Exportera.</p>
       <p>Om källfilen ligger i iCloud kan iPad först behöva hämta den från Apples lagring till enheten.</p>`,
+  },
+};
+
+const helpTopics = {
+  assessment: {
+    title: "Regelbaserad första reflektion",
+    meaning: "Vald inspelningstyp och användning bestämmer vilka referensintervall som används när mätvärdena beskrivs.",
+    relation: "LUFS vägs samman med toppmarginal, LRA, PLR, crest factor och tekniska observationer.",
+    caution: "Skalan är vägledning, inte en standard och inte ett kvalitetsbetyg. Ett lågmält soundscape kan vara avsiktligt mycket tyst.",
+    recommendation: "Använd reflektionen som en startpunkt och kontrollera alltid med lyssning innan en nivåändring.",
+  },
+  momentary: {
+    title: "Max LUFS M",
+    meaning: "Den högsta momentana loudness som uppmätts i ett fönster på ungefär 400 millisekunder.",
+    relation: "Jämför med LUFS S och LUFS I. En stor skillnad visar att en kort händelse är betydligt starkare än helheten.",
+    caution: "Ett enstaka fågelrop, rop eller slag kan ge ett högt värde utan att resten av inspelningen är stark.",
+    recommendation: "Öppna markören för högsta momentana loudness och lyssna innan du bedömer om toppen är problematisk.",
+  },
+  "short-term": {
+    title: "Max LUFS S",
+    meaning: "Den högsta korttidsnivån, beräknad över ungefär tre sekunder.",
+    relation: "Jämför med LUFS I för att se hur mycket den starkaste passagen avviker från hela inspelningen.",
+    caution: "Värdet beskriver nivå, inte om ljudhändelsen är önskvärd eller störande.",
+    recommendation: "Använd tidsmarkören för att kontrollera den starkaste sammanhängande passagen.",
+  },
+  lufs: {
+    title: "Integrerad loudness, LUFS I",
+    meaning: "Ett grindat mått på den genomsnittligt upplevda ljudstyrkan i hela materialet.",
+    relation: "Ska läsas tillsammans med True Peak, PLR, LRA och inspelningens typ. Gain ändrar normalt LUFS och toppnivå ungefär lika många decibel.",
+    caution: "Lågt LUFS är inte automatiskt ett fel. Naturlig stillhet kan vara själva innehållet.",
+    recommendation: "Bedöm nivån mot vald användning och provlyssna vid realistisk volym.",
+  },
+  lra: {
+    title: "Loudness Range, LRA",
+    meaning: "Beskriver spridningen i korttidsloudness över tid efter statistisk grindning.",
+    relation: "Jämför med crest factor och PLR. LRA beskriver längre nivåvariationer, medan crest factor påverkas mer av korta toppar.",
+    caution: "LRA är mindre stabilt för material kortare än ungefär en minut.",
+    recommendation: "Stor LRA i ett soundscape är ofta naturlig och är inte i sig skäl för kompression.",
+  },
+  plr: {
+    title: "Peak to Loudness Ratio, PLR",
+    meaning: "Skillnaden mellan orienterande True Peak och integrerad loudness.",
+    relation: "Hög PLR tyder på stor toppmarginal eller tydliga transienter i förhållande till medelnivån.",
+    caution: "PLR är beroende av det orienterande True Peak-estimatet och är därför också orienterande.",
+    recommendation: "Använd PLR som dynamikindikator, inte som ett mål som alltid ska höjas eller sänkas.",
+  },
+  "sample-peak": {
+    title: "Sample peak",
+    meaning: "Den högsta absoluta nivån bland de lagrade samplingarna.",
+    relation: "Jämför med True Peak. True Peak kan vara högre eftersom den uppskattar signalen mellan samplingarna.",
+    caution: "En sample peak vid full skala kan vara klippt, men själva toppvärdet bevisar inte distorsion.",
+    recommendation: "Kontrollera toppens tid och lyssna. Floatvärden över full skala kan fortfarande återställas genom global sänkning.",
+  },
+  "peak-time": {
+    title: "Tid för högsta sample peak",
+    meaning: "Tidpunkten för den högsta lagrade samplen i den kanal som nådde högst nivå.",
+    relation: "Använd tillsammans med vågformen, markörerna och observationer om nivåsprång eller platåer.",
+    caution: "Tidpunkten anger var du ska kontrollera, inte att ett fel har konstaterats.",
+    recommendation: "Hoppa till området och lyssna före varje beslut om trimning eller nivå.",
+  },
+  peak: {
+    title: "Orienterande True Peak",
+    meaning: "Ett översamplat estimat av möjliga toppar mellan de lagrade samplingarna.",
+    relation: "Jämför med sample peak, LUFS I och vald gain. Skillnaden mot önskat tak anger möjlig global sänkning.",
+    caution: "Metoden är inte standardvaliderad och får inte beskrivas som en garanterad leveransmätning.",
+    recommendation: "Använd marginal och kontrollera en slutlig leverans med en validerad mätare när ett formellt krav finns.",
+  },
+  rms: {
+    title: "RMS",
+    meaning: "Signalens kvadratiska medelnivå, ett rent energimått utan loudnessgrindning.",
+    relation: "Jämför med sample peak för crest factor och med LUFS för att se skillnaden mellan rå energi och perceptuell viktning.",
+    caution: "RMS tar inte hänsyn till människans frekvensberoende hörsel på samma sätt som LUFS.",
+    recommendation: "Använd främst RMS för tekniska jämförelser och för att följa nivå över tid.",
+  },
+  crest: {
+    title: "Crest factor",
+    meaning: "Skillnaden mellan sample peak och RMS. Den visar hur toppig signalen är.",
+    relation: "Jämför med PLR och LRA. De tre måtten beskriver olika tidsskalor av dynamik.",
+    caution: "Hög crest factor kan vara ett naturligt läte mot en tyst bakgrund och är inte ett fel.",
+    recommendation: "Undvik automatisk kompression enbart på grund av ett högt värde.",
+  },
+  correlation: {
+    title: "Stereokorrelation",
+    meaning: "Visar hur lika vänster och höger kanal är i samtidiga nivåförändringar, från minus ett till plus ett.",
+    relation: "Läs tillsammans med Mid Side-förhållande och kanalbalans. Negativa perioder kan ge svagare återgivning i mono.",
+    caution: "Ett brett naturligt stereofält kan ha låg korrelation utan att vara felaktigt.",
+    recommendation: "Kontrollera i mono och hörlurar innan någon stereoförändring övervägs.",
+  },
+  stereo: {
+    title: "Kanalbalans vänster mot höger",
+    meaning: "Skillnaden i sammanlagd energi mellan vänster och höger kanal.",
+    relation: "Jämför med balansens tidslinje och den verkliga scenens riktning. En konsekvent skillnad kan vara naturlig.",
+    caution: "Noll decibel är inte alltid det korrekta målet för en dokumentär stereobild.",
+    recommendation: "Ändra inte balansen utan att lyssningen visar ett faktiskt problem.",
+  },
+  "mid-side": {
+    title: "Mid Side-förhållande",
+    meaning: "Förhållandet mellan det gemensamma innehållet i båda kanalerna och skillnadsinnehållet mellan dem.",
+    relation: "Jämför med korrelation. Mycket Side och låg korrelation kan indikera stor bredd eller möjlig monorisk.",
+    caution: "Måttet avgör inte om stereobredden är naturtrogen.",
+    recommendation: "Använd värdet för orientering och kontrollera alltid stereobilden med lyssning.",
+  },
+  dc: {
+    title: "DC offset",
+    meaning: "Visar om signalens medelvärde ligger förskjutet från elektrisk noll.",
+    relation: "Jämför kanalerna och kontrollera om förskjutningen är ihållande eller lokal.",
+    caution: "Ett litet numeriskt värde är normalt. Verktyget tar inte bort DC automatiskt.",
+    recommendation: "Åtgärda endast en tydlig och relevant förskjutning med ett dokumenterat filter i ett lämpligt redigeringsprogram.",
+  },
+  overrange: {
+    title: "Floatvärden över full skala",
+    meaning: "Räknar 32 bit floatsamplingar vars absolutvärde överstiger 1,0.",
+    relation: "Jämför med topparnas regioner och efterföljande PCM export. Float overrange är inte automatiskt klippning.",
+    caution: "Värdena kan klampras om de exporteras till PCM utan tillräcklig global sänkning.",
+    recommendation: "Använd exportens toppförkontroll och lämna marginal innan PCM export.",
+  },
+  "invalid-float": {
+    title: "Ogiltiga floatvärden",
+    meaning: "Räknar NaN och oändliga tal som inte är giltiga ljudsamplingar.",
+    relation: "Relatera antalet till filens längd och markeringarna där värdena förekommer.",
+    caution: "Sådana värden är ett tekniskt dataproblem, inte ett akustiskt fenomen.",
+    recommendation: "Om antalet är större än noll bör källan och exporten kontrolleras noggrant.",
+  },
+  fades: {
+    title: "Linjära toningar",
+    meaning: "En linjär amplitudkurva från tystnad till full nivå eller tillbaka till tystnad.",
+    relation: "Längden ska relateras till snittets karaktär. Korta toningar motverkar klick, längre toningar blir hörbara gestaltningsval.",
+    caution: "Överlappande toningar använder den lägsta av kurvorna och kan sänka hela ett mycket kort utsnitt.",
+    recommendation: "Börja kort och lyssna. För soundscape kan en längre toning vara lämplig, men den ska vara ett medvetet val.",
+  },
+  gain: {
+    title: "Global gain",
+    meaning: "Samma nivåändring appliceras på varje sampling och bevarar interna nivårelationer.",
+    relation: "Relatera gain till både LUFS och toppnivå. Plus tre decibel höjer normalt båda ungefär tre decibel.",
+    caution: "Gain förbättrar inte signalens brusförhållande och reparerar inte distorsion.",
+    recommendation: "Välj nivån med både mätning och lyssning. Använd toppförkontrollen före positiv gain till PCM.",
+  },
+  "peak-handling": {
+    title: "Global toppmarginal",
+    meaning: "Sänker vid behov hela det valda utsnittet så att det orienterande True Peak-estimatet når valt tak.",
+    relation: "Beräkningen använder valt utsnitt efter toningar och före gain. Ingen enskild topp förändras separat.",
+    caution: "Det är inte limitering och estimatet är inte en formell dBTP garanti.",
+    recommendation: "Låt funktionen vara av om ingen sänkning behövs. Minus två dBTP ger försiktigare marginal än minus ett med nuvarande estimator.",
+  },
+  monitoring: {
+    title: "Utjämnad medhörning",
+    meaning: "Tar bort den valda globala nivåskillnaden under jämförelselyssning så att klang och toningar kan jämföras lättare.",
+    relation: "Medhörningsvolym och utjämning ligger i en separat lyssningskedja och påverkar inte exporten.",
+    caution: "Utjämnad lyssning kan dölja hur stor den verkliga nivåändringen blir.",
+    recommendation: "Växla mellan faktisk och utjämnad nivå före export.",
+  },
+  "export-profiles": {
+    title: "Exportprofiler",
+    meaning: "Profilerna beskriver avsikten med filen. I denna version bevarar båda aktiva profilerna källans WAV format.",
+    relation: "Profilen redovisas i exportrapporten tillsammans med trimning, gain, toningar och toppkontroll.",
+    caution: "En profil ändrar inte ljudet i smyg. Lyssningskopia är avstängd tills kodning av stora filer är verifierad på iPad.",
+    recommendation: "Spara alltid en bevarande master innan en komprimerad lyssningskopia skapas i ett senare steg.",
+  },
+  "preservation-export": {
+    title: "Bevarande master",
+    meaning: "En förlustfri WAV som behåller källans samplingsfrekvens och kodningsformat.",
+    relation: "Ren trimning kan vara bitidentisk i ljuddatat. Gain eller toningar kräver omräkning.",
+    caution: "Metadata från okända WAV block kan inte alltid bevaras och redovisas därför i exportrapporten.",
+    recommendation: "Använd denna som ny arbetsmaster och behåll alltid originalinspelningen separat.",
+  },
+  "distribution-export": {
+    title: "Redigerad distributionsmaster",
+    meaning: "En WAV avsedd som källa för publicering eller senare formatkodning.",
+    relation: "Den innehåller de trimningar, toningar och globala nivåval som visas i exportsammanfattningen.",
+    caution: "Den aktiva versionen skapar inte AAC eller MP3 och gör ingen automatisk loudnessnormalisering.",
+    recommendation: "Kontrollera rapporten och provlyssna på den sparade filen innan den kodas för en plattform.",
+  },
+  "listening-export": {
+    title: "Lyssningskopia",
+    meaning: "En framtida mindre fil i ett komprimerat format för enkel distribution.",
+    relation: "Den ska härledas från distributionsmastern, inte ersätta originalet eller bevarandemastern.",
+    caution: "Funktionen är medvetet avstängd tills stora filer har verifierats på fysisk iPad.",
+    recommendation: "Använd tills vidare den exporterade WAV filen i en betrodd kodare.",
+  },
+  "export-status": {
+    title: "Teknisk status",
+    meaning: "Visar om webbläsaren har de funktioner som analys, blockvis export och lokal storfilslagring behöver.",
+    relation: "OPFS minskar behovet av att hålla en stor export helt i arbetsminnet. Minnesreserv används när OPFS saknas.",
+    caution: "Redo betyder att funktionerna finns, inte att varje filstorlek har praktiskt verifierats på den aktuella enheten.",
+    recommendation: "Provexportera och kontrollera en stor fil på din iPad innan ett viktigt original bearbetas.",
+  },
+  "export-safety": {
+    title: "Exportkontroll och rekommendation",
+    meaning: "Sammanfattar vad exporten kommer att ändra och om aktuella mätvärden visar en tydlig teknisk risk.",
+    relation: "Kontrollen väger ihop utsnitt, toningar, gain, toppmarginal, källformat och aktuell analys.",
+    caution: "True Peak delen är orienterande. Den slutliga filen bör alltid provlyssnas efter sparande.",
+    recommendation: "Exportera först när sammanfattningen stämmer med din avsikt och inga olösta varningar återstår.",
   },
 };
 
@@ -302,6 +540,7 @@ function emitState(reason) {
       peakHandling: { ...state.peakHandling },
       markers: state.markers.map((marker) => ({ ...marker })),
       metadata: { ...state.metadata },
+      assessment: { ...state.assessment },
     },
   }));
 }
@@ -575,6 +814,145 @@ function renderAnalysisSummary() {
   $("#metricBalance").textContent = balance === null ? "ej analyserat" : `${balance >= 0 ? "L " : "R "}${formatDecimal(Math.abs(balance), 1)} dB`;
   updateProjectedMetrics();
   renderDeepMeasurements();
+  renderAssessmentReflection();
+  updateExportRecommendation();
+}
+
+const assessmentProfiles = {
+  "soundscape-quiet": {
+    label: "lågmält soundscape",
+    bands: [-30, -24, -18, -14],
+    reference: "Det interna publiceringsintervallet är försiktigt och lämnar plats för naturlig stillhet.",
+  },
+  "soundscape-active": {
+    label: "stadsmiljö eller evenemang",
+    bands: [-27, -21, -16, -12],
+    reference: "Aktiva miljöer kan normalt bära en högre integrerad nivå än ett lågmält soundscape.",
+  },
+  interview: {
+    label: "intervju eller tal",
+    bands: [-24, -20, -16, -13],
+    reference: "Tal behöver oftast ligga jämnare och högre än ett stilla ljudlandskap för att vara lätt att följa.",
+  },
+  music: {
+    label: "musikframträdande",
+    bands: [-24, -19, -14, -10],
+    reference: "Musik varierar kraftigt mellan genrer. Intervallet är endast en grov orientering.",
+  },
+  other: {
+    label: "annan inspelning",
+    bands: [-28, -22, -16, -12],
+    reference: "Utan en mer specifik typ används ett brett orienteringsintervall.",
+  },
+  objective: {
+    label: "objektiv mätning",
+    bands: null,
+    reference: "Ingen nivåklassificering görs när endast objektiv mätning är vald.",
+  },
+};
+
+function levelClass(value, bands) {
+  if (value === null || !bands) return null;
+  if (value < bands[0]) return { label: "Mycket låg", key: "very-low" };
+  if (value < bands[1]) return { label: "Ganska låg", key: "low" };
+  if (value <= bands[2]) return { label: "Inom referensområdet", key: "reference" };
+  if (value <= bands[3]) return { label: "Ganska hög", key: "high" };
+  return { label: "Mycket hög", key: "very-high" };
+}
+
+function renderAssessmentReflection() {
+  if (!elements.assessmentHeadline) return;
+  const profile = assessmentProfiles[state.assessment.recordingType] || assessmentProfiles.other;
+  const summary = state.analysis?.summary || {};
+  const integrated = finite(summary.integratedLufs ?? summary.lufsI);
+  const peak = finite(summary.truePeakEstimateDbtp ?? summary.truePeakDbtp ?? summary.truePeak);
+  const lra = finite(summary.loudnessRangeLu ?? summary.lra);
+  const plr = finite(summary.plrEstimateLu) ?? (integrated === null || peak === null ? null : peak - integrated);
+  const overrange = finite(summary.overrangeSamples) ?? 0;
+  const invalid = finite(summary.nonFiniteSamples) ?? 0;
+
+  if (!state.analysis) {
+    elements.assessmentStatus.textContent = "Väntar på analys";
+    elements.assessmentHeadline.textContent = "Första reflektion visas efter analysen";
+    elements.assessmentSummary.textContent = "Verktyget väger samman nivå, dynamik, toppmarginal och signalintegritet enligt tydliga regler.";
+    elements.assessmentActions.replaceChildren();
+    return;
+  }
+
+  if (state.assessment.purpose === "preservation" || state.assessment.recordingType === "objective") {
+    elements.assessmentStatus.textContent = state.assessment.purpose === "preservation" ? "Arkivbedömning" : "Objektiv mätning";
+    elements.assessmentHeadline.textContent = state.assessment.purpose === "preservation"
+      ? "Ingen publiceringsnivå behöver eftersträvas i originalet"
+      : "Mätvärdena visas utan nivåklassificering";
+    const peakText = peak === null ? "Toppmarginal saknas." : `Det orienterande True Peak-estimatet är ${formatDecimal(peak, 1)} dBTP.`;
+    elements.assessmentSummary.textContent = `${peakText} Bevara originalfilen och gör nivåval i en separat arbetskopia. ${profile.reference}`;
+  } else if (integrated === null) {
+    elements.assessmentStatus.textContent = "Kan inte klassificeras";
+    elements.assessmentHeadline.textContent = "Ingen stabil integrerad loudness kunde beräknas";
+    elements.assessmentSummary.textContent = "Materialet kan ligga under loudnessgrinden eller sakna tillräckligt giltigt signalinnehåll. Bedöm tidslinjen och lyssna innan någon nivåändring.";
+  } else {
+    const rating = levelClass(integrated, profile.bands);
+    elements.assessmentStatus.textContent = rating.label;
+    elements.assessmentHeadline.textContent = `${rating.label} nivå för ${profile.label}`;
+    const dynamics = lra === null
+      ? "Dynamisk spridning kan inte klassificeras."
+      : lra >= 12
+        ? "Den dynamiska spridningen är stor."
+        : lra >= 6
+          ? "Den dynamiska spridningen är måttlig."
+          : "Den dynamiska spridningen är begränsad.";
+    const peakText = peak === null
+      ? "Toppmarginalen saknar värde."
+      : peak > -1
+        ? "Det orienterande toppvärdet ligger nära eller över en försiktig leveransmarginal."
+        : peak < -8
+          ? "Det finns gott om orienterande toppmarginal."
+          : "Den orienterande toppmarginalen är användbar men bör kontrolleras före positiv gain.";
+    elements.assessmentSummary.textContent = `${profile.reference} ${dynamics} ${peakText}`;
+  }
+
+  const actions = [];
+  if (invalid > 0) actions.push("Prioritet: kontrollera ogiltiga floatvärden");
+  if (overrange > 0) actions.push("Kontrollera float overrange före PCM export");
+  if (plr !== null && plr >= 14) actions.push("Stor toppdynamik: undvik automatisk kompression");
+  if (peak !== null && integrated !== null && state.assessment.purpose === "distribution") {
+    const rating = levelClass(integrated, profile.bands);
+    const available = Math.max(0, -2 - peak);
+    if (rating && ["very-low", "low"].includes(rating.key) && available >= 0.5) {
+      const desired = Math.max(0, profile.bands[1] - integrated);
+      const trial = Math.min(desired, available, 6);
+      if (trial >= 0.5) actions.push(`Prova högst cirka +${formatDecimal(trial, 1)} dB och lyssna`);
+    }
+    if (rating && ["high", "very-high"].includes(rating.key)) actions.push("Ingen nivåhöjning rekommenderas");
+  }
+  if (!actions.length) actions.push("Lyssna i hörlurar och vid låg högtalarvolym");
+  elements.assessmentActions.innerHTML = actions.map(action => `<span>${escapeHtml(action)}</span>`).join("");
+}
+
+function updateExportRecommendation() {
+  if (!elements.exportRecommendationText) return;
+  if (!state.file) {
+    elements.exportRecommendationText.textContent = "Öppna och analysera en fil för en rekommendation före export.";
+    return;
+  }
+  const changes = [];
+  const trimmed = state.trim.startFrame > 0 || state.trim.endFrame < toFrame(durationSeconds());
+  if (trimmed) changes.push("trimning");
+  if (state.trim.fadeInSeconds > 0 || state.trim.fadeOutSeconds > 0) changes.push("toningar");
+  if (Math.abs(state.trim.gainDb) > 1e-9) changes.push("global gain");
+  if (state.peakHandling.enabled) changes.push("global toppmarginal");
+  const peak = analysisTruePeakDbtp();
+  const predicted = peak === null ? null : peak + state.trim.gainDb + peakAdjustmentDb();
+  if (!changes.length) {
+    elements.exportRecommendationText.textContent = "Inga bearbetningar är valda. Hela filen kan bevaras utan omräkning av ljudsamplingarna.";
+  } else if (predicted !== null && predicted > 0) {
+    elements.exportRecommendationText.textContent = `Valt: ${changes.join(", ")}. Det orienterande toppestimatet ligger över 0 dBTP. Sänk gain eller aktivera en försiktigare global toppmarginal före PCM export.`;
+  } else {
+    const ditherText = state.fileInfo?.encoding === "PCM" && changes.some(item => item !== "trimning")
+      ? "PCM samplingarna räknas om med TPDF dither."
+      : "Exportmotorn gör en ny toppförkontroll på exakt valt utsnitt.";
+    elements.exportRecommendationText.textContent = `Valt: ${changes.join(", ")}. ${ditherText} Provlyssna den sparade filen.`;
+  }
 }
 
 function renderDeepMeasurements() {
@@ -899,6 +1277,7 @@ function updateExportSummary() {
       : adjustment < -0.05
         ? `${formatDecimal(adjustment, 1)} dB globalt, tak ${formatDecimal(config.ceilingDbtp, 1)} dBTP`
         : `På, tak ${formatDecimal(config.ceilingDbtp, 1)} dBTP`;
+  updateExportRecommendation();
 }
 
 async function ensureAudioGraph() {
@@ -1368,7 +1747,7 @@ async function saveProjectFile() {
       edit: projectEdit(),
       markers: state.markers,
       metadata: collectMetadata(),
-      settings: { monitoring: state.monitoring, view: state.view },
+      settings: { monitoring: state.monitoring, view: state.view, assessment: state.assessment },
     };
     const project = projectTools?.buildProject
       ? await projectTools.buildProject(input)
@@ -1380,7 +1759,7 @@ async function saveProjectFile() {
           edit: projectEdit(),
           markers: state.markers,
           metadata: collectMetadata(),
-          settings: { monitoring: state.monitoring, view: state.view },
+          settings: { monitoring: state.monitoring, view: state.view, assessment: state.assessment },
           privacy: { audioIncluded: false },
         };
     const fileName = `${baseName(state.file.name)}.ljudr.json`;
@@ -1443,6 +1822,12 @@ async function applyPendingProjectToFile() {
     ceilingDbtp: -2,
     sourceTruePeakDbtp: analysisTruePeakDbtp(),
   });
+  state.assessment = {
+    ...state.assessment,
+    ...(project.settings?.assessment || {}),
+  };
+  if (assessmentProfiles[state.assessment.recordingType]) elements.recordingType.value = state.assessment.recordingType;
+  if (["distribution", "preservation"].includes(state.assessment.purpose)) elements.assessmentPurpose.value = state.assessment.purpose;
   syncFadeUi();
   syncPeakHandlingUi();
   updateGain(state.trim.gainDb);
@@ -1623,6 +2008,47 @@ function fitTimeline() {
   scheduleCanvasRender();
 }
 
+function helpTopicLive(topic) {
+  const summary = state.analysis?.summary || {};
+  const integrated = finite(summary.integratedLufs ?? summary.lufsI);
+  const truePeak = finite(summary.truePeakEstimateDbtp ?? summary.truePeakDbtp ?? summary.truePeak);
+  const samplePeak = finite(summary.samplePeakDbfs ?? summary.samplePeak);
+  const momentary = finite(summary.momentaryMaxLufs);
+  const shortTerm = finite(summary.shortTermMaxLufs);
+  const lra = finite(summary.loudnessRangeLu ?? summary.lra);
+  const plr = finite(summary.plrEstimateLu) ?? (integrated === null || truePeak === null ? null : truePeak - integrated);
+  const values = {
+    momentary: [momentary === null ? "Saknas" : `${formatDecimal(momentary, 2)} LUFS`, integrated === null || momentary === null ? "Analysera för jämförelse" : `${formatDecimal(momentary - integrated, 2)} LU över LUFS I`],
+    "short-term": [shortTerm === null ? "Saknas" : `${formatDecimal(shortTerm, 2)} LUFS`, integrated === null || shortTerm === null ? "Analysera för jämförelse" : `${formatDecimal(shortTerm - integrated, 2)} LU över LUFS I`],
+    lufs: [integrated === null ? "Saknas" : `${formatDecimal(integrated, 2)} LUFS`, integrated === null ? "Välj fil och analysera" : `${levelClass(integrated, assessmentProfiles[state.assessment.recordingType]?.bands)?.label || "Ingen klassificering"} för valt sammanhang`],
+    lra: [lra === null ? "Saknas" : `${formatDecimal(lra, 2)} LU`, lra === null ? "Analysera för jämförelse" : lra >= 12 ? "Stor dynamisk spridning" : lra >= 6 ? "Måttlig dynamisk spridning" : "Begränsad dynamisk spridning"],
+    plr: [plr === null ? "Saknas" : `${formatDecimal(plr, 2)} dB`, plr === null ? "Kräver LUFS I och True Peak" : plr >= 14 ? "Stor skillnad mellan topp och helhet" : plr >= 9 ? "Måttlig skillnad mellan topp och helhet" : "Begränsad skillnad mellan topp och helhet"],
+    "sample-peak": [samplePeak === null ? "Saknas" : `${formatDecimal(samplePeak, 2)} dBFS`, truePeak === null || samplePeak === null ? "Analysera för jämförelse" : `True Peak-estimatet är ${formatDecimal(truePeak - samplePeak, 2)} dB högre`],
+    "peak-time": [$("#deepSamplePeakTime")?.textContent || "Saknas", "Jämför med toppmarkörerna i tidslinjen"],
+    peak: [truePeak === null ? "Saknas" : `${formatDecimal(truePeak, 2)} dBTP`, truePeak === null ? "Analysera för jämförelse" : `${formatDecimal(-2 - truePeak, 2)} dB till verktygets försiktiga orienteringstak på minus 2 dBTP`],
+    rms: [finite(summary.rmsDbfs) === null ? "Saknas" : `${formatDecimal(summary.rmsDbfs, 2)} dBFS`, integrated === null || finite(summary.rmsDbfs) === null ? "Analysera för jämförelse" : `${formatDecimal(integrated - summary.rmsDbfs, 2)} dB skillnad mot LUFS I`],
+    crest: [finite(summary.crestFactorDb) === null ? "Saknas" : `${formatDecimal(summary.crestFactorDb, 2)} dB`, plr === null ? "Jämför med PLR efter analys" : `PLR är ${formatDecimal(plr, 2)} dB`],
+    correlation: [finite(summary.correlation) === null ? "Saknas" : formatDecimal(summary.correlation, 4), finite(summary.midSideRatioDb) === null ? "Jämför med Mid Side efter analys" : `Mid Side-förhållandet är ${formatDecimal(summary.midSideRatioDb, 2)} dB`],
+    stereo: [finite(summary.channelBalanceDb) === null ? "Saknas" : `${formatDecimal(summary.channelBalanceDb, 2)} dB`, finite(summary.channelBalanceDb) === null ? "Analysera för jämförelse" : Math.abs(summary.channelBalanceDb) < 1 ? "Liten sammanlagd energiskillnad" : "Tydlig sammanlagd energiskillnad, kontrollera scenen"],
+    "mid-side": [finite(summary.midSideRatioDb) === null ? "Saknas" : `${formatDecimal(summary.midSideRatioDb, 2)} dB`, finite(summary.correlation) === null ? "Jämför med korrelation efter analys" : `Korrelationen är ${formatDecimal(summary.correlation, 4)}`],
+    dc: [$("#deepDcLeft")?.textContent || "Saknas", `Höger kanal: ${$("#deepDcRight")?.textContent || "saknas"}`],
+    overrange: [$("#deepOverrange")?.textContent || "Saknas", state.fileInfo?.encoding === "IEEE_FLOAT" ? "Floatkälla, kontrollera före PCM export" : "Inte tillämpligt på vanlig PCM på samma sätt"],
+    "invalid-float": [$("#deepInvalid")?.textContent || "Saknas", "Noll är det förväntade tekniska utfallet"],
+    assessment: [assessmentProfiles[state.assessment.recordingType]?.label || "Annan inspelning", state.assessment.purpose === "distribution" ? "Bedöms för publicering" : "Bedöms som original eller arkivmaster"],
+    fades: [`In ${formatDecimal(state.trim.fadeInSeconds, 2)} s, ut ${formatDecimal(state.trim.fadeOutSeconds, 2)} s`, `Valt utsnitt är ${formatTime(Math.max(0, state.trim.endSeconds - state.trim.startSeconds))}`],
+    gain: [`${state.trim.gainDb >= 0 ? "+" : ""}${formatDecimal(state.trim.gainDb, 1)} dB`, truePeak === null ? "Toppjämförelse saknas" : `Beräknat True Peak före exportkontroll: ${formatDecimal(truePeak + state.trim.gainDb, 2)} dBTP`],
+    "peak-handling": [state.peakHandling.enabled ? `På, ${formatDecimal(state.peakHandling.ceilingDbtp, 1)} dBTP` : "Av", `Beräknad global sänkning ${formatDecimal(peakAdjustmentDb(), 2)} dB`],
+    monitoring: [state.monitoring.levelMatched ? "Utjämnad" : "Faktisk nivåskillnad", `Medhörningsvolym ${formatDecimal(state.monitoring.volume * 100, 0)} procent`],
+    "export-profiles": [$(`input[name='exportProfile']:checked`)?.value || "Ingen", "Se exportsammanfattningen för alla val"],
+    "preservation-export": ["WAV med källformat", technicalDescription()],
+    "distribution-export": ["WAV distributionsmaster", technicalDescription()],
+    "listening-export": ["Avstängd", "Inväntar fysisk storfilsvalidering på iPad"],
+    "export-status": [elements.capabilityStatus?.textContent || "Kontrollerar", state.capabilities.opfs ? "OPFS är tillgängligt" : "Minnesreserv används"],
+    "export-safety": [state.analysis ? "Analys finns" : "Analys saknas", elements.exportRecommendationText?.textContent || "Ingen rekommendation ännu"],
+  };
+  return values[topic] || ["Se aktuell vy", "Relatera alltid värdet till inspelningstyp och användning"];
+}
+
 function openHelp(section = "principles") {
   renderHelp(section);
   if (typeof elements.helpDialog.showModal === "function") elements.helpDialog.showModal();
@@ -1630,9 +2056,25 @@ function openHelp(section = "principles") {
 }
 
 function renderHelp(section) {
-  const content = helpContent[section] || helpContent.principles;
-  elements.helpCopy.innerHTML = `<h3>${content.title}</h3>${content.body}`;
-  $$("[data-help-section]").forEach((button) => button.classList.toggle("is-active", button.dataset.helpSection === section));
+  const topic = helpTopics[section];
+  if (topic) {
+    const [current, comparison] = helpTopicLive(section);
+    elements.helpCopy.innerHTML = `
+      <h3>${escapeHtml(topic.title)}</h3>
+      <p class="help-lead">${escapeHtml(topic.meaning)}</p>
+      <dl class="help-facts">
+        <div><dt>Aktuellt värde eller val</dt><dd>${escapeHtml(current)}</dd></div>
+        <div><dt>Ställt i relation till</dt><dd>${escapeHtml(comparison)}</dd></div>
+        <div><dt>Ska läsas tillsammans med</dt><dd>${escapeHtml(topic.relation)}</dd></div>
+        <div><dt>Typ av slutsats</dt><dd>Regelbaserad vägledning. Ingen AI och ingen automatisk ljudändring.</dd></div>
+      </dl>
+      <div class="help-recommendation"><strong>Rekommendation</strong><p>${escapeHtml(topic.recommendation)}</p></div>
+      <div class="help-caution"><strong>Begränsning</strong><p>${escapeHtml(topic.caution)}</p></div>`;
+  } else {
+    const content = helpContent[section] || helpContent.principles;
+    elements.helpCopy.innerHTML = `<h3>${content.title}</h3>${content.body}`;
+  }
+  $$("[data-help-section]").forEach((button) => button.classList.toggle("is-active", !topic && button.dataset.helpSection === section));
 }
 
 function bindEvents() {
@@ -1651,6 +2093,18 @@ function bindEvents() {
   elements.dropZone.addEventListener("drop", (event) => openAudioFile(event.dataTransfer?.files?.[0]));
 
   elements.analyzeButton.addEventListener("click", startAnalysis);
+  elements.recordingType.addEventListener("change", () => {
+    state.assessment.recordingType = elements.recordingType.value;
+    renderAssessmentReflection();
+    updateExportRecommendation();
+    emitState("assessment-context");
+  });
+  elements.assessmentPurpose.addEventListener("change", () => {
+    state.assessment.purpose = elements.assessmentPurpose.value;
+    renderAssessmentReflection();
+    updateExportRecommendation();
+    emitState("assessment-purpose");
+  });
   elements.saveProject.addEventListener("click", saveProjectFile);
   elements.openProject.addEventListener("click", () => elements.projectInput.click());
   elements.projectInput.addEventListener("change", () => readProject(elements.projectInput.files?.[0]));
@@ -1832,7 +2286,11 @@ function bindEvents() {
     if (event.target === elements.helpDialog) elements.helpDialog.close();
   });
   $$("[data-help-section]").forEach((button) => button.addEventListener("click", () => renderHelp(button.dataset.helpSection)));
-  $$("[data-help-topic]").forEach((button) => button.addEventListener("click", () => openHelp(button.dataset.helpTopic === "peak" || button.dataset.helpTopic === "lra" ? "lufs" : button.dataset.helpTopic)));
+  $$("[data-help-topic]").forEach((button) => button.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    openHelp(button.dataset.helpTopic);
+  }));
 
   window.addEventListener("resize", scheduleCanvasRender, { passive: true });
   window.addEventListener("orientationchange", scheduleCanvasRender, { passive: true });
@@ -1848,6 +2306,8 @@ function bindEvents() {
 async function initialize() {
   bindEvents();
   applyMetadata(state.metadata);
+  elements.recordingType.value = state.assessment.recordingType;
+  elements.assessmentPurpose.value = state.assessment.purpose;
   elements.audio.volume = state.monitoring.volume;
   if (!(window.AudioContext || window.webkitAudioContext)) {
     elements.levelMatch.disabled = true;

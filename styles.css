@@ -967,6 +967,136 @@ svg {
   font-weight: bold;
 }
 
+.info-dot:hover,
+.info-dot:focus-visible {
+  color: var(--blue);
+  background: var(--blue-soft);
+}
+
+.info-dot-large {
+  width: 36px;
+  height: 36px;
+  align-self: end;
+}
+
+.assessment-context {
+  display: grid;
+  margin-bottom: 16px;
+  padding: 15px 17px;
+  grid-template-columns: minmax(260px, 1fr) minmax(430px, 1.2fr);
+  align-items: center;
+  gap: 18px;
+  background: var(--surface);
+  border: 1px solid rgba(24, 34, 54, 0.09);
+  border-radius: 14px;
+  box-shadow: var(--shadow-small);
+}
+
+.assessment-context-copy {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.assessment-context-copy .objective-badge {
+  flex: 0 0 auto;
+}
+
+.assessment-context h2 {
+  margin: 0 0 2px;
+  font-size: 0.93rem;
+}
+
+.assessment-context p {
+  margin: 0;
+  font-size: 0.7rem;
+}
+
+.assessment-selects {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(160px, 0.8fr) 36px;
+  align-items: end;
+  gap: 9px;
+}
+
+.assessment-selects label {
+  display: grid;
+  gap: 4px;
+  color: var(--ink-soft);
+  font-size: 0.66rem;
+  font-weight: 650;
+}
+
+.assessment-selects select {
+  width: 100%;
+  min-height: 40px;
+  padding: 7px 30px 7px 10px;
+  background: #f8f8f6;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  font-size: 0.76rem;
+}
+
+.assessment-reflection {
+  margin-bottom: 16px;
+  padding: 17px 19px;
+  background: linear-gradient(135deg, rgba(110, 90, 167, 0.1), rgba(45, 136, 145, 0.07)), var(--surface);
+  border: 1px solid rgba(110, 90, 167, 0.18);
+  border-radius: 15px;
+  box-shadow: var(--shadow-small);
+}
+
+.assessment-reflection-heading {
+  display: flex;
+  margin-bottom: 6px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.reflection-status {
+  padding: 4px 8px;
+  color: var(--violet);
+  background: var(--violet-soft);
+  border-radius: 99px;
+  font-size: 0.62rem;
+  font-weight: 740;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.assessment-reflection h2 {
+  margin: 0 0 5px;
+  font-size: 1.05rem;
+}
+
+.assessment-reflection > p {
+  max-width: 900px;
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.55;
+}
+
+.assessment-actions {
+  display: flex;
+  margin-top: 11px;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.assessment-actions:empty {
+  display: none;
+}
+
+.assessment-actions span {
+  padding: 5px 8px;
+  color: var(--ink-soft);
+  background: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(24, 34, 54, 0.1);
+  border-radius: 7px;
+  font-size: 0.67rem;
+}
+
 .metric-card > strong {
   display: block;
   overflow: hidden;
@@ -1121,8 +1251,54 @@ svg {
 }
 
 .measurement-group dt {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   color: var(--ink-soft);
   font-size: 0.66rem;
+}
+
+.measurement-group dt .info-dot {
+  width: 19px;
+  height: 19px;
+  font-size: 0.63rem;
+}
+
+.heading-with-help,
+.profile-title,
+.export-recommendation > div,
+.profile-fieldset legend {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.profile-title {
+  justify-content: space-between;
+}
+
+.profile-title .info-dot {
+  width: 20px;
+  height: 20px;
+}
+
+.export-recommendation {
+  margin-bottom: 12px;
+  padding: 12px 13px;
+  color: var(--ink);
+  background: var(--blue-soft);
+  border: 1px solid rgba(49, 95, 139, 0.14);
+  border-radius: 10px;
+}
+
+.export-recommendation strong {
+  font-size: 0.76rem;
+}
+
+.export-recommendation p {
+  margin: 5px 0 0;
+  font-size: 0.69rem;
+  line-height: 1.48;
 }
 
 .measurement-group dd {
@@ -1999,6 +2175,21 @@ svg {
   cursor: pointer;
 }
 
+.profile-option-wrap {
+  position: relative;
+}
+
+.profile-option-wrap .profile-option {
+  padding-right: 48px;
+}
+
+.profile-info {
+  position: absolute;
+  z-index: 2;
+  top: 12px;
+  right: 12px;
+}
+
 .profile-option:has(input:checked) {
   background: #f1f5f8;
   border-color: var(--blue);
@@ -2196,8 +2387,10 @@ svg {
 }
 
 .help-dialog {
-  width: min(860px, calc(100vw - 32px));
-  max-height: min(720px, calc(100vh - 32px));
+  width: min(1120px, calc(100vw - 32px));
+  max-width: none;
+  height: min(820px, calc(100vh - 32px));
+  max-height: none;
   padding: 0;
   overflow: hidden;
   color: var(--ink);
@@ -2233,8 +2426,9 @@ svg {
 
 .dialog-content {
   display: grid;
-  min-height: 400px;
-  grid-template-columns: 210px 1fr;
+  height: calc(100% - 89px);
+  min-height: 0;
+  grid-template-columns: minmax(210px, 250px) 1fr;
 }
 
 .help-nav {
@@ -2262,7 +2456,7 @@ svg {
 }
 
 .help-copy {
-  padding: 27px 30px 35px;
+  padding: clamp(24px, 3vw, 38px);
   overflow: auto;
 }
 
@@ -2282,6 +2476,63 @@ svg {
   padding-left: 20px;
 }
 
+.help-lead {
+  max-width: 760px;
+  font-size: 0.92rem !important;
+}
+
+.help-facts {
+  display: grid;
+  margin: 20px 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.help-facts > div {
+  padding: 13px 14px;
+  background: #f6f6f3;
+  border: 1px solid #e7e7e2;
+  border-radius: 10px;
+}
+
+.help-facts dt {
+  color: var(--ink-faint);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.help-facts dd {
+  margin: 4px 0 0;
+  color: var(--ink);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.help-recommendation,
+.help-caution {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border-radius: 10px;
+}
+
+.help-recommendation {
+  color: #234e42;
+  background: rgba(57, 114, 97, 0.1);
+}
+
+.help-caution {
+  color: #765925;
+  background: var(--gold-soft);
+}
+
+.help-recommendation p,
+.help-caution p {
+  margin: 4px 0 0;
+  color: inherit;
+}
+
 @media (max-width: 1120px) {
   .privacy-badge span {
     max-width: 210px;
@@ -2295,6 +2546,10 @@ svg {
   }
 
   .measurement-groups {
+    grid-template-columns: 1fr;
+  }
+
+  .assessment-context {
     grid-template-columns: 1fr;
   }
 
@@ -2524,6 +2779,28 @@ svg {
     align-items: flex-start;
   }
 
+  .assessment-context {
+    padding: 14px;
+  }
+
+  .assessment-context-copy {
+    align-items: flex-start;
+  }
+
+  .assessment-selects {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .assessment-selects .info-dot-large {
+    grid-column: 1 / 3;
+    justify-self: end;
+  }
+
+  .assessment-reflection-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
   .trim-control-grid {
     grid-template-columns: 1fr;
   }
@@ -2585,8 +2862,18 @@ svg {
   }
 
   .help-copy {
-    max-height: 55vh;
+    height: calc(100% - 61px);
+    max-height: none;
     padding: 22px;
+  }
+
+  .help-dialog {
+    width: calc(100vw - 16px);
+    height: calc(100vh - 16px);
+  }
+
+  .help-facts {
+    grid-template-columns: 1fr;
   }
 }
 

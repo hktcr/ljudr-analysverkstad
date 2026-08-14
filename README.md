@@ -34,12 +34,17 @@ Analysen får vara rik, men varje ljudingrepp måste vara uttryckligt. Originalf
 - projektfil utan ljuddata
 - reproducerbar HTML- och JSON-rapport
 - PWA och offlinecache av appskalet
+- regelbaserad första reflektion utifrån inspelningstyp och användning
+- klickbara informationsrutor för samtliga mätvärden, bearbetningar och exportval
+- aktuella värden jämförda med relaterade mått och tydligt redovisade begränsningar
 
 ## Vetenskaplig status
 
 Beräkningarna är utformade efter ITU-R BS.1770-5 och EBU Tech 3341/3342. Verktyget skiljer därför på mätresultat, observationer och konstnärliga val.
 
-Version 0.10.0 är en valideringskandidat, inte en certifierad loudnessmätare. LUFS, LRA och True Peak ska jämföras med EBU Loudness Test Set och ITU:s testmaterial innan statusen ändras till verifierad. True Peak-värdet och den globala toppmarginalen är därför orienterande, inte leveransgarantier. Varje rapport innehåller motorversion och aktuell valideringsstatus.
+Version 0.11.0 är en valideringskandidat, inte en certifierad loudnessmätare. LUFS, LRA och True Peak ska jämföras med EBU Loudness Test Set och ITU:s testmaterial innan statusen ändras till verifierad. True Peak-värdet och den globala toppmarginalen är därför orienterande, inte leveransgarantier. Varje rapport innehåller motorversion och aktuell valideringsstatus.
+
+Den första reflektionen är ett lokalt och deterministiskt expertsystem. Ingen AI används. Referensintervallen är dokumenterad vägledning och får inte förväxlas med plattformsstandarder eller kvalitetsbetyg. Varje informationsruta redovisar aktuellt värde, relevant jämförelse, rekommendation och begränsning.
 
 Se [Validering](docs/VALIDATION.md) och [Metod](docs/METHOD.md).
 

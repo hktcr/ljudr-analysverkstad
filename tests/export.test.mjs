@@ -33,6 +33,39 @@ const pcm16Wave = (samples, channels = 2, sampleRate = 48000) => {
   return new File([bytes], "fixture.wav", { type: "audio/wav", lastModified: 1 });
 };
 
+const pcmWideWave = (samples, bitsPerSample, channels = 1, sampleRate = 48000) => {
+  const bytesPerSample = bitsPerSample / 8;
+  const blockAlign = channels * bytesPerSample;
+  const dataBytes = samples.length * bytesPerSample;
+  const bytes = new Uint8Array(44 + dataBytes);
+  const view = new DataView(bytes.buffer);
+  ascii(view, 0, "RIFF");
+  view.setUint32(4, 36 + dataBytes, true);
+  ascii(view, 8, "WAVE");
+  ascii(view, 12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, channels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * blockAlign, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, bitsPerSample, true);
+  ascii(view, 36, "data");
+  view.setUint32(40, dataBytes, true);
+  samples.forEach((sample, index) => {
+    const offset = 44 + index * bytesPerSample;
+    if (bitsPerSample === 24) {
+      const unsigned = sample < 0 ? sample + 0x1000000 : sample;
+      view.setUint8(offset, unsigned & 0xff);
+      view.setUint8(offset + 1, (unsigned >>> 8) & 0xff);
+      view.setUint8(offset + 2, (unsigned >>> 16) & 0xff);
+    } else {
+      view.setInt32(offset, sample, true);
+    }
+  });
+  return new File([bytes], `pcm${bitsPerSample}.wav`, { type: "audio/wav", lastModified: 3 });
+};
+
 const float32Wave = (samples, channels = 2, sampleRate = 96000) => {
   const blockAlign = channels * 4;
   const dataBytes = samples.length * 4;
@@ -117,6 +150,28 @@ test("Ren trimning bevarar valda PCM-byte exakt", async () => {
   assert.equal(report.output.pcmClampingRisk.detected, false);
   assert.equal(outputInfo.frameCount, 3);
 });
+
+for (const bitsPerSample of [24, 32]) {
+  test(`Ren trimning bevarar PCM${bitsPerSample} exakt`, async () => {
+    const limit = bitsPerSample === 24 ? 0x7fffff : 0x7fffffff;
+    const file = pcmWideWave([100, -100, limit / 4 | 0, -(limit / 4 | 0), 7, -7], bitsPerSample);
+    const sourceInfo = await inspectWav(file);
+    const { output, report } = await exportWav(file, {
+      startFrame: 1,
+      endFrame: 5,
+      preferOpfs: false,
+    });
+    const outputInfo = await inspectWav(output);
+    const sourcePayload = new Uint8Array(await file.slice(
+      sourceInfo.data.dataOffset + sourceInfo.format.blockAlign,
+      sourceInfo.data.dataOffset + 5 * sourceInfo.format.blockAlign,
+    ).arrayBuffer());
+    const outputPayload = new Uint8Array(await output.slice(outputInfo.data.dataOffset).arrayBuffer());
+    assert.deepEqual(outputPayload, sourcePayload);
+    assert.equal(report.edit.bitExactSamplePayload, true);
+    assert.equal(outputInfo.format.bitsPerSample, bitsPerSample);
+  });
+}
 
 test("Gain gör exporten explicit icke bitidentisk", async () => {
   const file = pcm16Wave([1000, -1000, 2000, -2000]);

@@ -2,7 +2,9 @@
 
 ## Status
 
-Version 0.10.0 är en valideringskandidat. Grundläggande WAV-parsning, sample-exakt trimning, linjära fades, global gain, global toppmarginal och PCM-klamprisk täcks av automatiska regressionstester. Loudness och True Peak är ännu inte certifierade mot hela den officiella testsviten.
+Version 0.11.0 är en valideringskandidat. Grundläggande WAV-parsning, sample-exakt trimning, linjära fades, global gain, global toppmarginal, PCM-klamprisk och det regelbaserade förklaringslagret täcks av automatiska regressionstester. Loudness och True Peak är ännu inte certifierade mot hela den officiella testsviten.
+
+Den kontextuella nivåskalan är ett transparent expertsystem utan AI. Den måste provas mot kända exempel inom lågmälda soundscapes, aktiva miljöer, intervjuer och musik. Testningen ska kontrollera både korrekta råd och att systemet avstår från råd när underlaget är otillräckligt.
 
 En lokal referens den 14 augusti 2026 använde 10 sekunder stereo float med 1 kHz sinus. LjudR-motorn och FFmpeg `ebur128` gav samma Integrated loudness efter avrundning till 0,1 LU. Det är en värdefull regression, men inte ett substitut för EBU:s fullständiga testmaterial.
 
