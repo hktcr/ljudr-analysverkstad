@@ -1,6 +1,6 @@
 {
   "schema": "se.gaia.ljudr.test-inventory/1",
-  "release": "1.0.0-rc.2",
+  "release": "1.0.0-rc.3",
   "files": {
     "dsp.test.mjs": [
       "tolkar PCM16 och hoppar över ett udda okänt chunk",

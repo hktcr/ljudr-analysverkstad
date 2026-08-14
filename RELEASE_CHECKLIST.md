@@ -1,4 +1,4 @@
-# Releasechecklista för 1.0.0-rc.2
+# Releasechecklista för 1.0.0-rc.3
 
 Status: offentlig valideringskandidat. Inte produktionsverifierad 1.0.
 
@@ -16,7 +16,7 @@ Status: offentlig valideringskandidat. Inte produktionsverifierad 1.0.
 ## Lokal kandidat
 
 - [x] Varje releasefil är avsiktligt inkluderad och det publicerade GitHub-trädet matchar det lokalt beräknade trädet exakt.
-- [x] Versionen `1.0.0-rc.2` är konsekvent i paket, app, workers, projekt, rapport, dokumentation, PWA-cache och validation-manifest.
+- [x] Versionen `1.0.0-rc.3` är konsekvent i paket, app, workers, projekt, rapport, dokumentation, PWA-cache och validation-manifest.
 - [x] Syntaxkommandona i `npm run check`, hela fixerade testsuiten och `git diff --check` passerar.
 - [x] EBU visar 68/68 och ITU visar 19/19 för exakt releasekod.
 - [x] Build skapar endast den uttryckliga allowlisten och `build-manifest.json`.
@@ -43,7 +43,7 @@ Status: offentlig valideringskandidat. Inte produktionsverifierad 1.0.
 - [ ] Spara releasecommit, tree-id, Actions run-id, artifact digest och tidsstämplar.
 - [ ] GitHub `main` och buildmanifestets commit är exakt releasecommitten.
 - [x] Pages använder GitHub Actions.
-- [ ] Liveversionen på `https://hktcr.github.io/ljudr-analysverkstad/` visar `1.0.0-rc.2` och matchar releasecommitten.
+- [ ] Liveversionen på `https://hktcr.github.io/ljudr-analysverkstad/` visar `1.0.0-rc.3` och matchar releasecommitten.
 
 ## Live smoke
 
@@ -59,7 +59,7 @@ Status: offentlig valideringskandidat. Inte produktionsverifierad 1.0.
 
 ## RC-kvitto
 
-- Releaseversion: `1.0.0-rc.2`
+- Releaseversion: `1.0.0-rc.3`
 - Releasecommit: _fylls efter commit_
 - Tree-id: _fylls efter commit_
 - Actions run-id: _fylls efter grön körning_

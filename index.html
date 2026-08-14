@@ -190,7 +190,18 @@
                 </div>
                 <h2 id="assessmentHeadline">Första reflektion visas efter analysen</h2>
                 <p id="assessmentSummary">Verktyget väger samman nivå, dynamik, toppmarginal och signalintegritet enligt tydliga regler.</p>
-                <div class="assessment-actions" id="assessmentActions"></div>
+                <section class="assessment-action-plan" id="assessmentActionPlan" hidden aria-labelledby="assessmentActionsTitle">
+                  <div class="assessment-action-heading">
+                    <div><strong id="assessmentActionsTitle">Föreslagna nästa steg</strong><small>Regelbaserade förslag. Inget utförs automatiskt.</small></div>
+                    <span id="assessmentActionCount">0 förslag</span>
+                  </div>
+                  <ol class="assessment-actions" id="assessmentActions"></ol>
+                  <div class="assessment-action-controls">
+                    <button class="button button-secondary button-small" id="reviewFindingsButton" type="button">Granska fynd och markörer</button>
+                    <button class="button button-primary button-small" id="openRecommendationsButton" type="button">Öppna åtgärdsverkstaden</button>
+                    <button class="button button-quiet button-small" id="preserveFromAnalysisButton" type="button">Bevara oförändrat</button>
+                  </div>
+                </section>
               </article>
 
               <section class="measurement-chain" aria-label="Mätkedja">
@@ -465,7 +476,7 @@
                 <div class="neutral-notice" id="gainNotice" hidden></div>
               </section>
 
-              <section class="inspector-section series-section">
+              <section class="inspector-section series-section" id="recommendationWorkbench">
                 <div class="inspector-heading">
                   <div><div class="heading-with-help"><h2>Twenty Minutes Here</h2><button class="info-dot" type="button" data-help-topic="series-reference" aria-label="Om seriens frivilliga nivåreferens">i</button></div><span class="method-badge">Frivillig seriereferens</span></div>
                 </div>

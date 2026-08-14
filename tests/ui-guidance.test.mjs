@@ -24,11 +24,17 @@ test("regelbaserad bedömning har typ, användning och förklarad reflektion", a
   assert.match(html, /id="recordingType"/);
   assert.match(html, /id="assessmentPurpose"/);
   assert.match(html, /id="assessmentReflection"/);
+  assert.match(html, /id="assessmentActionPlan"/);
+  assert.match(html, />Föreslagna nästa steg</);
+  assert.match(html, /id="openRecommendationsButton"/);
+  assert.match(html, /id="preserveFromAnalysisButton"/);
   assert.match(app, /const assessmentProfiles =/);
   assert.match(app, /function levelClass\(/);
   assert.match(app, /Regelbaserad vägledning\. Ingen AI/);
   assert.match(app, /settings: projectSettings\(\)/);
   assert.match(app, /function projectSettings\(\)/);
+  assert.match(app, /requestRegionAnalysis\(\)/);
+  assert.match(app, /recommendationWorkbench/);
   assert.doesNotMatch(app.match(/function projectSettings\(\)[\s\S]*?\n\}/)?.[0] || "", /detail:/, "detaljcache får inte sparas i projektet");
 });
 

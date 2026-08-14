@@ -1,5 +1,12 @@
 # Ändringslogg
 
+## 1.0.0-rc.3, 2026-08-15
+
+- samlar analysens regelbaserade förslag i panelen Föreslagna nästa steg
+- visar prioriterade åtgärder och förklarar att inget utförs automatiskt
+- leder direkt till fynd, markörer och den varsamma åtgärdsverkstaden
+- behåller Bevara oförändrat som ett lika synligt huvudval
+
 ## 1.0.0-rc.2, 2026-08-15
 
 - visar aktuell programversion tydligt intill LjudR-logotypen

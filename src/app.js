@@ -194,6 +194,11 @@ const elements = {
   assessmentHeadline: $("#assessmentHeadline"),
   assessmentSummary: $("#assessmentSummary"),
   assessmentActions: $("#assessmentActions"),
+  assessmentActionPlan: $("#assessmentActionPlan"),
+  assessmentActionCount: $("#assessmentActionCount"),
+  reviewFindings: $("#reviewFindingsButton"),
+  openRecommendations: $("#openRecommendationsButton"),
+  preserveFromAnalysis: $("#preserveFromAnalysisButton"),
   exportRecommendationText: $("#exportRecommendationText"),
   helpDialog: $("#helpDialog"),
   helpCopy: $("#helpCopy"),
@@ -1065,6 +1070,7 @@ function renderAssessmentReflection() {
     elements.assessmentHeadline.textContent = "Första reflektion visas efter analysen";
     elements.assessmentSummary.textContent = "Verktyget väger samman nivå, dynamik, toppmarginal och signalintegritet enligt tydliga regler.";
     elements.assessmentActions.replaceChildren();
+    elements.assessmentActionPlan.hidden = true;
     return;
   }
 
@@ -1115,7 +1121,9 @@ function renderAssessmentReflection() {
     if (rating && ["high", "very-high"].includes(rating.key)) actions.push("Ingen nivåhöjning rekommenderas");
   }
   if (!actions.length) actions.push("Lyssna i hörlurar och vid låg högtalarvolym");
-  elements.assessmentActions.innerHTML = actions.map(action => `<span>${escapeHtml(action)}</span>`).join("");
+  elements.assessmentActions.innerHTML = actions.map((action, index) => `<li><span>${index + 1}</span><p>${escapeHtml(action)}</p></li>`).join("");
+  elements.assessmentActionCount.textContent = `${actions.length} ${actions.length === 1 ? "förslag" : "förslag"}`;
+  elements.assessmentActionPlan.hidden = false;
 }
 
 function updateExportRecommendation() {
@@ -2670,6 +2678,25 @@ function bindEvents() {
     renderAssessmentReflection();
     updateExportRecommendation();
     emitState("assessment-purpose");
+  });
+  elements.reviewFindings.addEventListener("click", () => {
+    state.markerFilter = "all";
+    $$('[data-marker-filter]').forEach((button) => {
+      const active = button.dataset.markerFilter === "all";
+      button.classList.toggle("is-active", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
+    renderMarkers();
+    elements.markerList.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "center" });
+  });
+  elements.openRecommendations.addEventListener("click", () => {
+    setMode("trim");
+    requestRegionAnalysis();
+    window.setTimeout(() => $("#recommendationWorkbench")?.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" }), 120);
+  });
+  elements.preserveFromAnalysis.addEventListener("click", () => {
+    preserveSeries();
+    showToast("Bevara oförändrat är valt. Inga förslag har applicerats.");
   });
   elements.saveProject.addEventListener("click", saveProjectFile);
   elements.openProject.addEventListener("click", () => elements.projectInput.click());

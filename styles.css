@@ -1101,23 +1101,80 @@ svg {
 }
 
 .assessment-actions {
-  display: flex;
-  margin-top: 11px;
-  flex-wrap: wrap;
+  display: grid;
+  margin: 10px 0 0;
+  padding: 0;
   gap: 7px;
+  list-style: none;
 }
 
 .assessment-actions:empty {
   display: none;
 }
 
-.assessment-actions span {
-  padding: 5px 8px;
+.assessment-actions li {
+  display: grid;
+  padding: 8px 10px;
+  grid-template-columns: 24px 1fr;
+  align-items: center;
+  gap: 8px;
   color: var(--ink-soft);
   background: rgba(255, 255, 255, 0.75);
   border: 1px solid rgba(24, 34, 54, 0.1);
-  border-radius: 7px;
-  font-size: 0.67rem;
+  border-radius: 9px;
+  font-size: 0.72rem;
+}
+
+.assessment-actions li > span {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  color: #fff;
+  background: var(--violet);
+  border-radius: 50%;
+  font-size: 0.65rem;
+  font-weight: 760;
+}
+
+.assessment-actions p {
+  margin: 0;
+  color: inherit;
+}
+
+.assessment-action-plan {
+  margin-top: 15px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(110, 90, 167, 0.18);
+}
+
+.assessment-action-heading,
+.assessment-action-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.assessment-action-heading > div {
+  display: grid;
+  gap: 2px;
+}
+
+.assessment-action-heading strong {
+  font-size: 0.82rem;
+}
+
+.assessment-action-heading small,
+.assessment-action-heading > span {
+  color: var(--ink-faint);
+  font-size: 0.65rem;
+}
+
+.assessment-action-controls {
+  margin-top: 10px;
+  justify-content: flex-start;
+  flex-wrap: wrap;
 }
 
 .metric-card > strong {
