@@ -1,5 +1,22 @@
 # Ändringslogg
 
+## 0.12.0, 2026-08-14
+
+### Tillagt
+
+- 64 bit float som intern arbetsprecision för gain och fades
+- 49 taps polyfas FIR-mätning för True Peak
+- analytiska regressionstest för högfrekvent sinus och kraftig intersample-topp
+- kontroll att PCM32:s lägsta bitar bevaras i bearbetningsbufferten
+- sampleexakt referenstest för kombinationen global gain och linjära fades
+- lokalt valideringsskript för EBU:s officiella testfiler
+
+### Förtydligat
+
+- ren trimning är fortsatt bitidentisk
+- FIR-mätningen är starkare men kallas inte formellt verifierad innan hela EBU- och ITU-materialet har körts
+- fysisk långfilsverifiering på iPad Pro återstår
+
 ## 0.11.0, 2026-08-14
 
 ### Tillagt

@@ -7,12 +7,12 @@ import {
   inspectWav
 } from "./wav.js";
 import {
-  CubicTruePeakEstimator,
+  FirTruePeakEstimator,
   normalizePeakHandling,
   TRUE_PEAK_ORIENTATION
 } from "./dsp-core.js";
 
-const ENGINE_VERSION = "0.11.0";
+const ENGINE_VERSION = "0.12.0";
 const DEFAULT_CHUNK_BYTES = 8 * 1024 * 1024;
 const MEMORY_WARNING_BYTES = 512 * 1024 * 1024;
 const GAIN_EPSILON_DB = 1e-9;
@@ -123,7 +123,7 @@ async function preflightSelection(file, inspected, selection, onProgress, should
   const { startFrame, selectedFrames, fadeInFrames, fadeOutFrames } = selection;
   const { format } = inspected;
   const chunkFrames = Math.max(1, Math.floor(DEFAULT_CHUNK_BYTES / format.blockAlign));
-  const truePeak = new CubicTruePeakEstimator(format.channels, format.sampleRate);
+  const truePeak = new FirTruePeakEstimator(format.channels, format.sampleRate);
   let processedFrames = 0;
   let samplePeak = 0;
   let maximum = -Infinity;
@@ -186,7 +186,9 @@ async function preflightSelection(file, inspected, selection, onProgress, should
     truePeakEstimate,
     truePeakEstimateDbtp: amplitudeToDb(truePeakEstimate),
     truePeakFactor: truePeak.factor,
-    truePeakMethod: `${truePeak.factor}x kubisk intersample-estimering`,
+    truePeakMethod: truePeak.factor === 1
+      ? "Sample peak vid minst 192 kHz"
+      : `${truePeak.factor}x polyfas FIR-oversampling med 49 tappar`,
     validationStatus: TRUE_PEAK_ORIENTATION.status
   };
 }

@@ -2,11 +2,13 @@
 
 ## Status
 
-Version 0.11.0 är en valideringskandidat. Grundläggande WAV-parsning, sample-exakt trimning, linjära fades, global gain, global toppmarginal, PCM-klamprisk och det regelbaserade förklaringslagret täcks av automatiska regressionstester. Loudness och True Peak är ännu inte certifierade mot hela den officiella testsviten.
+Version 0.12.0 är en valideringskandidat. WAV-parsning, sample-exakt trimning, linjära fades, 64 bitars intern bearbetning, global gain, global toppmarginal, PCM-klamprisk och det regelbaserade förklaringslagret täcks av automatiska regressionstester. Loudness och True Peak är ännu inte certifierade mot hela den officiella testsviten.
 
 Den kontextuella nivåskalan är ett transparent expertsystem utan AI. Den måste provas mot kända exempel inom lågmälda soundscapes, aktiva miljöer, intervjuer och musik. Testningen ska kontrollera både korrekta råd och att systemet avstår från råd när underlaget är otillräckligt.
 
 En lokal referens den 14 augusti 2026 använde 10 sekunder stereo float med 1 kHz sinus. LjudR-motorn och FFmpeg `ebur128` gav samma Integrated loudness efter avrundning till 0,1 LU. Det är en värdefull regression, men inte ett substitut för EBU:s fullständiga testmaterial.
+
+True Peak-motorn använder nu 49 taps polyfas FIR-oversampling. Ett periodiskt extremprov med samplingarna +0,99, +0,99, -0,99, -0,99 gav cirka +3,03 dBTP. Ett analytiskt 18 kHz sinusprov vid 48 kHz och amplituden 0,9 återgav den kontinuerliga signalens topp inom 0,05 dB. Ett lokalt skript kan köra EBU:s testfall 1 till 5, 15 till 23 samt LRA 1 till 4 när de officiella filerna lagts i en lokal, ignorerad valideringsmapp.
 
 Ett separat blockprov använde 60 sekunder stereo 32 bit float vid 96 kHz, cirka 44 MiB, genom en filbackad Blob. Analysen tog cirka 0,93 sekunder i utvecklingsmiljön och processens högsta observerade RSS var cirka 125 MiB inklusive Node. Resultatet stöder att läsningen är blockbaserad, men säger inte hur snabbt eller minnessnålt samma körning blir i Safari på iPad.
 
@@ -39,13 +41,13 @@ Ett separat blockprov använde 60 sekunder stereo 32 bit float vid 96 kHz, cirka
 
 För ren trimning ska SHA-256 av exporterad sample-payload vara identisk med SHA-256 av samma byteintervall i källfilen. Testet ska köras för PCM 16, 24 och 32 bit samt IEEE float 32 bit, mono och stereo.
 
-För gain och fade ska filens deklarerade bildrutor, data-storlek, kanaler, samplingsfrekvens och kodning stämma. PCM-proven ska kontrollera klampning och TPDF-dither.
+För gain och fade ska filens deklarerade bildrutor, data-storlek, kanaler, samplingsfrekvens och kodning stämma. PCM-proven ska kontrollera klampning och TPDF-dither. PCM32-avkodning ska bevara även de lägsta heltalsbitarna i 64 bitars arbetsbuffert. Float32-export ska motsvara den samplebaserade gain- och fadeformeln exakt efter den enda slutliga float32-avrundningen.
 
 Global toppmarginal ska testas både när den ingriper och när den lämnar signalen oförändrad. Förkontrollen ska använda valt intervall efter fades. När ingen sänkning behövs ska ren trimning fortfarande vara bitidentisk. Positiv gain som skulle klampa PCM ska stoppas innan exportfilen skapas.
 
 ## Jämförelsemätning
 
-LUFS-I, max LUFS-M, max LUFS-S, LRA, sample peak och True Peak ska jämföras med minst två etablerade implementationer, där en är EBU:s officiella testresultat. Skillnader ska dokumenteras per signal och får inte döljas genom avrundning. Den nuvarande kubiska True Peak-estimatorn kan underskatta extrema intersample-toppar och får därför inte användas som ensam leveranskontroll.
+LUFS-I, max LUFS-M, max LUFS-S, LRA, sample peak och True Peak ska jämföras med minst två etablerade implementationer, där en är EBU:s officiella testresultat. Skillnader ska dokumenteras per signal och får inte döljas genom avrundning. Den tidigare kubiska True Peak-estimatorn är borttagen. Den nya FIR-motorn får ändå inte kallas formellt compliance-validerad innan de lokala kopiorna av hela det officiella materialet har körts och protokollet sparats.
 
 ## iPad-prov
 

@@ -1,6 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { analyzeWav, parseWavHeader, calculateIntegratedLufs, calculateLoudnessRange } from "../src/dsp-core.js";
+import {
+  analyzeWav,
+  parseWavHeader,
+  calculateIntegratedLufs,
+  calculateLoudnessRange,
+  FirTruePeakEstimator,
+} from "../src/dsp-core.js";
 
 function fourCc(value) {
   return [...value].map((character) => character.charCodeAt(0));
@@ -159,7 +165,31 @@ test("redovisar float-overrange och icke ändliga värden utan att kalla dem kli
   assert.equal(result.summary.nonFiniteSamples, 2);
   assert.ok(result.observations.some((item) => item.id === "overrange"));
   assert.ok(result.observations.some((item) => item.id === "non-finite"));
-  assert.match(result.validation.truePeakStatus, /inte en standardvaliderad/);
+  assert.match(result.validation.truePeakStatus, /full officiell EBU- och ITU-validering återstår/);
+});
+
+test("49 taps FIR fångar ett kraftigt intersample-mönster omkring plus 3 dBTP", () => {
+  const estimator = new FirTruePeakEstimator(1, 48000);
+  const pattern = [0.99, 0.99, -0.99, -0.99];
+  for (let index = 0; index < 1000; index += 1) {
+    estimator.push(0, pattern[index % pattern.length]);
+  }
+  estimator.finish();
+  const peakDbtp = 20 * Math.log10(estimator.peaks[0]);
+  assert.ok(peakDbtp >= 2.6 && peakDbtp <= 3.2, `${peakDbtp} dBTP`);
+});
+
+test("FIR True Peak återger den analytiska toppen för en högfrekvent sinus", () => {
+  const sampleRate = 48000;
+  const amplitude = 0.9;
+  const estimator = new FirTruePeakEstimator(1, sampleRate);
+  for (let frame = 0; frame < sampleRate / 5; frame += 1) {
+    estimator.push(0, amplitude * Math.sin(2 * Math.PI * 18000 * frame / sampleRate));
+  }
+  estimator.finish();
+  const expectedDbtp = 20 * Math.log10(amplitude);
+  const measuredDbtp = 20 * Math.log10(estimator.peaks[0]);
+  assert.ok(Math.abs(measuredDbtp - expectedDbtp) < 0.05);
 });
 
 test("gatingfunktionerna ger null för tystnad och positiv LRA för varierande energi", () => {

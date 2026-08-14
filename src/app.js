@@ -222,10 +222,11 @@ const helpContent = {
       <p class="help-lead">Exportmotorn läser och skriver långa filer blockvis. Före omräkning kontrolleras det valda utsnittet efter toningar och före gain.</p>
       <ul>
         <li>Ren trimning utan gain eller toningar bevarar ljuddatat bitidentiskt.</li>
+        <li>Gain och toningar beräknas med 64 bit float innan den slutliga kodningen.</li>
         <li>PCM får TPDF dither när samplingarna måste räknas om.</li>
         <li>IEEE float behöver inte kvantiseringsdither.</li>
         <li>Positiv gain som skulle klampa PCM stoppas före export.</li>
-        <li>True Peak är fortfarande ett orienterande estimat och ingen formell leveransgaranti.</li>
+        <li>True Peak använder 49 taps FIR-oversampling men är ingen formell leveransgaranti innan hela den officiella testsviten har körts.</li>
       </ul>`,
   },
   trim: {

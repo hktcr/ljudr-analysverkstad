@@ -5,7 +5,7 @@ import {
   exportWav,
   FADE_OVERLAP_POLICY
 } from "../src/export-worker.js";
-import { inspectWav } from "../src/wav.js";
+import { decodeInterleaved, inspectWav } from "../src/wav.js";
 
 const ascii = (view, offset, text) => {
   for (let index = 0; index < text.length; index += 1) view.setUint8(offset + index, text.charCodeAt(index));
@@ -123,6 +123,21 @@ test("WAV-parsern läser ett vanligt stereo PCM-huvud", async () => {
   assert.equal(info.frameCount, 4);
 });
 
+test("bearbetningsavkodningen använder 64 bit float och bevarar PCM32:s lägsta bitar", () => {
+  const integers = [2147483647, 2147483646, 1, -1, -2147483648];
+  const bytes = new Uint8Array(integers.length * 4);
+  const view = new DataView(bytes.buffer);
+  integers.forEach((value, index) => view.setInt32(index * 4, value, true));
+  const decoded = decodeInterleaved(bytes, {
+    channels: 1,
+    bitsPerSample: 32,
+    encoding: "PCM",
+    blockAlign: 4,
+  });
+  assert.equal(decoded instanceof Float64Array, true);
+  assert.deepEqual(Array.from(decoded, value => value * 2147483648), integers);
+});
+
 test("Ren trimning bevarar valda PCM-byte exakt", async () => {
   const samples = [100, -100, 200, -200, 300, -300, 400, -400, 500, -500];
   const file = pcm16Wave(samples);
@@ -187,6 +202,33 @@ test("Gain gör exporten explicit icke bitidentisk", async () => {
   assert.equal((await inspectWav(output)).frameCount, 2);
 });
 
+test("gain och linjära fades ger exakt förväntad float32-export", async () => {
+  const source = [0.75, -0.5, 0.25, -0.125, 0.6];
+  const file = float32Wave(source, 1, 96000);
+  const gainDb = -3;
+  const multiplier = 10 ** (gainDb / 20);
+  const fadeInFrames = 3;
+  const fadeOutFrames = 2;
+  const { output, report } = await exportWav(file, {
+    gainDb,
+    fadeInFrames,
+    fadeOutFrames,
+    preferOpfs: false,
+  });
+  const info = await inspectWav(output);
+  const view = new DataView(await output.slice(info.data.dataOffset).arrayBuffer());
+  const expected = source.map((sample, index) => {
+    const fadeIn = index < fadeInFrames ? index / (fadeInFrames - 1) : 1;
+    const fromEnd = source.length - 1 - index;
+    const fadeOut = fromEnd < fadeOutFrames ? fromEnd / (fadeOutFrames - 1) : 1;
+    return Math.fround(sample * multiplier * Math.min(fadeIn, fadeOut));
+  });
+  const actual = expected.map((_, index) => view.getFloat32(index * 4, true));
+  assert.deepEqual(actual, expected);
+  assert.equal(report.output.dither.applied, false);
+  assert.equal(report.edit.bitExactSamplePayload, false);
+});
+
 test("Aktiverad toppanpassning som inte behöver ingripa bevarar ren trimning bitidentiskt", async () => {
   const file = pcm16Wave([1000, -1000, 2000, -2000, 3000, -3000]);
   const { output, report } = await exportWav(file, {
@@ -229,7 +271,7 @@ test("Global toppanpassning sänker hela urvalet utan dynamisk limitering", asyn
   assert.ok(report.edit.peakAdjustmentDb < 0);
   assert.ok(report.edit.predictedTruePeakDbtp <= -6 + 1e-9);
   assert.equal(report.edit.peakHandling.dynamicProcessing, false);
-  assert.equal(report.edit.truePeakValidationStatus, "orientational-not-standard-validated");
+  assert.equal(report.edit.truePeakValidationStatus, "fir-cross-validated-not-official-compliance");
   assert.equal(report.output.pcmClampingRisk.detected, false);
   assert.equal(report.output.dither.applied, true);
 

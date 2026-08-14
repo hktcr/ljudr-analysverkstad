@@ -17,7 +17,7 @@ LUFS-I för ett soundscape behöver inte följa ett talpoddsriktvärde. En möjl
 
 ## Peak och full skala
 
-Sample peak är den högsta lagrade samplingen. True Peak försöker uppskatta toppar mellan samplingarna genom översampling. I 32 bit float kan lagrade värden ligga över 0 dBFS utan att den ursprungliga floatfilen nödvändigtvis är förstörd. Verktyget kallar detta över full skala och redovisar tid och omfattning.
+Sample peak är den högsta lagrade samplingen. True Peak uppskattar toppar mellan samplingarna med 49 taps polyfas FIR-oversampling. Material under 96 kHz mäts fyrfaldigt, 96 till under 192 kHz mäts tvåfaldigt och material vid minst 192 kHz använder sample peak. I 32 bit float kan lagrade värden ligga över 0 dBFS utan att den ursprungliga floatfilen nödvändigtvis är förstörd. Verktyget kallar detta över full skala och redovisar tid och omfattning.
 
 ## Trimning
 
@@ -27,7 +27,7 @@ Fade är avstängd som standard. Den väljs bara när Håkan själv bedömer att
 
 ## Gain
 
-Endast en statisk gain för hela verket finns. Ingen lokal gain, automatisk nivåutjämning, kompression, limiter, brusreducering eller EQ ingår. Förhandsvisningen ska skilja tydligt mellan medhörningsvolym och den gain som faktiskt skrivs till exporten.
+Endast en statisk gain för hela verket finns. Ingen lokal gain, automatisk nivåutjämning, kompression, limiter, brusreducering eller EQ ingår. Förhandsvisningen ska skilja tydligt mellan medhörningsvolym och den gain som faktiskt skrivs till exporten. Avkodning, gain och fades beräknas i 64 bit float. Den slutliga filen avrundas först vid kodning till originalets format.
 
 Vid PCM-export med gain eller fade kvantiseras samplingarna på nytt med TPDF-dither. Vid ren trimning sker ingen dither eftersom sample-payloaden inte räknas om.
 
@@ -35,7 +35,7 @@ Vid PCM-export med gain eller fade kvantiseras samplingarna på nytt med TPDF-di
 
 Den globala toppmarginalen är avstängd som standard. När den aktiveras gör exportmotorn en extra blockvis förkontroll av det valda intervallet efter fades. Om det orienterande True Peak-estimatet tillsammans med vald gain överstiger taket minskas samma gainvärde för hela urvalet. Intern dynamik och stereorelationer bevaras.
 
-Funktionen är inte limitering, soft clipping eller automatisk normalisering. Den formar inte enskilda toppar och kan inte reparera redan klippt eller distorderat ljud. Förvalt tak är -2 dBTP, men estimatorn är ännu inte validerad för formella leveranskrav.
+Funktionen är inte limitering, soft clipping eller automatisk normalisering. Den formar inte enskilda toppar och kan inte reparera redan klippt eller distorderat ljud. Förvalt tak är -2 dBTP. FIR-mätningen är betydligt starkare än den tidigare kubiska uppskattningen, men full officiell EBU- och ITU-validering samt fysisk iPad-verifiering återstår.
 
 För PCM använder exportmotorn dessutom sample peak som en separat hård säkerhetskontroll. Positiv gain blockeras före omkodning om den skulle orsaka numerisk klampning. Rapporten skiljer mellan rå klamprisk och den mycket mindre marginalrisk som kan uppstå när TPDF-dither läggs till.
 

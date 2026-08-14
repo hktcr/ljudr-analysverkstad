@@ -172,7 +172,10 @@ export async function inspectWav(blob) {
 export function decodeInterleaved(bytes, format, target = null) {
   const { channels, bitsPerSample, encoding, blockAlign } = format;
   const frameCount = Math.floor(bytes.byteLength / blockAlign);
-  const output = target || new Float32Array(frameCount * channels);
+  // Bearbetningsvägen använder 64 bit float. Det bevarar hela precisionen
+  // hos PCM32 genom gain och fades. IEEE float32 avrundas först när den nya
+  // WAV-filen kodas, inte mellan de enskilda bearbetningsstegen.
+  const output = target || new Float64Array(frameCount * channels);
   if (output.length < frameCount * channels) throw new RangeError("Målbufferten är för liten.");
   const view = new DataView(bytes.buffer, bytes.byteOffset, frameCount * blockAlign);
   let byteOffset = 0;

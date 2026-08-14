@@ -29,6 +29,7 @@ Analysen får vara rik, men varje ljudingrepp måste vara uttryckligt. Originalf
 - blockvis toppförkontroll av det valda intervallet efter fades
 - spärr mot positiv gain som skulle klampa PCM-samplingar
 - WAV-export i originalets kodning och samplingsfrekvens
+- 64 bit float som intern arbetsprecision för gain och fades
 - bitidentisk sample-payload när endast trimgränser används
 - TPDF-dither när PCM-samplingar måste räknas om
 - projektfil utan ljuddata
@@ -42,7 +43,7 @@ Analysen får vara rik, men varje ljudingrepp måste vara uttryckligt. Originalf
 
 Beräkningarna är utformade efter ITU-R BS.1770-5 och EBU Tech 3341/3342. Verktyget skiljer därför på mätresultat, observationer och konstnärliga val.
 
-Version 0.11.0 är en valideringskandidat, inte en certifierad loudnessmätare. LUFS, LRA och True Peak ska jämföras med EBU Loudness Test Set och ITU:s testmaterial innan statusen ändras till verifierad. True Peak-värdet och den globala toppmarginalen är därför orienterande, inte leveransgarantier. Varje rapport innehåller motorversion och aktuell valideringsstatus.
+Version 0.12.0 är en valideringskandidat, inte en certifierad loudnessmätare. Gain och fades beräknas nu med 64 bit float. True Peak använder en 49 taps polyfas FIR-modell av samma typ som den etablerade libebur128-implementationen. Lokala analytiska signalprov och jämförelser med FFmpeg ingår, men hela EBU Loudness Test Set och ITU:s testmaterial ska fortfarande köras innan statusen ändras till formellt verifierad. Varje rapport innehåller motorversion, mätmetod och aktuell valideringsstatus.
 
 Den första reflektionen är ett lokalt och deterministiskt expertsystem. Ingen AI används. Referensintervallen är dokumenterad vägledning och får inte förväxlas med plattformsstandarder eller kvalitetsbetyg. Varje informationsruta redovisar aktuellt värde, relevant jämförelse, rekommendation och begränsning.
 
@@ -83,6 +84,12 @@ python3 -m http.server 8080
 
 ```bash
 node --test tests/*.test.mjs
+```
+
+Det officiella EBU-materialet kan läggas lokalt i `validation-fixtures` och kontrolleras utan att ljudfilerna hamnar i repot:
+
+```bash
+npm run validate:ebu -- validation-fixtures
 ```
 
 ## Projekt

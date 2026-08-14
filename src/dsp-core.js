@@ -5,7 +5,7 @@
  * Ljudfilen ändras inte. Mätvärdena är avsedda som sakliga beslutsunderlag.
  */
 
-export const ENGINE_VERSION = "0.11.0";
+export const ENGINE_VERSION = "0.12.0";
 
 export const DEFAULT_PEAK_HANDLING = Object.freeze({
   enabled: false,
@@ -328,74 +328,86 @@ class KWeightingFilter {
 }
 
 export const TRUE_PEAK_ORIENTATION = Object.freeze({
-  status: "orientational-not-standard-validated",
-  statement: "Kubisk intersample-estimering för orientering. Resultatet är inte en standardvaliderad dBTP-mätning.",
+  status: "fir-cross-validated-not-official-compliance",
+  statement: "Polyfas FIR-oversampling som korsvalideras mot referensmätare. Full officiell EBU- och ITU-validering återstår.",
 });
 
-export class CubicTruePeakEstimator {
+const sinc = value => Math.abs(value) < 1e-12
+  ? 1
+  : Math.sin(Math.PI * value) / (Math.PI * value);
+
+// 49 taps sinc med Hanningfönster och polyfasindelning. Strukturen följer
+// den MIT-licensierade libebur128-motorns etablerade True Peak-interpolator.
+const createTruePeakPhases = (factor, taps) => {
+  const delay = Math.ceil(taps / factor);
+  const phases = Array.from({ length: factor }, () => ({
+    coefficients: [],
+    indices: [],
+  }));
+  for (let tap = 0; tap < taps; tap += 1) {
+    const centered = tap - (taps - 1) / 2;
+    const coefficient = sinc(centered / factor)
+      * 0.5 * (1 - Math.cos(2 * Math.PI * tap / (taps - 1)));
+    if (Math.abs(coefficient) <= 1e-6) continue;
+    const phase = tap % factor;
+    phases[phase].coefficients.push(coefficient);
+    phases[phase].indices.push(Math.floor(tap / factor));
+  }
+  return { delay, phases };
+};
+
+export class FirTruePeakEstimator {
   constructor(channels, sampleRate) {
-    this.factor = sampleRate >= 96000 ? 2 : 4;
-    this.states = Array.from({ length: channels }, () => ({
-      p0: 0,
-      p1: 0,
-      p2: 0,
-      count: 0,
-    }));
+    this.factor = sampleRate >= 192000 ? 1 : sampleRate >= 96000 ? 2 : 4;
+    this.tapCount = this.factor === 1 ? 1 : 49;
+    const interpolation = createTruePeakPhases(this.factor, this.tapCount);
+    this.delay = interpolation.delay;
+    this.phases = interpolation.phases;
+    this.states = Array.from({ length: channels }, () => {
+      const buffer = new Float64Array(this.delay);
+      return {
+        buffer,
+        writePosition: 0,
+        finished: false,
+      };
+    });
     this.peaks = new Float64Array(channels);
   }
 
-  interpolate(channel, p0, p1, p2, p3) {
-    for (let phase = 1; phase < this.factor; phase += 1) {
-      const t = phase / this.factor;
-      const t2 = t * t;
-      const t3 = t2 * t;
-      const estimate = 0.5 * ((2 * p1) + (-p0 + p2) * t
-        + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2
-        + (-p0 + 3 * p1 - 3 * p2 + p3) * t3);
+  process(channel, sample, includeSamplePeak = true) {
+    const state = this.states[channel];
+    if (includeSamplePeak) {
+      const absolute = Math.abs(sample);
+      if (absolute > this.peaks[channel]) this.peaks[channel] = absolute;
+    }
+    if (this.factor === 1) return;
+    state.buffer[state.writePosition] = sample;
+    for (const phase of this.phases) {
+      let estimate = 0;
+      for (let tap = 0; tap < phase.coefficients.length; tap += 1) {
+        let position = state.writePosition - phase.indices[tap];
+        if (position < 0) position += this.delay;
+        estimate += state.buffer[position] * phase.coefficients[tap];
+      }
       const candidate = Math.abs(estimate);
       if (candidate > this.peaks[channel]) this.peaks[channel] = candidate;
     }
+    state.writePosition += 1;
+    if (state.writePosition === this.delay) state.writePosition = 0;
   }
 
   push(channel, sample) {
-    const state = this.states[channel];
-    const absolute = Math.abs(sample);
-    if (absolute > this.peaks[channel]) this.peaks[channel] = absolute;
-    if (state.count === 0) {
-      state.p0 = sample;
-      state.count = 1;
-      return;
-    }
-    if (state.count === 1) {
-      state.p1 = sample;
-      state.count = 2;
-      return;
-    }
-    if (state.count === 2) {
-      state.p2 = sample;
-      state.count = 3;
-      this.interpolate(channel, state.p0, state.p0, state.p1, state.p2);
-      return;
-    }
-    this.interpolate(channel, state.p0, state.p1, state.p2, sample);
-    state.p0 = state.p1;
-    state.p1 = state.p2;
-    state.p2 = sample;
+    this.process(channel, sample, true);
   }
 
   finish() {
     for (let channel = 0; channel < this.states.length; channel += 1) {
       const state = this.states[channel];
-      if (state.count === 2) {
-        for (let phase = 1; phase < this.factor; phase += 1) {
-          const t = phase / this.factor;
-          const value = state.p0 + (state.p1 - state.p0) * t;
-          const absolute = Math.abs(value);
-          if (absolute > this.peaks[channel]) this.peaks[channel] = absolute;
-        }
-      } else if (state.count >= 3) {
-        this.interpolate(channel, state.p0, state.p1, state.p2, state.p2);
+      if (state.finished) continue;
+      for (let index = 0; index < this.delay; index += 1) {
+        this.process(channel, 0, false);
       }
+      state.finished = true;
     }
   }
 }
@@ -646,7 +658,7 @@ export async function analyzeWav(blob, suppliedOptions = {}, onProgress = () => 
   const bytesPerSample = bitsPerSample / 8;
   const channelStats = Array.from({ length: channels }, createChannelStats);
   const kFilters = Array.from({ length: channels }, () => new KWeightingFilter(sampleRate));
-  const truePeak = new CubicTruePeakEstimator(channels, sampleRate);
+  const truePeak = new FirTruePeakEstimator(channels, sampleRate);
 
   const waveformBins = Math.max(64, Math.min(options.waveformBins, frameCount));
   const framesPerWaveformBin = Math.max(1, Math.ceil(frameCount / waveformBins));
@@ -758,6 +770,7 @@ export async function analyzeWav(blob, suppliedOptions = {}, onProgress = () => 
           stats.nonFiniteSamples += 1;
           allFinite = false;
           allZero = false;
+          truePeak.push(channel, 0);
           const weighted = kFilters[channel].process(0);
           stepKSum[channel] += weighted * weighted;
           continue;
@@ -1095,9 +1108,11 @@ export async function analyzeWav(blob, suppliedOptions = {}, onProgress = () => 
       engineVersion: ENGINE_VERSION,
       loudnessModel: "ITU-R BS.1770-5 och EBU Tech 3341/3342",
       loudnessStatus: "Beräkningsmodellen är implementerad. Officiell EBU-testsvit återstår innan den kallas compliance-validerad.",
-      truePeakMethod: `${truePeak.factor}x kubisk intersample-estimering`,
+      truePeakMethod: truePeak.factor === 1
+        ? "Sample peak vid minst 192 kHz"
+        : `${truePeak.factor}x polyfas FIR-oversampling med 49 tappar`,
       truePeakValidationStatus: TRUE_PEAK_ORIENTATION.status,
-      truePeakStatus: "Försiktig orienteringsmätning, inte en standardvaliderad dBTP-mätare.",
+      truePeakStatus: "FIR-mätningen är korsvaliderad men full officiell EBU- och ITU-validering återstår.",
       lraStatus: header.durationSeconds < 60
         ? "Beräknad enligt gatingmodellen men statistiskt instabil för material under 60 sekunder."
         : "Beräknad enligt EBU Tech 3342-modellen. Officiell testsvit återstår.",
