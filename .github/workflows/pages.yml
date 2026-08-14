@@ -34,6 +34,7 @@ jobs:
           node --check sw.js
           node --check scripts/build-site.mjs
           node --check scripts/validate-ebu.mjs
+          node --check scripts/validate-itu.mjs
           node --test tests/*.test.mjs
       - name: Kontrollera publicerade filtyper
         shell: bash

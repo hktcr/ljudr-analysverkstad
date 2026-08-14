@@ -1,15 +1,16 @@
 {
   "name": "ljudr-analysverkstad",
-  "version": "0.12.0",
+  "version": "0.12.1",
   "private": true,
   "type": "module",
   "description": "Lokal analys och varsam trimning av fältinspelningar.",
   "scripts": {
     "build": "node scripts/build-site.mjs",
     "test": "node --test tests/*.test.mjs",
-    "check": "node --check src/app.js && node --check src/wav.js && node --check src/dsp-core.js && node --check src/analysis-worker.js && node --check src/export-worker.js && node --check src/project.js && node --check sw.js && node --check scripts/build-site.mjs && node --check scripts/validate-ebu.mjs",
+    "check": "node --check src/app.js && node --check src/wav.js && node --check src/dsp-core.js && node --check src/analysis-worker.js && node --check src/export-worker.js && node --check src/project.js && node --check sw.js && node --check scripts/build-site.mjs && node --check scripts/validate-ebu.mjs && node --check scripts/validate-itu.mjs",
     "serve": "python3 -m http.server 8080",
-    "validate:ebu": "node scripts/validate-ebu.mjs"
+    "validate:ebu": "node scripts/validate-ebu.mjs",
+    "validate:itu": "node scripts/validate-itu.mjs"
   },
   "engines": {
     "node": ">=20"

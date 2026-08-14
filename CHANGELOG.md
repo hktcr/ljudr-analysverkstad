@@ -1,5 +1,19 @@
 # Ändringslogg
 
+## 0.12.1, 2026-08-14
+
+### Korrigerat
+
+- filbaserad Max Momentary och Max Short-term använder nu 10 ms sökupplösning för att hitta exakta 400 ms- och 3 s-fönster oberoende av signalens startläge
+- den publika tidslinjen och Integrated/LRA behåller sina standardenliga 100 ms-block
+
+### Validerat
+
+- 68 av 68 krav godkända för 62 relevanta mono/stereo-filer i EBU Loudness Test Set v5.0
+- 19 av 19 relevanta mono/stereo-filer godkända i ITU-R BS.2217-2 med toleransen ±0,1 LKFS
+- EBU:s flerkanalsfall och uttryckliga live-mätarfall redovisas som utanför verktygets filbaserade mono/stereo-omfattning
+- 48 automatiska regressionstester godkända
+
 ## 0.12.0, 2026-08-14
 
 ### Tillagt

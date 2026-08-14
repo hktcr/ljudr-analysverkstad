@@ -271,7 +271,7 @@ test("Global toppanpassning sänker hela urvalet utan dynamisk limitering", asyn
   assert.ok(report.edit.peakAdjustmentDb < 0);
   assert.ok(report.edit.predictedTruePeakDbtp <= -6 + 1e-9);
   assert.equal(report.edit.peakHandling.dynamicProcessing, false);
-  assert.equal(report.edit.truePeakValidationStatus, "fir-cross-validated-not-official-compliance");
+  assert.equal(report.edit.truePeakValidationStatus, "ebu-minimum-requirements-validated");
   assert.equal(report.output.pcmClampingRisk.detected, false);
   assert.equal(report.output.dither.applied, true);
 

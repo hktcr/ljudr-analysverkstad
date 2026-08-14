@@ -2,13 +2,17 @@
 
 ## Status
 
-Version 0.12.0 är en valideringskandidat. WAV-parsning, sample-exakt trimning, linjära fades, 64 bitars intern bearbetning, global gain, global toppmarginal, PCM-klamprisk och det regelbaserade förklaringslagret täcks av automatiska regressionstester. Loudness och True Peak är ännu inte certifierade mot hela den officiella testsviten.
+Version 0.12.1 klarar hela den relevanta filbaserade mono/stereo-delen av EBU Loudness Test Set v5.0 och ITU-R BS.2217-2. WAV-parsning, sample-exakt trimning, linjära fades, 64 bitars intern bearbetning, global gain, global toppmarginal, PCM-klamprisk och det regelbaserade förklaringslagret täcks dessutom av 48 automatiska regressionstester. Testresultatet är inte en produktcertifiering eller garanti för varje möjlig signal. Fysisk långfilsverifiering på iPad Pro återstår.
 
 Den kontextuella nivåskalan är ett transparent expertsystem utan AI. Den måste provas mot kända exempel inom lågmälda soundscapes, aktiva miljöer, intervjuer och musik. Testningen ska kontrollera både korrekta råd och att systemet avstår från råd när underlaget är otillräckligt.
 
 En lokal referens den 14 augusti 2026 använde 10 sekunder stereo float med 1 kHz sinus. LjudR-motorn och FFmpeg `ebur128` gav samma Integrated loudness efter avrundning till 0,1 LU. Det är en värdefull regression, men inte ett substitut för EBU:s fullständiga testmaterial.
 
-True Peak-motorn använder nu 49 taps polyfas FIR-oversampling. Ett periodiskt extremprov med samplingarna +0,99, +0,99, -0,99, -0,99 gav cirka +3,03 dBTP. Ett analytiskt 18 kHz sinusprov vid 48 kHz och amplituden 0,9 återgav den kontinuerliga signalens topp inom 0,05 dB. Ett lokalt skript kan köra EBU:s testfall 1 till 5, 15 till 23 samt LRA 1 till 4 när de officiella filerna lagts i en lokal, ignorerad valideringsmapp.
+True Peak-motorn använder 49 taps polyfas FIR-oversampling. Ett periodiskt extremprov med samplingarna +0,99, +0,99, -0,99, -0,99 gav cirka +3,03 dBTP. Ett analytiskt 18 kHz sinusprov vid 48 kHz och amplituden 0,9 återgav den kontinuerliga signalens topp inom 0,05 dB.
+
+Den 14 augusti 2026 kördes det officiella EBU Loudness Test Set v5.0. Kontrollen omfattade 62 relevanta filbaserade mono/stereo-filer och 68 separata krav för Integrated, Max Momentary, Max Short-term, LRA och True Peak. Samtliga 68 krav godkändes. Största absoluta avvikelsen var -0,1814 dB i True Peak-fall 22, inom EBU:s tillåtna intervall -0,4 till +0,2 dBTP. Flerkanalsfall 6 och live-mätarfallen 11 och 14 ligger uttryckligen utanför LjudR:s filbaserade mono/stereo-omfattning.
+
+Samma datum kördes ITU-R BS.2217-2:s samtliga 19 mono/stereo-filer: absoluta och relativa gateprov, frekvenssvep, tolv frekvensprov samt fyra mono/stereo-prov med tal och musik. Samtliga godkändes inom rapportens tolerans ±0,1 LKFS. Största absoluta avvikelsen var -0,0721 LU i det relativa gateprovet. Valideringsskripten skriver ut varje oavrundat mätvärde och dess avvikelse.
 
 Ett separat långfilsprov den 14 augusti 2026 använde en virtuell 20 minuters stereo WAV i 32 bit float vid 96 kHz. Motorn behandlade 115 200 000 ljudbildrutor, motsvarande cirka 879 MiB sample-payload, på 25,19 sekunder i utvecklingsmiljön. Processens RSS steg från cirka 56,5 till 223,9 MiB. Den virtuella filen skapade varje block vid läsning och tvingade därför motorn att genomföra samma block-, sample- och FIR-beräkningar som en faktisk fil utan att reservera hela ljudfilen i minnet. Resultatet stöder storfilsarkitekturen, men ersätter inte fysisk verifiering i Safari och installerad PWA på Håkans iPad Pro.
 
@@ -47,7 +51,7 @@ Global toppmarginal ska testas både när den ingriper och när den lämnar sign
 
 ## Jämförelsemätning
 
-LUFS-I, max LUFS-M, max LUFS-S, LRA, sample peak och True Peak ska jämföras med minst två etablerade implementationer, där en är EBU:s officiella testresultat. Skillnader ska dokumenteras per signal och får inte döljas genom avrundning. Den tidigare kubiska True Peak-estimatorn är borttagen. Den nya FIR-motorn får ändå inte kallas formellt compliance-validerad innan de lokala kopiorna av hela det officiella materialet har körts och protokollet sparats.
+LUFS-I, max LUFS-M, max LUFS-S, LRA och True Peak är jämförda med EBU:s och ITU:s officiella förväntade resultat inom verktygets filbaserade mono/stereo-omfattning. Skillnaderna redovisas per signal utan dold avrundning. Den tidigare kubiska True Peak-estimatorn är borttagen. Att minimikraven klaras får beskrivas som verifierat, men inte som extern produktcertifiering eller som garanti för varje möjlig signal och leveranskedja.
 
 ## iPad-prov
 

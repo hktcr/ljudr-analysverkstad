@@ -35,7 +35,7 @@ Vid PCM-export med gain eller fade kvantiseras samplingarna på nytt med TPDF-di
 
 Den globala toppmarginalen är avstängd som standard. När den aktiveras gör exportmotorn en extra blockvis förkontroll av det valda intervallet efter fades. Om det orienterande True Peak-estimatet tillsammans med vald gain överstiger taket minskas samma gainvärde för hela urvalet. Intern dynamik och stereorelationer bevaras.
 
-Funktionen är inte limitering, soft clipping eller automatisk normalisering. Den formar inte enskilda toppar och kan inte reparera redan klippt eller distorderat ljud. Förvalt tak är -2 dBTP. FIR-mätningen är betydligt starkare än den tidigare kubiska uppskattningen, men full officiell EBU- och ITU-validering samt fysisk iPad-verifiering återstår.
+Funktionen är inte limitering, soft clipping eller automatisk normalisering. Den formar inte enskilda toppar och kan inte reparera redan klippt eller distorderat ljud. Förvalt tak är -2 dBTP. FIR-mätningen klarar EBU Tech 3341:s officiella minimikrav för True Peak. Det är ett verifierat testresultat, inte en produktcertifiering eller leveransgaranti. Fysisk iPad-verifiering återstår.
 
 För PCM använder exportmotorn dessutom sample peak som en separat hård säkerhetskontroll. Positiv gain blockeras före omkodning om den skulle orsaka numerisk klampning. Rapporten skiljer mellan rå klamprisk och den mycket mindre marginalrisk som kan uppstå när TPDF-dither läggs till.
 

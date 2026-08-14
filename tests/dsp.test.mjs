@@ -165,7 +165,30 @@ test("redovisar float-overrange och icke ändliga värden utan att kalla dem kli
   assert.equal(result.summary.nonFiniteSamples, 2);
   assert.ok(result.observations.some((item) => item.id === "overrange"));
   assert.ok(result.observations.some((item) => item.id === "non-finite"));
-  assert.match(result.validation.truePeakStatus, /full officiell EBU- och ITU-validering återstår/);
+  assert.match(result.validation.truePeakStatus, /klarar EBU Tech 3341/);
+});
+
+test("filbaserade M- och S-maxima är oberoende av signalens startläge", async () => {
+  const sampleRate = 48000;
+  const tone = seconds => Array.from({ length: sampleRate * seconds }, (_, index) => {
+    const value = 0.1 * Math.sin(2 * Math.PI * 1000 * index / sampleRate);
+    return [value, value];
+  });
+  const silence = seconds => Array.from({ length: sampleRate * seconds }, () => [0, 0]);
+
+  const momentaryReference = await analyzeWav(makeWav({ sampleRate, frames: tone(0.4) }), { waveformBins: 64 });
+  const momentaryShifted = await analyzeWav(makeWav({
+    sampleRate,
+    frames: [...silence(0.04), ...tone(0.4), ...silence(0.36)],
+  }), { waveformBins: 64 });
+  assert.ok(Math.abs(momentaryReference.summary.momentaryMaxLufs - momentaryShifted.summary.momentaryMaxLufs) < 0.01);
+
+  const shortReference = await analyzeWav(makeWav({ sampleRate, frames: tone(3) }), { waveformBins: 64 });
+  const shortShifted = await analyzeWav(makeWav({
+    sampleRate,
+    frames: [...silence(0.15), ...tone(3), ...silence(0.85)],
+  }), { waveformBins: 64 });
+  assert.ok(Math.abs(shortReference.summary.shortTermMaxLufs - shortShifted.summary.shortTermMaxLufs) < 0.01);
 });
 
 test("49 taps FIR fångar ett kraftigt intersample-mönster omkring plus 3 dBTP", () => {

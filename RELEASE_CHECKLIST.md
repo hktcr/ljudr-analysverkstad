@@ -6,13 +6,15 @@ Denna fil beskriver verifieringskedjan för LjudR Analysverkstad. En release är
 
 Kontrollerat lokalt den 14 augusti 2026:
 
-- [x] 48 av 48 automatiska tester godkända, inklusive 64 bitars bearbetning, FIR True Peak, vägledning, informationsrutor och exportskydd för PCM 16, 24 och 32 bit samt float 32 bit.
+- [x] 49 av 49 automatiska tester godkända, inklusive 64 bitars bearbetning, FIR True Peak, filbaserad M/S-maxprecision, vägledning, informationsrutor och exportskydd för PCM 16, 24 och 32 bit samt float 32 bit.
+- [x] EBU Loudness Test Set v5.0: 68 av 68 krav godkända för 62 relevanta filbaserade mono/stereo-filer.
+- [x] ITU-R BS.2217-2: 19 av 19 relevanta mono/stereo-filer godkända inom ±0,1 LKFS.
 - [x] Virtuell 20 minuters stereo 32 bit float vid 96 kHz analyserad i 115 200 000 bildrutor utan helfilsbuffert.
 - [x] Syntaxkontroll godkänd för app, WAV-motor, DSP-motor, workers, projektmodul och service worker.
 - [x] Samtliga resurser i appskalet svarar med HTTP 200 från lokal webbserver.
 - [x] PWA-ikonerna är giltiga PNG-filer i 192 x 192 och 512 x 512 bildpunkter.
 - [x] Alla publicerade sökvägar använder ASCII-tecken.
-- [x] Releaseversionen 0.12.0 är bekräftad i paketdata, projektmodul, DSP-motor, exportmotor, service worker och dokumentation.
+- [x] Releaseversionen 0.12.1 är bekräftad i paketdata, projektmodul, DSP-motor, exportmotor, service worker och dokumentation.
 - [x] CSP blockerar externa anslutningar genom `connect-src 'none'`.
 - [x] Inga externa script, typsnitt, spårare eller analysverktyg används.
 - [x] Inga ljudfiler ingår i den återställda källan.
@@ -44,7 +46,7 @@ Basartefakten är endast proveniens. Om någon fil ändras ska en ny releasearte
 - [x] Bekräfta att service workerns cache-id innehåller aktuellt versionsnummer.
 - [x] Bekräfta att service workerns lista endast pekar på filer som finns.
 - [x] Bekräfta att README, ändringslogg, integritetstext och valideringsstatus motsvarar den kod som ska publiceras.
-- [x] Bekräfta att True Peak fortfarande beskrivs som orienterande tills officiell validering är genomförd.
+- [x] Bekräfta att True Peak beskrivs som godkänd mot EBU:s minimikrav men inte som produktcertifiering eller leveransgaranti.
 - [x] Bygg `_site` och bekräfta exakt 13 tillåtna, byteidentiska filer utan symlänkar eller förbjudna filtyper.
 - [x] Bekräfta att arbetskatalogen är ren efter releasecommit.
 

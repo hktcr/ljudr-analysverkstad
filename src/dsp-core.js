@@ -5,7 +5,7 @@
  * Ljudfilen ändras inte. Mätvärdena är avsedda som sakliga beslutsunderlag.
  */
 
-export const ENGINE_VERSION = "0.12.0";
+export const ENGINE_VERSION = "0.12.1";
 
 export const DEFAULT_PEAK_HANDLING = Object.freeze({
   enabled: false,
@@ -328,8 +328,8 @@ class KWeightingFilter {
 }
 
 export const TRUE_PEAK_ORIENTATION = Object.freeze({
-  status: "fir-cross-validated-not-official-compliance",
-  statement: "Polyfas FIR-oversampling som korsvalideras mot referensmätare. Full officiell EBU- och ITU-validering återstår.",
+  status: "ebu-minimum-requirements-validated",
+  statement: "Polyfas FIR-oversampling som klarar EBU Tech 3341:s officiella minimum requirements för True Peak.",
 });
 
 const sinc = value => Math.abs(value) < 1e-12
@@ -670,7 +670,10 @@ export async function analyzeWav(blob, suppliedOptions = {}, onProgress = () => 
   }));
 
   const stepFrames = Math.max(1, Math.round(sampleRate * options.timelineStepSeconds));
+  const maximumStepSeconds = 0.01;
+  const maximumStepFrames = Math.max(1, Math.round(sampleRate * maximumStepSeconds));
   const loudnessStepEnergies = [];
+  const maximumStepEnergies = [];
   const rawStepEnergies = [];
   const channelStepEnergies = Array.from({ length: channels }, () => []);
   const stepSamplePeaks = [];
@@ -689,6 +692,8 @@ export async function analyzeWav(blob, suppliedOptions = {}, onProgress = () => 
   let stepSide = 0;
   let stepCount = 0;
   let stepValidStereoFrames = 0;
+  let maximumStepKSum = 0;
+  let maximumStepCount = 0;
 
   const global = {
     validFrames: 0,
@@ -745,6 +750,13 @@ export async function analyzeWav(blob, suppliedOptions = {}, onProgress = () => 
     stepValidStereoFrames = 0;
   }
 
+  function finishMaximumStep(complete = true) {
+    if (!maximumStepCount) return;
+    maximumStepEnergies.push(complete ? maximumStepKSum / maximumStepCount : null);
+    maximumStepKSum = 0;
+    maximumStepCount = 0;
+  }
+
   const alignedBlockBytes = Math.max(
     blockAlign,
     Math.floor(options.readBlockBytes / blockAlign) * blockAlign,
@@ -773,6 +785,7 @@ export async function analyzeWav(blob, suppliedOptions = {}, onProgress = () => 
           truePeak.push(channel, 0);
           const weighted = kFilters[channel].process(0);
           stepKSum[channel] += weighted * weighted;
+          maximumStepKSum += weighted * weighted;
           continue;
         }
         kahanAdd(stats, sample);
@@ -830,6 +843,7 @@ export async function analyzeWav(blob, suppliedOptions = {}, onProgress = () => 
 
         const weighted = kFilters[channel].process(sample);
         stepKSum[channel] += weighted * weighted;
+        maximumStepKSum += weighted * weighted;
         stepRawSum[channel] += sample * sample;
         if (absolute > stepPeak) stepPeak = absolute;
       }
@@ -861,7 +875,9 @@ export async function analyzeWav(blob, suppliedOptions = {}, onProgress = () => 
         }
       }
       stepCount += 1;
+      maximumStepCount += 1;
       if (stepCount >= stepFrames) finishStep(true);
+      if (maximumStepCount >= maximumStepFrames) finishMaximumStep(true);
       frameIndex += 1;
     }
     consumedBytes += blockFrames * blockAlign;
@@ -873,6 +889,7 @@ export async function analyzeWav(blob, suppliedOptions = {}, onProgress = () => 
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
   finishStep(false);
+  finishMaximumStep(false);
   truePeak.finish();
 
   for (const stats of channelStats) {
@@ -895,6 +912,10 @@ export async function analyzeWav(blob, suppliedOptions = {}, onProgress = () => 
   rollingWindowEnergy(loudnessStepEnergies, shortTermSteps, shortTermEnergies);
   const momentaryLufs = momentaryEnergies.map((value) => value === null ? null : energyToLufs(value));
   const shortTermLufs = shortTermEnergies.map((value) => value === null ? null : energyToLufs(value));
+  const maximumMomentaryEnergies = new Array(maximumStepEnergies.length);
+  const maximumShortTermEnergies = new Array(maximumStepEnergies.length);
+  rollingWindowEnergy(maximumStepEnergies, Math.max(1, Math.round(0.4 / maximumStepSeconds)), maximumMomentaryEnergies);
+  rollingWindowEnergy(maximumStepEnergies, Math.max(1, Math.round(3 / maximumStepSeconds)), maximumShortTermEnergies);
   const integratedLufs = calculateIntegratedLufs(momentaryEnergies.filter((value) => value !== null));
   const loudnessRangeLu = calculateLoudnessRange(shortTermEnergies.filter((value) => value !== null));
   const runningIntegratedLufs = new Array(loudnessStepEnergies.length).fill(null);
@@ -992,8 +1013,20 @@ export async function analyzeWav(blob, suppliedOptions = {}, onProgress = () => 
     header.durationSeconds,
     (index + 1) * options.timelineStepSeconds,
   ));
-  const momentaryMaximum = maxFiniteEntry(momentaryLufs);
-  const shortTermMaximum = maxFiniteEntry(shortTermLufs);
+  const maximumMomentaryEnergy = maxFiniteEntry(maximumMomentaryEnergies);
+  const maximumShortTermEnergy = maxFiniteEntry(maximumShortTermEnergies);
+  const momentaryMaximum = {
+    value: maximumMomentaryEnergy.value === null ? null : energyToLufs(maximumMomentaryEnergy.value),
+    timeSeconds: maximumMomentaryEnergy.index === null
+      ? null
+      : Math.min(header.durationSeconds, (maximumMomentaryEnergy.index + 1) * maximumStepSeconds),
+  };
+  const shortTermMaximum = {
+    value: maximumShortTermEnergy.value === null ? null : energyToLufs(maximumShortTermEnergy.value),
+    timeSeconds: maximumShortTermEnergy.index === null
+      ? null
+      : Math.min(header.durationSeconds, (maximumShortTermEnergy.index + 1) * maximumStepSeconds),
+  };
   const importantMarkers = suggestedMarkers(
     discontinuities,
     flatTopEvents,
@@ -1012,18 +1045,18 @@ export async function analyzeWav(blob, suppliedOptions = {}, onProgress = () => 
       });
     }
   }
-  if (momentaryMaximum.index !== null) {
+  if (momentaryMaximum.timeSeconds !== null) {
     importantMarkers.push({
-      timeSeconds: timeSeconds[momentaryMaximum.index],
+      timeSeconds: momentaryMaximum.timeSeconds,
       type: "technical",
       severity: "info",
       label: "Högsta Momentary loudness",
       detail: `${momentaryMaximum.value.toFixed(2)} LUFS, fönstret slutar vid denna tid.`,
     });
   }
-  if (shortTermMaximum.index !== null) {
+  if (shortTermMaximum.timeSeconds !== null) {
     importantMarkers.push({
-      timeSeconds: timeSeconds[shortTermMaximum.index],
+      timeSeconds: shortTermMaximum.timeSeconds,
       type: "technical",
       severity: "info",
       label: "Högsta Short-term loudness",
@@ -1054,9 +1087,9 @@ export async function analyzeWav(blob, suppliedOptions = {}, onProgress = () => 
       integratedLufs,
       loudnessRangeLu,
       momentaryMaxLufs: momentaryMaximum.value,
-      momentaryMaxTimeSeconds: momentaryMaximum.index === null ? null : timeSeconds[momentaryMaximum.index],
+      momentaryMaxTimeSeconds: momentaryMaximum.timeSeconds,
       shortTermMaxLufs: shortTermMaximum.value,
-      shortTermMaxTimeSeconds: shortTermMaximum.index === null ? null : timeSeconds[shortTermMaximum.index],
+      shortTermMaxTimeSeconds: shortTermMaximum.timeSeconds,
       samplePeak: highestSamplePeak,
       samplePeakDbfs: finiteDb(highestSamplePeak),
       truePeakEstimate: highestTruePeak,
@@ -1107,15 +1140,15 @@ export async function analyzeWav(blob, suppliedOptions = {}, onProgress = () => 
     validation: {
       engineVersion: ENGINE_VERSION,
       loudnessModel: "ITU-R BS.1770-5 och EBU Tech 3341/3342",
-      loudnessStatus: "Beräkningsmodellen är implementerad. Officiell EBU-testsvit återstår innan den kallas compliance-validerad.",
+      loudnessStatus: "Filbaserad mono/stereo-loudness klarar relevanta officiella EBU- och ITU-testfall.",
       truePeakMethod: truePeak.factor === 1
         ? "Sample peak vid minst 192 kHz"
         : `${truePeak.factor}x polyfas FIR-oversampling med 49 tappar`,
       truePeakValidationStatus: TRUE_PEAK_ORIENTATION.status,
-      truePeakStatus: "FIR-mätningen är korsvaliderad men full officiell EBU- och ITU-validering återstår.",
+      truePeakStatus: "FIR-mätningen klarar EBU Tech 3341:s officiella True Peak-minimikrav. Detta är inte en certifiering eller leveransgaranti.",
       lraStatus: header.durationSeconds < 60
         ? "Beräknad enligt gatingmodellen men statistiskt instabil för material under 60 sekunder."
-        : "Beräknad enligt EBU Tech 3342-modellen. Officiell testsvit återstår.",
+        : "Beräknad enligt EBU Tech 3342-modellen och verifierad mot dess relevanta officiella mono/stereo-testfall.",
       immutableSource: true,
     },
   };

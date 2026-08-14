@@ -43,7 +43,7 @@ Analysen får vara rik, men varje ljudingrepp måste vara uttryckligt. Originalf
 
 Beräkningarna är utformade efter ITU-R BS.1770-5 och EBU Tech 3341/3342. Verktyget skiljer därför på mätresultat, observationer och konstnärliga val.
 
-Version 0.12.0 är en valideringskandidat, inte en certifierad loudnessmätare. Gain och fades beräknas nu med 64 bit float. True Peak använder en 49 taps polyfas FIR-modell av samma typ som den etablerade libebur128-implementationen. Lokala analytiska signalprov och jämförelser med FFmpeg ingår, men hela EBU Loudness Test Set och ITU:s testmaterial ska fortfarande köras innan statusen ändras till formellt verifierad. Varje rapport innehåller motorversion, mätmetod och aktuell valideringsstatus.
+Version 0.12.1 är verifierad mot hela den relevanta filbaserade mono/stereo-delen av EBU Loudness Test Set v5.0 och ITU-R BS.2217-2. EBU-körningen omfattar 62 officiella filer och 68 mätkrav. ITU-körningen omfattar samtliga 19 mono/stereo-filer och använder rapportens tolerans ±0,1 LKFS. Samtliga krav godkändes. Gain och fades beräknas med 64 bit float. True Peak använder en 49 taps polyfas FIR-modell. Resultatet är inte en produktcertifiering eller garanti för varje möjlig signal. Fysisk långfilsverifiering på iPad Pro återstår. Varje rapport innehåller motorversion, mätmetod och aktuell valideringsstatus.
 
 Den första reflektionen är ett lokalt och deterministiskt expertsystem. Ingen AI används. Referensintervallen är dokumenterad vägledning och får inte förväxlas med plattformsstandarder eller kvalitetsbetyg. Varje informationsruta redovisar aktuellt värde, relevant jämförelse, rekommendation och begränsning.
 
@@ -90,6 +90,7 @@ Det officiella EBU-materialet kan läggas lokalt i `validation-fixtures` och kon
 
 ```bash
 npm run validate:ebu -- validation-fixtures
+npm run validate:itu -- validation-fixtures/itu-bs2217
 ```
 
 ## Projekt

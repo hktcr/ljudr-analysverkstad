@@ -2,7 +2,7 @@ import { normalizePeakHandling } from "./dsp-core.js";
 
 export const PROJECT_SCHEMA = "se.gaia.ljudr.analysis-project/1";
 export const REPORT_SCHEMA = "se.gaia.ljudr.analysis-report/1";
-export const APP_VERSION = "0.12.0";
+export const APP_VERSION = "0.12.1";
 
 const encoder = new TextEncoder();
 

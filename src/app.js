@@ -226,7 +226,7 @@ const helpContent = {
         <li>PCM får TPDF dither när samplingarna måste räknas om.</li>
         <li>IEEE float behöver inte kvantiseringsdither.</li>
         <li>Positiv gain som skulle klampa PCM stoppas före export.</li>
-        <li>True Peak använder 49 taps FIR-oversampling men är ingen formell leveransgaranti innan hela den officiella testsviten har körts.</li>
+        <li>True Peak använder 49 taps FIR-oversampling och klarar EBU:s officiella minimikrav. Det är fortfarande ingen certifiering eller leveransgaranti.</li>
       </ul>`,
   },
   trim: {
@@ -306,8 +306,8 @@ const helpTopics = {
     title: "Orienterande True Peak",
     meaning: "Ett översamplat estimat av möjliga toppar mellan de lagrade samplingarna.",
     relation: "Jämför med sample peak, LUFS I och vald gain. Skillnaden mot önskat tak anger möjlig global sänkning.",
-    caution: "Metoden är inte standardvaliderad och får inte beskrivas som en garanterad leveransmätning.",
-    recommendation: "Använd marginal och kontrollera en slutlig leverans med en validerad mätare när ett formellt krav finns.",
+    caution: "Metoden klarar EBU:s officiella minimikrav, men testresultatet är inte en produktcertifiering eller garanti för varje möjlig signal.",
+    recommendation: "Använd marginal och gör en separat leveranskontroll när mottagaren ställer ett formellt True Peak-krav.",
   },
   rms: {
     title: "RMS",
@@ -989,7 +989,7 @@ function renderDeepMeasurements() {
     const parts = [validation.loudnessStatus, validation.truePeakStatus, validation.lraStatus].filter(Boolean);
     validationElement.innerHTML = `<span class="validation-dot" aria-hidden="true"></span><p><strong>Valideringsstatus.</strong> ${parts.map(escapeHtml).join(" ")}</p>`;
   } else if (validationElement) {
-    validationElement.innerHTML = '<span class="validation-dot" aria-hidden="true"></span><p><strong>Valideringsstatus visas efter analys.</strong> Ett True Peak-estimat ska inte användas som leveranskrav innan metoden är verifierad mot officiellt testmaterial.</p>';
+    validationElement.innerHTML = '<span class="validation-dot" aria-hidden="true"></span><p><strong>Valideringsstatus visas efter analys.</strong> Motorn klarar relevanta officiella EBU- och ITU-testfall, men ett mätresultat är inte i sig en leveransgaranti.</p>';
   }
 }
 
