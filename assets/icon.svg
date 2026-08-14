@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">LjudR Analysverkstad</title>
+  <desc id="desc">Stiliserade ljudvågor över ett landskap.</desc>
+  <rect width="512" height="512" fill="#173f35"/>
+  <path d="M0 349c69-22 128-17 189 8 60 25 123 30 188 5 42-17 87-22 135-11v161H0z" fill="#d2a75d"/>
+  <path d="M0 400c89-18 163-8 226 27 57 31 122 40 194 19 31-9 62-11 92-7v73H0z" fill="#b95f43"/>
+  <g fill="none" stroke="#f2eee1" stroke-linecap="round" stroke-width="18">
+    <path d="M110 170v106"/>
+    <path d="M158 132v182"/>
+    <path d="M207 185v77"/>
+    <path d="M256 105v237"/>
+    <path d="M305 160v126"/>
+    <path d="M354 125v198"/>
+    <path d="M402 184v83"/>
+  </g>
+</svg>

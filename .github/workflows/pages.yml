@@ -1,0 +1,67 @@
+name: Publicera GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hämta koden
+        uses: actions/checkout@v6
+      - name: Installera Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - name: Testa
+        run: |
+          node --check src/app.js
+          node --check src/wav.js
+          node --check src/dsp-core.js
+          node --check src/analysis-worker.js
+          node --check src/export-worker.js
+          node --check src/project.js
+          node --check sw.js
+          node --check scripts/build-site.mjs
+          node --test tests/*.test.mjs
+      - name: Kontrollera publicerade filtyper
+        shell: bash
+        run: |
+          forbidden="$(git ls-files | grep -Ei '\.(wav|wave|flac|m4a|aac|mp3|aif|aiff|caf|opus|ogg|w64|rf64|bw64|bwf|raw)$' || true)"
+          if [ -n "$forbidden" ]; then
+            echo "Ljudfiler får inte publiceras i kodarkivet:"
+            echo "$forbidden"
+            exit 1
+          fi
+      - name: Bygg tillåten webbplats
+        run: node scripts/build-site.mjs
+      - name: Paketera webbappen
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+
+  deploy:
+    needs: test-and-build
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Förbered Pages
+        uses: actions/configure-pages@v5
+      - name: Publicera
+        id: deployment
+        uses: actions/deploy-pages@v4

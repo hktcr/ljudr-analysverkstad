@@ -1,0 +1,270 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {
+  exportInternals,
+  exportWav,
+  FADE_OVERLAP_POLICY
+} from "../src/export-worker.js";
+import { inspectWav } from "../src/wav.js";
+
+const ascii = (view, offset, text) => {
+  for (let index = 0; index < text.length; index += 1) view.setUint8(offset + index, text.charCodeAt(index));
+};
+
+const pcm16Wave = (samples, channels = 2, sampleRate = 48000) => {
+  const blockAlign = channels * 2;
+  const dataBytes = samples.length * 2;
+  const bytes = new Uint8Array(44 + dataBytes);
+  const view = new DataView(bytes.buffer);
+  ascii(view, 0, "RIFF");
+  view.setUint32(4, 36 + dataBytes, true);
+  ascii(view, 8, "WAVE");
+  ascii(view, 12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, channels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * blockAlign, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, 16, true);
+  ascii(view, 36, "data");
+  view.setUint32(40, dataBytes, true);
+  samples.forEach((sample, index) => view.setInt16(44 + index * 2, sample, true));
+  return new File([bytes], "fixture.wav", { type: "audio/wav", lastModified: 1 });
+};
+
+const float32Wave = (samples, channels = 2, sampleRate = 96000) => {
+  const blockAlign = channels * 4;
+  const dataBytes = samples.length * 4;
+  const bytes = new Uint8Array(44 + dataBytes);
+  const view = new DataView(bytes.buffer);
+  ascii(view, 0, "RIFF");
+  view.setUint32(4, 36 + dataBytes, true);
+  ascii(view, 8, "WAVE");
+  ascii(view, 12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 3, true);
+  view.setUint16(22, channels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * blockAlign, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, 32, true);
+  ascii(view, 36, "data");
+  view.setUint32(40, dataBytes, true);
+  samples.forEach((sample, index) => view.setFloat32(44 + index * 4, sample, true));
+  return new File([bytes], "float96.wav", { type: "audio/wav", lastModified: 2 });
+};
+
+const waveWithOddJunk = () => {
+  const samples = [100, -100, 200, -200];
+  const bytes = new Uint8Array(44 + 10 + samples.length * 2);
+  const view = new DataView(bytes.buffer);
+  ascii(view, 0, "RIFF");
+  view.setUint32(4, bytes.length - 8, true);
+  ascii(view, 8, "WAVE");
+  ascii(view, 12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 2, true);
+  view.setUint32(24, 48000, true);
+  view.setUint32(28, 192000, true);
+  view.setUint16(32, 4, true);
+  view.setUint16(34, 16, true);
+  ascii(view, 36, "JUNK");
+  view.setUint32(40, 1, true);
+  view.setUint8(44, 123);
+  view.setUint8(45, 0);
+  ascii(view, 46, "data");
+  view.setUint32(50, samples.length * 2, true);
+  samples.forEach((sample, index) => view.setInt16(54 + index * 2, sample, true));
+  return new File([bytes], "odd.wav", { type: "audio/wav" });
+};
+
+test("WAV-parsern läser ett vanligt stereo PCM-huvud", async () => {
+  const file = pcm16Wave([1, -1, 2, -2, 3, -3, 4, -4]);
+  const info = await inspectWav(file);
+  assert.equal(info.format.encoding, "PCM");
+  assert.equal(info.format.channels, 2);
+  assert.equal(info.format.sampleRate, 48000);
+  assert.equal(info.format.bitsPerSample, 16);
+  assert.equal(info.frameCount, 4);
+});
+
+test("Ren trimning bevarar valda PCM-byte exakt", async () => {
+  const samples = [100, -100, 200, -200, 300, -300, 400, -400, 500, -500];
+  const file = pcm16Wave(samples);
+  const { output, report } = await exportWav(file, {
+    startFrame: 1,
+    endFrame: 4,
+    gainDb: 0,
+    fadeInFrames: 0,
+    fadeOutFrames: 0,
+    preferOpfs: false
+  });
+  const sourceInfo = await inspectWav(file);
+  const outputInfo = await inspectWav(output);
+  const sourceBytes = new Uint8Array(await file.slice(
+    sourceInfo.data.dataOffset + sourceInfo.format.blockAlign,
+    sourceInfo.data.dataOffset + 4 * sourceInfo.format.blockAlign
+  ).arrayBuffer());
+  const outputBytes = new Uint8Array(await output.slice(
+    outputInfo.data.dataOffset,
+    outputInfo.data.dataOffset + outputInfo.data.completeDataBytes
+  ).arrayBuffer());
+  assert.deepEqual(outputBytes, sourceBytes);
+  assert.equal(report.edit.bitExactSamplePayload, true);
+  assert.equal(report.output.dither.applied, false);
+  assert.equal(report.output.pcmClampingRisk.detected, false);
+  assert.equal(outputInfo.frameCount, 3);
+});
+
+test("Gain gör exporten explicit icke bitidentisk", async () => {
+  const file = pcm16Wave([1000, -1000, 2000, -2000]);
+  const { output, report } = await exportWav(file, {
+    startFrame: 0,
+    endFrame: 2,
+    gainDb: -6,
+    preferOpfs: false
+  });
+  assert.equal(report.edit.bitExactSamplePayload, false);
+  assert.equal(report.output.dither.applied, true);
+  assert.equal(report.output.dither.type, "TPDF");
+  assert.equal((await inspectWav(output)).frameCount, 2);
+});
+
+test("Aktiverad toppanpassning som inte behöver ingripa bevarar ren trimning bitidentiskt", async () => {
+  const file = pcm16Wave([1000, -1000, 2000, -2000, 3000, -3000]);
+  const { output, report } = await exportWav(file, {
+    startFrame: 0,
+    endFrame: 3,
+    peakHandling: {
+      enabled: true,
+      mode: "global-attenuation",
+      ceilingDbtp: 0,
+      sourceTruePeakDbtp: -20
+    },
+    preferOpfs: false
+  });
+  const sourceInfo = await inspectWav(file);
+  const outputInfo = await inspectWav(output);
+  const sourcePayload = new Uint8Array(await file.slice(sourceInfo.data.dataOffset).arrayBuffer());
+  const outputPayload = new Uint8Array(await output.slice(outputInfo.data.dataOffset).arrayBuffer());
+  assert.deepEqual(outputPayload, sourcePayload);
+  assert.equal(report.edit.peakAdjustmentDb, 0);
+  assert.equal(report.edit.effectiveGainDb, 0);
+  assert.equal(report.edit.bitExactSamplePayload, true);
+  assert.equal(report.edit.peakHandling.sourceTruePeakDbtp, -20);
+  assert.equal(report.output.ditherApplied, false);
+});
+
+test("Global toppanpassning sänker hela urvalet utan dynamisk limitering", async () => {
+  const samples = [28000, -14000, 21000, -7000, 14000, -3500, 7000, -1750];
+  const file = pcm16Wave(samples);
+  const { output, report } = await exportWav(file, {
+    gainDb: 3,
+    peakHandling: {
+      enabled: true,
+      mode: "global-attenuation",
+      ceilingDbtp: -6,
+      sourceTruePeakDbtp: -1
+    },
+    preferOpfs: false
+  });
+  assert.equal(report.edit.intendedGainDb, 3);
+  assert.ok(report.edit.peakAdjustmentDb < 0);
+  assert.ok(report.edit.predictedTruePeakDbtp <= -6 + 1e-9);
+  assert.equal(report.edit.peakHandling.dynamicProcessing, false);
+  assert.equal(report.edit.truePeakValidationStatus, "orientational-not-standard-validated");
+  assert.equal(report.output.pcmClampingRisk.detected, false);
+  assert.equal(report.output.dither.applied, true);
+
+  const info = await inspectWav(output);
+  const view = new DataView(await output.slice(info.data.dataOffset).arrayBuffer());
+  const multiplier = 10 ** (report.edit.effectiveGainDb / 20);
+  for (let index = 0; index < samples.length; index += 1) {
+    const actual = view.getInt16(index * 2, true);
+    const expected = samples[index] * multiplier;
+    assert.ok(Math.abs(actual - expected) <= 2);
+  }
+});
+
+test("Positiv gain som skulle klampa PCM blockeras före export", async () => {
+  const file = pcm16Wave([30000, -30000, 28000, -28000]);
+  await assert.rejects(
+    () => exportWav(file, { gainDb: 1, preferOpfs: false }),
+    error => {
+      assert.equal(error.name, "PcmClampingRiskError");
+      assert.equal(error.code, "PCM_CLAMPING_RISK");
+      assert.equal(error.details.detected, true);
+      assert.equal(error.details.blocked, true);
+      return true;
+    }
+  );
+});
+
+test("PCM-rapporten skiljer rå klamprisk från TPDF-marginal vid omräkning", async () => {
+  const file = pcm16Wave([32767, 0, 1000, 0]);
+  const { report } = await exportWav(file, {
+    fadeOutFrames: 1,
+    preferOpfs: false
+  });
+  assert.equal(report.output.dither.applied, true);
+  assert.equal(report.output.pcmClampingRisk.rawClampingRisk, false);
+  assert.equal(report.output.pcmClampingRisk.ditherClampingRisk, true);
+  assert.equal(report.output.pcmClampingRisk.detected, true);
+  assert.equal(report.output.pcmClampingRisk.blocked, false);
+});
+
+test("Toppförkontrollen använder markerat intervall efter fades", async () => {
+  const file = float32Wave([1, 1, 0.1, 0.1, 1], 1, 96000);
+  const { report } = await exportWav(file, {
+    startFrame: 1,
+    endFrame: 4,
+    fadeInFrames: 2,
+    preferOpfs: false
+  });
+  assert.ok(report.edit.selectionTruePeakEstimateDbtp < -15);
+  assert.equal(report.validation.selectionBased, true);
+  assert.equal(report.validation.measuredAfterFadesBeforeGain, true);
+  assert.equal(report.output.dither.applied, false);
+});
+
+test("Överlappande fades använder den lägsta linjära enveloppen", () => {
+  const { fadeFactor } = exportInternals;
+  assert.equal(FADE_OVERLAP_POLICY, "minimum-envelope");
+  assert.deepEqual(
+    Array.from({ length: 4 }, (_, index) => fadeFactor(index, 4, 4, 4)),
+    [0, 1 / 3, 1 / 3, 0]
+  );
+});
+
+test("Avklippt WAV upptäcks", async () => {
+  const file = pcm16Wave([1, -1, 2, -2]);
+  const truncated = new File([await file.slice(0, file.size - 2).arrayBuffer()], "kort.wav");
+  const info = await inspectWav(truncated);
+  assert.equal(info.isTruncated, true);
+  assert.ok(info.warnings.some(item => item.includes("avklippt")));
+});
+
+test("32 bit float vid 96 kHz behåller overrange vid ren trimning", async () => {
+  const file = float32Wave([0.25, -0.25, 1.2, -1.1, 0.5, -0.5]);
+  const sourceInfo = await inspectWav(file);
+  assert.equal(sourceInfo.format.encoding, "IEEE_FLOAT");
+  assert.equal(sourceInfo.format.sampleRate, 96000);
+  const { output, report } = await exportWav(file, {
+    startFrame: 1,
+    endFrame: 3,
+    preferOpfs: false
+  });
+  const outputInfo = await inspectWav(output);
+  const payload = new DataView(await output.slice(outputInfo.data.dataOffset).arrayBuffer());
+  assert.ok(Math.abs(payload.getFloat32(0, true) - 1.2) < 1e-6);
+  assert.ok(Math.abs(payload.getFloat32(4, true) + 1.1) < 1e-6);
+  assert.equal(report.edit.bitExactSamplePayload, true);
+});
+
+test("Parsern respekterar padding efter ett udda chunk", async () => {
+  const info = await inspectWav(waveWithOddJunk());
+  assert.equal(info.data.dataOffset, 54);
+  assert.equal(info.frameCount, 2);
+});

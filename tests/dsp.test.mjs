@@ -1,0 +1,170 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { analyzeWav, parseWavHeader, calculateIntegratedLufs, calculateLoudnessRange } from "../src/dsp-core.js";
+
+function fourCc(value) {
+  return [...value].map((character) => character.charCodeAt(0));
+}
+
+function makeWav({ sampleRate = 48000, channels = 2, bits = 16, format = 1, frames, junk = false, extensible = false }) {
+  const bytesPerSample = bits / 8;
+  const blockAlign = channels * bytesPerSample;
+  const dataSize = frames.length * blockAlign;
+  const junkSize = junk ? 3 : 0;
+  const junkChunkSize = junk ? 8 + junkSize + 1 : 0;
+  const formatSize = extensible ? 40 : 16;
+  const totalSize = 12 + 8 + formatSize + junkChunkSize + 8 + dataSize;
+  const buffer = new ArrayBuffer(totalSize);
+  const bytes = new Uint8Array(buffer);
+  const view = new DataView(buffer);
+  bytes.set(fourCc("RIFF"), 0);
+  view.setUint32(4, totalSize - 8, true);
+  bytes.set(fourCc("WAVE"), 8);
+  let offset = 12;
+  bytes.set(fourCc("fmt "), offset);
+  view.setUint32(offset + 4, formatSize, true);
+  view.setUint16(offset + 8, extensible ? 0xfffe : format, true);
+  view.setUint16(offset + 10, channels, true);
+  view.setUint32(offset + 12, sampleRate, true);
+  view.setUint32(offset + 16, sampleRate * blockAlign, true);
+  view.setUint16(offset + 20, blockAlign, true);
+  view.setUint16(offset + 22, bits, true);
+  if (extensible) {
+    view.setUint16(offset + 24, 22, true);
+    view.setUint16(offset + 26, bits, true);
+    view.setUint32(offset + 28, channels === 1 ? 4 : 3, true);
+    view.setUint32(offset + 32, format, true);
+    bytes.set([0x00, 0x00, 0x10, 0x00, 0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71], offset + 36);
+  }
+  offset += 8 + formatSize;
+  if (junk) {
+    bytes.set(fourCc("JUNK"), offset);
+    view.setUint32(offset + 4, junkSize, true);
+    bytes.set([1, 2, 3], offset + 8);
+    offset += 8 + junkSize + 1;
+  }
+  bytes.set(fourCc("data"), offset);
+  view.setUint32(offset + 4, dataSize, true);
+  offset += 8;
+  for (const frame of frames) {
+    for (let channel = 0; channel < channels; channel += 1) {
+      const value = frame[channel] ?? frame[0];
+      if (format === 3) view.setFloat32(offset, value, true);
+      else if (bits === 16) view.setInt16(offset, Math.max(-32768, Math.min(32767, Math.round(value * 32768))), true);
+      else if (bits === 24) {
+        let integer = Math.max(-8388608, Math.min(8388607, Math.round(value * 8388608)));
+        if (integer < 0) integer += 0x1000000;
+        bytes[offset] = integer & 0xff;
+        bytes[offset + 1] = (integer >>> 8) & 0xff;
+        bytes[offset + 2] = (integer >>> 16) & 0xff;
+      } else view.setInt32(offset, Math.max(-2147483648, Math.min(2147483647, Math.round(value * 2147483648))), true);
+      offset += bytesPerSample;
+    }
+  }
+  return new Blob([buffer], { type: "audio/wav" });
+}
+
+test("tolkar PCM16 och hoppar över ett udda okänt chunk", async () => {
+  const frames = Array.from({ length: 480 }, (_, index) => [index % 2 ? 0.25 : -0.25, 0.1]);
+  const blob = makeWav({ frames, junk: true });
+  const header = await parseWavHeader(blob);
+  assert.equal(header.channels, 2);
+  assert.equal(header.sampleRate, 48000);
+  assert.equal(header.bitsPerSample, 16);
+  assert.equal(header.frameCount, 480);
+  assert.equal(header.chunks.some((chunk) => chunk.id === "JUNK"), true);
+});
+
+test("analyserar en sammanhängande stereosinus med rimliga råmått", async () => {
+  const sampleRate = 48000;
+  const duration = 4;
+  const frames = Array.from({ length: sampleRate * duration }, (_, index) => {
+    const value = 0.5 * Math.sin(2 * Math.PI * 1000 * index / sampleRate);
+    return [value, value];
+  });
+  const progress = [];
+  const result = await analyzeWav(makeWav({ sampleRate, frames }), {
+    readBlockBytes: 128 * 1024,
+    waveformBins: 256,
+  }, (event) => progress.push(event));
+  assert.equal(result.format.frameCount, sampleRate * duration);
+  assert.ok(Math.abs(result.duration - duration) < 1e-9);
+  assert.ok(Math.abs(result.summary.samplePeakDbfs + 6.0206) < 0.02);
+  assert.ok(Math.abs(result.summary.rmsDbfs + 9.0309) < 0.03);
+  assert.ok(Math.abs(result.summary.channelBalanceDb) < 0.001);
+  assert.ok(result.summary.correlation > 0.99999);
+  assert.ok(result.summary.midSideRatioDb === null || result.summary.midSideRatioDb > 100);
+  assert.ok(Number.isFinite(result.summary.integratedLufs));
+  assert.ok(Number.isFinite(result.summary.plrEstimateLu));
+  assert.ok(result.timelines.momentaryLufs.some(Number.isFinite));
+  assert.ok(result.markersSuggested.some((marker) => marker.label === "Högsta Momentary loudness"));
+  assert.ok(result.markersSuggested.some((marker) => marker.label === "Högsta Short-term loudness"));
+  assert.equal(result.markersSuggested.filter((marker) => marker.label.startsWith("Högsta sample peak")).length, 2);
+  assert.equal(result.waveform.channels.length, 2);
+  assert.equal(progress.at(-1).fraction, 1);
+});
+
+test("läser PCM24 med korrekt tecken och nivå", async () => {
+  const frames = [[-0.75], [0.5], [0], [0.25]];
+  const result = await analyzeWav(makeWav({ channels: 1, bits: 24, frames }), { waveformBins: 64 });
+  assert.ok(Math.abs(result.summary.channels[0].minimum + 0.75) < 1e-6);
+  assert.ok(Math.abs(result.summary.channels[0].maximum - 0.5) < 1e-6);
+  assert.equal(result.summary.channels[0].zeroSamples, 1);
+});
+
+test("analyserar 96 kHz float32 med tvåfaldig intersample-estimering", async () => {
+  const sampleRate = 96000;
+  const frames = Array.from({ length: sampleRate / 2 }, (_, index) => {
+    const left = 0.2 + 0.7 * Math.sin(2 * Math.PI * 997 * index / sampleRate);
+    const right = -0.1 + 0.35 * Math.sin(2 * Math.PI * 997 * index / sampleRate);
+    return [left, right];
+  });
+  const result = await analyzeWav(makeWav({ sampleRate, format: 3, bits: 32, frames }), {
+    readBlockBytes: 96 * 1024,
+    waveformBins: 128,
+  });
+  assert.equal(result.format.sampleRate, 96000);
+  assert.equal(result.format.encoding, "IEEE float");
+  assert.match(result.validation.truePeakMethod, /^2x/);
+  assert.ok(result.summary.truePeakEstimate >= result.summary.samplePeak);
+  assert.ok(Math.abs(result.summary.channels[0].dcOffset - 0.2) < 0.001);
+  assert.ok(result.summary.channelBalanceDb > 5.5 && result.summary.channelBalanceDb < 6.5);
+});
+
+test("stöder WAVE_FORMAT_EXTENSIBLE float32 vid 96 kHz", async () => {
+  const frames = Array.from({ length: 9600 }, (_, index) => {
+    const value = 0.4 * Math.sin(2 * Math.PI * 440 * index / 96000);
+    return [value, -value];
+  });
+  const blob = makeWav({ sampleRate: 96000, format: 3, bits: 32, frames, extensible: true });
+  const header = await parseWavHeader(blob);
+  assert.equal(header.extensible, true);
+  assert.equal(header.encoding, "IEEE float");
+  const result = await analyzeWav(blob, { waveformBins: 64 });
+  assert.ok(result.summary.correlation < -0.9999);
+});
+
+test("läser PCM32 utan att förlora tecken", async () => {
+  const result = await analyzeWav(makeWav({ channels: 1, bits: 32, frames: [[-0.9], [0.8], [0]] }), {
+    waveformBins: 64,
+  });
+  assert.ok(Math.abs(result.summary.channels[0].minimum + 0.9) < 1e-8);
+  assert.ok(Math.abs(result.summary.channels[0].maximum - 0.8) < 1e-8);
+});
+
+test("redovisar float-overrange och icke ändliga värden utan att kalla dem klippning", async () => {
+  const frames = [[0, 0], [1.2, -1.1], [Number.NaN, 0.2], [Number.POSITIVE_INFINITY, 0.3]];
+  const result = await analyzeWav(makeWav({ format: 3, bits: 32, frames }), { waveformBins: 64 });
+  assert.equal(result.summary.overrangeSamples, 2);
+  assert.equal(result.summary.nonFiniteSamples, 2);
+  assert.ok(result.observations.some((item) => item.id === "overrange"));
+  assert.ok(result.observations.some((item) => item.id === "non-finite"));
+  assert.match(result.validation.truePeakStatus, /inte en standardvaliderad/);
+});
+
+test("gatingfunktionerna ger null för tystnad och positiv LRA för varierande energi", () => {
+  assert.equal(calculateIntegratedLufs([0, 0, 0]), null);
+  const energies = [0.0001, 0.0001, 0.001, 0.001, 0.01, 0.01];
+  assert.ok(Number.isFinite(calculateIntegratedLufs(energies)));
+  assert.ok(calculateLoudnessRange(energies) > 0);
+});

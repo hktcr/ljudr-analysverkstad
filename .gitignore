@@ -1,0 +1,32 @@
+# Ljudoriginal och exporter får aldrig hamna i kodarkivet.
+*.[Ww][Aa][Vv]
+*.[Ww][Aa][Vv][Ee]
+*.[Ff][Ll][Aa][Cc]
+*.[Mm]4[Aa]
+*.[Aa][Aa][Cc]
+*.[Mm][Pp]3
+*.[Aa][Ii][Ff]
+*.[Aa][Ii][Ff][Ff]
+*.[Cc][Aa][Ff]
+*.[Oo][Pp][Uu][Ss]
+*.[Oo][Gg][Gg]
+*.[Ww]64
+*.[Rr][Ff]64
+*.[Bb][Ww]64
+*.[Bb][Ww][Ff]
+*.[Rr][Aa][Ww]
+
+# Lokala projekt, rapporter och systemfiler.
+*.ljudr.json
+*-analysrapport.html
+*-analysrapport.json
+*_analysrapport.html
+*_analysrapport.json
+.DS_Store
+Thumbs.db
+
+# Tillfälliga utvecklingsfiler.
+node_modules/
+.tmp/
+coverage/
+_site/

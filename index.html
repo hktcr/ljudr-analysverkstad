@@ -1,0 +1,552 @@
+<!doctype html>
+<html lang="sv">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#13243b">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="LjudR">
+    <meta name="description" content="Lokal, varsam analys och trimning av långa ljudlandskap.">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'; manifest-src 'self'">
+    <title>LjudR Analysverkstad</title>
+    <link rel="manifest" href="./manifest.webmanifest">
+    <link rel="icon" href="./assets/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="./assets/icon-192.png">
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#mainContent">Hoppa till innehållet</a>
+
+    <div class="app-shell">
+      <header class="app-header">
+        <a class="brand" href="#" aria-label="LjudR Analysverkstad, startsida" data-mode-link="open">
+          <span class="brand-mark" aria-hidden="true">
+            <i></i><i></i><i></i>
+          </span>
+          <span>
+            <strong>LjudR</strong>
+            <small>Analysverkstad</small>
+          </span>
+        </a>
+
+        <div class="header-actions">
+          <div class="privacy-badge" role="status">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.75 19 6v5.2c0 4.55-2.92 8.68-7 10.05-4.08-1.37-7-5.5-7-10.05V6l7-3.25Zm0 3.08L8 7.68v3.52c0 2.98 1.7 5.86 4 6.99 2.3-1.13 4-4.01 4-6.99V7.68l-4-1.85Z"/></svg>
+            <span>Lokalt läge: ljudfilen lämnar inte enheten</span>
+          </div>
+          <button class="button button-quiet header-button" type="button" id="saveProjectButton" disabled>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h12l2 2v16H5V3Zm3 2v5h8V5H8Zm0 9v5h8v-5H8Z"/></svg>
+            <span>Spara projekt</span>
+          </button>
+          <button class="icon-button" type="button" id="helpButton" aria-label="Öppna hjälp">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 17.5a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Zm0-4.25a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5Zm.12-8.75c-2.06 0-3.3 1.12-3.48 2.96l2.02.23c.11-.92.58-1.37 1.39-1.37.72 0 1.22.4 1.22 1.08 0 .56-.26.89-1.03 1.43-1.08.76-1.36 1.43-1.31 2.72h1.89c-.03-.74.14-1.06.88-1.58 1.1-.78 1.64-1.51 1.64-2.68 0-1.69-1.3-2.79-3.22-2.79Z"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <nav class="mode-nav" aria-label="Arbetsflöde">
+        <button type="button" class="mode-tab is-active" data-mode="open" aria-current="step">
+          <span class="step-number">1</span><span>Öppna</span>
+        </button>
+        <span class="step-line" aria-hidden="true"></span>
+        <button type="button" class="mode-tab" data-mode="analyze" disabled>
+          <span class="step-number">2</span><span>Analysera</span>
+        </button>
+        <span class="step-line" aria-hidden="true"></span>
+        <button type="button" class="mode-tab" data-mode="trim" disabled>
+          <span class="step-number">3</span><span>Trimma och lyssna</span>
+        </button>
+        <span class="step-line" aria-hidden="true"></span>
+        <button type="button" class="mode-tab" data-mode="export" disabled>
+          <span class="step-number">4</span><span>Exportera</span>
+        </button>
+      </nav>
+
+      <div class="file-strip" id="fileStrip" hidden>
+        <div class="file-identity">
+          <span class="file-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M4 4h16v16H4V4Zm3 6v4h2v-4H7Zm4-3v10h2V7h-2Zm4 2v6h2V9h-2Z"/></svg>
+          </span>
+          <span>
+            <strong id="fileName">Ingen fil</strong>
+            <small id="fileTechnical">Tekniska data läses in</small>
+          </span>
+        </div>
+        <div class="file-assurance">
+          <span class="status-dot"></span>
+          <span>Originalet är skrivskyddat</span>
+        </div>
+        <button class="button button-quiet button-small" id="changeFileButton" type="button">Byt fil</button>
+      </div>
+
+      <main id="mainContent">
+        <section class="mode-panel open-panel is-visible" data-panel="open" aria-labelledby="openTitle">
+          <div class="open-hero">
+            <div class="hero-copy">
+              <span class="eyebrow">För fältinspelningar och ljudlandskap</span>
+              <h1 id="openTitle">Se ljudet tydligt.<br>Bevara platsen som den var.</h1>
+              <p>Analysera, lyssna och trimma långa inspelningar utan att skicka dem någonstans. Verktyget arbetar direkt i din webbläsare och låter originalets dynamik vara orörd.</p>
+              <div class="principle-list" aria-label="Grundprinciper">
+                <span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.2 16.6-4.3-4.3 1.5-1.5 2.8 2.8 8.4-8.4 1.5 1.5-9.9 9.9Z"/></svg>Ingen uppladdning</span>
+                <span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.2 16.6-4.3-4.3 1.5-1.5 2.8 2.8 8.4-8.4 1.5 1.5-9.9 9.9Z"/></svg>Inga automatiska ingrepp</span>
+                <span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.2 16.6-4.3-4.3 1.5-1.5 2.8 2.8 8.4-8.4 1.5 1.5-9.9 9.9Z"/></svg>Transparent analys</span>
+              </div>
+            </div>
+
+            <div class="open-card">
+              <label class="drop-zone" id="dropZone" for="audioFileInput">
+                <input id="audioFileInput" type="file" accept="audio/wav,audio/x-wav,.wav,.wave">
+                <span class="drop-graphic" aria-hidden="true">
+                  <svg viewBox="0 0 48 48"><path d="M24 6a18 18 0 1 0 18 18A18 18 0 0 0 24 6Zm1.75 9v7.25H33v3.5h-7.25V33h-3.5v-7.25H15v-3.5h7.25V15Z"/></svg>
+                </span>
+                <strong>Välj en WAV-inspelning</strong>
+                <span>eller dra filen hit</span>
+                <small>Optimerat för stora stereo-filer, även 32-bit float och 96 kHz</small>
+              </label>
+              <div class="local-explainer">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 10V8a4 4 0 1 1 8 0v2h2v11H6V10h2Zm2 0h4V8a2 2 0 1 0-4 0v2Zm0 4v3h4v-3h-4Z"/></svg>
+                <p><strong>Bearbetas lokalt på denna enhet</strong><br>Endast filer som du själv exporterar lämnar verktyget.</p>
+              </div>
+              <button class="text-button" type="button" id="openProjectButton">Öppna ett sparat projekt</button>
+              <input id="projectFileInput" type="file" accept="application/json,.ljudr.json,.json" hidden>
+            </div>
+          </div>
+
+          <div class="open-footnote">
+            <span>WAV PCM 16, 24 och 32 bit</span>
+            <span>WAV IEEE float 32 bit</span>
+            <span>Mono och stereo</span>
+            <span>44,1 till 192 kHz</span>
+          </div>
+        </section>
+
+        <section class="mode-panel" data-panel="analyze" aria-labelledby="analyzeTitle">
+          <div class="workspace-grid">
+            <div class="workspace-main">
+              <div class="section-heading">
+                <div>
+                  <span class="eyebrow">Steg 2</span>
+                  <h1 id="analyzeTitle">Analysera inspelningen</h1>
+                  <p>Mätvärden beskriver signalen. De avgör inte hur ett ljudlandskap ska låta.</p>
+                </div>
+                <button class="button button-primary" type="button" id="analyzeButton">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18h2V9H4v9Zm4 0h2V5H8v13Zm4 0h2v-7h-2v7Zm4 0h2V3h-2v15Zm4 0h2v-4h-2v4Z"/></svg>
+                  Starta analys
+                </button>
+              </div>
+
+              <div class="progress-card" id="analysisProgress" hidden aria-live="polite">
+                <div class="progress-copy">
+                  <strong id="progressLabel">Förbereder analys</strong>
+                  <span id="progressPercent">0 %</span>
+                </div>
+                <div class="progress-track"><i id="progressFill"></i></div>
+                <small>Du kan lämna skärmen på, men undvik att stänga fliken under analysen.</small>
+              </div>
+
+              <article class="timeline-card">
+                <div class="card-toolbar">
+                  <div>
+                    <h2>Översikt</h2>
+                    <span id="timelineRange">Hela inspelningen</span>
+                  </div>
+                  <div class="toolbar-group" aria-label="Tidslinjens vy">
+                    <button class="icon-button" type="button" data-zoom="out" aria-label="Zooma ut"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 11h14v2H5z"/></svg></button>
+                    <button class="button button-quiet button-small" type="button" id="fitTimelineButton">Visa allt</button>
+                    <button class="icon-button" type="button" data-zoom="in" aria-label="Zooma in"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></svg></button>
+                  </div>
+                </div>
+                <div class="track-legend" aria-label="Spår i tidslinjen">
+                  <button class="legend-chip is-on" type="button" data-track="waveform"><i class="legend-wave"></i>Stereo</button>
+                  <button class="legend-chip is-on" type="button" data-track="loudness"><i class="legend-loudness"></i>Loudness</button>
+                  <button class="legend-chip is-on" type="button" data-track="peaks"><i class="legend-peaks"></i>Toppar</button>
+                  <button class="legend-chip is-on" type="button" data-track="markers"><i class="legend-markers"></i>Markörer</button>
+                </div>
+                <div class="canvas-wrap">
+                  <canvas id="analysisCanvas" class="timeline-canvas" role="img" aria-label="Tidslinje för stereovågform, loudness, toppnivåer och markörer"></canvas>
+                  <div class="canvas-empty" id="analysisCanvasEmpty">
+                    <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M4 25h4l2-7 4 14 4-22 4 30 4-23 4 16 3-8h7v-2h-8l-2 5-4-20-4 20-4-25-5 23-3-12-4 9H4v2Z"/></svg>
+                    <span>Analysens tidslinje visas här</span>
+                  </div>
+                </div>
+                <div class="time-axis" aria-hidden="true"><span>00:00</span><span>05:00</span><span>10:00</span><span>15:00</span><span>20:00</span></div>
+              </article>
+
+              <div class="metric-grid" aria-label="Sammanfattande mätvärden">
+                <article class="metric-card metric-violet">
+                  <div class="metric-label"><span>Integrated loudness</span><button class="info-dot" type="button" data-help-topic="lufs" aria-label="Om Integrated loudness">i</button></div>
+                  <strong id="metricLufs">ej analyserat</strong>
+                  <small>LUFS-I, hela urvalet</small>
+                </article>
+                <article class="metric-card metric-cyan">
+                  <div class="metric-label"><span>True Peak</span><button class="info-dot" type="button" data-help-topic="peak" aria-label="Om True Peak">i</button></div>
+                  <strong id="metricPeak">ej analyserat</strong>
+                  <small>dBTP, högsta kanal</small>
+                </article>
+                <article class="metric-card metric-gold">
+                  <div class="metric-label"><span>Loudness range</span><button class="info-dot" type="button" data-help-topic="lra" aria-label="Om Loudness range">i</button></div>
+                  <strong id="metricLra">ej analyserat</strong>
+                  <small>LU, dynamisk spridning</small>
+                </article>
+                <article class="metric-card metric-slate">
+                  <div class="metric-label"><span>Stereobalans</span><button class="info-dot" type="button" data-help-topic="stereo" aria-label="Om stereobalans">i</button></div>
+                  <strong id="metricBalance">ej analyserat</strong>
+                  <small>energi vänster mot höger</small>
+                </article>
+              </div>
+
+              <details class="deep-measurements" id="deepMeasurements">
+                <summary>
+                  <span class="deep-summary-copy">
+                    <span class="objective-badge">Objektiva mätningar</span>
+                    <strong>Fördjupad mätning</strong>
+                    <small>Signalvärden, kanaler och mätmetod</small>
+                  </span>
+                  <span class="deep-summary-action">Visa detaljer <i aria-hidden="true"></i></span>
+                </summary>
+                <div class="deep-measurement-body">
+                  <p class="measurement-principle"><strong>Mätning är inte bedömning.</strong> Värdena nedan beskriver ljudfilens signal. Heuristiska observationer visas separat i inspektören och är markerade som observationer.</p>
+                  <div class="measurement-groups">
+                    <section class="measurement-group">
+                      <h3>Loudness och dynamik</h3>
+                      <dl>
+                        <div><dt>Max LUFS-M</dt><dd id="deepMomentary">saknas</dd></div>
+                        <div><dt>Max LUFS-S</dt><dd id="deepShortTerm">saknas</dd></div>
+                        <div><dt>LUFS-I</dt><dd id="deepIntegrated">saknas</dd></div>
+                        <div><dt>LRA</dt><dd id="deepLra">saknas</dd></div>
+                        <div><dt>PLR</dt><dd id="deepPlr">saknas</dd></div>
+                      </dl>
+                    </section>
+                    <section class="measurement-group">
+                      <h3>Toppar och energi</h3>
+                      <dl>
+                        <div><dt>Sample peak</dt><dd id="deepSamplePeak">saknas</dd></div>
+                        <div><dt>Tid för sample peak</dt><dd id="deepSamplePeakTime">saknas</dd></div>
+                        <div><dt>True Peak-estimat</dt><dd id="deepTruePeak">saknas</dd></div>
+                        <div><dt>RMS</dt><dd id="deepRms">saknas</dd></div>
+                        <div><dt>Crest factor</dt><dd id="deepCrest">saknas</dd></div>
+                      </dl>
+                    </section>
+                    <section class="measurement-group">
+                      <h3>Stereo</h3>
+                      <dl>
+                        <div><dt>Korrelation</dt><dd id="deepCorrelation">saknas</dd></div>
+                        <div><dt>Kanalbalans L/R</dt><dd id="deepChannelBalance">saknas</dd></div>
+                        <div><dt>Mid/Side-förhållande</dt><dd id="deepMidSide">saknas</dd></div>
+                      </dl>
+                    </section>
+                    <section class="measurement-group">
+                      <h3>Signalintegritet</h3>
+                      <dl>
+                        <div><dt>DC vänster</dt><dd id="deepDcLeft">saknas</dd></div>
+                        <div><dt>DC höger</dt><dd id="deepDcRight">saknas</dd></div>
+                        <div><dt>Över full skala</dt><dd id="deepOverrange">saknas</dd></div>
+                        <div><dt>Ogiltiga floatvärden</dt><dd id="deepInvalid">saknas</dd></div>
+                      </dl>
+                    </section>
+                  </div>
+                  <div class="measurement-validation" id="measurementValidation">
+                    <span class="validation-dot" aria-hidden="true"></span>
+                    <p><strong>Valideringsstatus visas efter analys.</strong> Ett True Peak-estimat ska inte användas som leveranskrav innan metoden är verifierad mot officiellt testmaterial.</p>
+                  </div>
+                </div>
+              </details>
+            </div>
+
+            <aside class="inspector" aria-label="Analysinspektör">
+              <section class="inspector-section">
+                <div class="inspector-heading">
+                  <div class="observation-heading-copy"><h2>Observationer</h2><span>Separat tolkande lager</span></div>
+                  <span class="count-badge" id="observationCount">0</span>
+                </div>
+                <div class="observation-list" id="observationList">
+                  <div class="empty-state-small">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 3h2v10h-2V3Zm0 14h2v2h-2v-2ZM3 11h5v2H3v-2Zm13 0h5v2h-5v-2Zm-8.36 5.95 1.41 1.41-3.53 3.53-1.41-1.41 3.53-3.53Zm10.72-12.9 1.42 1.41-3.54 3.54-1.41-1.42 3.53-3.53ZM5.52 4.05l3.53 3.53L7.64 9 4.1 5.46l1.42-1.41Zm10.72 12.9 3.54 3.53-1.42 1.41-3.53-3.53 1.41-1.41Z"/></svg>
+                    <p>Observationer visas när analysen är klar.</p>
+                  </div>
+                </div>
+              </section>
+
+              <section class="inspector-section">
+                <div class="inspector-heading"><h2>Markörer</h2><button class="text-button" type="button" id="addMarkerButton" disabled>+ Lägg till</button></div>
+                <div class="marker-compose" id="markerCompose" hidden>
+                  <label>Beskrivning<input type="text" id="markerText" maxlength="120" placeholder="Exempel: ko råmar nära mikrofonen"></label>
+                  <label>Typ<select id="markerType"><option value="descriptive">Beskrivande</option><option value="technical">Teknisk</option><option value="user">Egen</option></select></label>
+                  <div class="inline-actions"><button class="button button-primary button-small" id="confirmMarkerButton" type="button">Spara</button><button class="button button-quiet button-small" id="cancelMarkerButton" type="button">Avbryt</button></div>
+                </div>
+                <ol class="marker-list" id="markerList"><li class="list-placeholder">Inga markörer ännu</li></ol>
+              </section>
+
+              <section class="inspector-section standards-note">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 2 20h20L12 2Zm0 5.4 6.58 10.6H5.42L12 7.4ZM11 11v3h2v-3h-2Zm0 4.5v2h2v-2h-2Z"/></svg>
+                <div><strong>Analys under validering</strong><p>Resultaten beräknas lokalt enligt angivna metoder. Se rapporten för motorversion och aktuell valideringsstatus.</p></div>
+              </section>
+            </aside>
+          </div>
+        </section>
+
+        <section class="mode-panel" data-panel="trim" aria-labelledby="trimTitle">
+          <div class="workspace-grid">
+            <div class="workspace-main">
+              <div class="section-heading">
+                <div><span class="eyebrow">Steg 3</span><h1 id="trimTitle">Trimma och lyssna</h1><p>Trimma ytterkanterna och gör endast globala nivåval. Ingen lokal nivåjustering görs.</p></div>
+                <span class="read-only-pill"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h12v16H6V4Zm2 2v12h8V6H8Z"/></svg>Originalet påverkas inte</span>
+              </div>
+
+              <article class="timeline-card trim-timeline-card">
+                <div class="card-toolbar">
+                  <div><h2>Valt utsnitt</h2><span id="selectedDuration">00:00.000</span></div>
+                  <div class="toolbar-group"><button class="button button-quiet button-small" id="resetTrimButton" type="button">Återställ gränser</button><button class="button button-quiet button-small" id="fitTrimButton" type="button">Visa allt</button></div>
+                </div>
+                <div class="canvas-wrap canvas-wrap-trim">
+                  <canvas id="trimCanvas" class="timeline-canvas" role="img" aria-label="Tidslinje med trimgränser för början och slut"></canvas>
+                  <div class="trim-handle-label trim-start-label" id="trimStartLabel">Start 00:00.000</div>
+                  <div class="trim-handle-label trim-end-label" id="trimEndLabel">Slut 00:00.000</div>
+                </div>
+                <div class="transport">
+                  <div class="transport-buttons">
+                    <button class="icon-button" type="button" id="jumpStartButton" aria-label="Gå till startgränsen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h2v14H5V5Zm4 7 10-7v14L9 12Z"/></svg></button>
+                    <button class="icon-button" type="button" id="backTenButton" aria-label="Hoppa tio sekunder bakåt"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5V2L7 6l5 4V7a7 7 0 1 1-6.93 8H3.05A9 9 0 1 0 12 5Zm-3 6h2v5H9v-5Zm3 0h2v5h-2v-5Z"/></svg></button>
+                    <button class="play-button" type="button" id="playButton" aria-label="Spela"><svg class="play-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5 11 7-11 7V5Z"/></svg><svg class="pause-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7V5Zm6 0h4v14h-4V5Z"/></svg></button>
+                    <button class="icon-button" type="button" id="forwardTenButton" aria-label="Hoppa tio sekunder framåt"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5V2l5 4-5 4V7a7 7 0 1 0 6.93 8h2.02A9 9 0 1 1 12 5Zm-3 6h2v5H9v-5Zm3 0h2v5h-2v-5Z"/></svg></button>
+                    <button class="icon-button" type="button" id="jumpEndButton" aria-label="Gå till slutgränsen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 5h2v14h-2V5Zm-2 7L5 19V5l10 7Z"/></svg></button>
+                  </div>
+                  <div class="transport-time"><strong id="currentTime">00:00.000</strong><span>/</span><span id="transportDuration">00:00.000</span></div>
+                  <label class="volume-control"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4Zm11.5.5a4 4 0 0 1 0 5l1.5 1.3a6 6 0 0 0 0-7.6l-1.5 1.3Zm2.8-2.5a8 8 0 0 1 0 10l1.5 1.3a10 10 0 0 0 0-12.6L18.3 7Z"/></svg><span class="visually-hidden">Medhörningsvolym</span><input id="monitorVolume" type="range" min="0" max="1" step="0.01" value="0.8"></label>
+                </div>
+                <audio id="audioPlayer" preload="metadata"></audio>
+              </article>
+
+              <div class="trim-control-grid">
+                <article class="control-card">
+                  <div class="control-card-heading"><span class="boundary-chip boundary-start">A</span><div><h2>Startgräns</h2><p>Första bildrutan som tas med</p></div></div>
+                  <label class="time-input-label">Tid<input id="trimStartInput" class="time-input" type="text" inputmode="decimal" value="00:00.000" aria-label="Starttid"></label>
+                  <button class="button button-secondary button-full" id="setStartAtPlayhead" type="button">Sätt vid spelhuvudet</button>
+                  <div class="nudge-group" aria-label="Finjustera startgräns">
+                    <button type="button" data-nudge="start:-0.1">−100 ms</button><button type="button" data-nudge="start:-0.01">−10</button><button type="button" data-nudge="start:-0.001">−1</button>
+                    <button type="button" data-nudge="start:0.001">+1</button><button type="button" data-nudge="start:0.01">+10</button><button type="button" data-nudge="start:0.1">+100 ms</button>
+                  </div>
+                  <button class="text-button preview-boundary" type="button" data-preview-boundary="start">Lyssna runt gränsen</button>
+                </article>
+
+                <article class="control-card">
+                  <div class="control-card-heading"><span class="boundary-chip boundary-end">B</span><div><h2>Slutgräns</h2><p>Första bildrutan som inte tas med</p></div></div>
+                  <label class="time-input-label">Tid<input id="trimEndInput" class="time-input" type="text" inputmode="decimal" value="00:00.000" aria-label="Sluttid"></label>
+                  <button class="button button-secondary button-full" id="setEndAtPlayhead" type="button">Sätt vid spelhuvudet</button>
+                  <div class="nudge-group" aria-label="Finjustera slutgräns">
+                    <button type="button" data-nudge="end:-0.1">−100 ms</button><button type="button" data-nudge="end:-0.01">−10</button><button type="button" data-nudge="end:-0.001">−1</button>
+                    <button type="button" data-nudge="end:0.001">+1</button><button type="button" data-nudge="end:0.01">+10</button><button type="button" data-nudge="end:0.1">+100 ms</button>
+                  </div>
+                  <button class="text-button preview-boundary" type="button" data-preview-boundary="end">Lyssna runt gränsen</button>
+                </article>
+              </div>
+            </div>
+
+            <aside class="inspector" aria-label="Trimningsinställningar">
+              <section class="inspector-section fade-section">
+                <h2>Linjära toningar</h2>
+                <p class="section-description">Av är förvalt. Medhörning och export använder samma linjära amplitudkurva.</p>
+
+                <div class="fade-editor">
+                  <div class="fade-control" id="fadeInEditor">
+                    <label class="switch-row fade-switch"><span><strong>Intoning</strong><small>Från tystnad till full nivå</small></span><input type="checkbox" id="fadeInToggle"><i aria-hidden="true"></i></label>
+                    <div class="fade-controls" id="fadeInControls" aria-disabled="true">
+                      <div class="value-unit-field"><input id="fadeInNumber" type="number" min="0.01" max="60" step="0.01" value="1.00" inputmode="decimal" aria-label="Intoningens längd i sekunder" disabled><span>s</span></div>
+                      <input id="fadeInRange" class="accent-range" type="range" min="0.01" max="30" step="0.01" value="1" aria-label="Intoningens längd" disabled>
+                      <div class="preset-row" aria-label="Förval för intoning">
+                        <button type="button" data-fade-preset="in:0.05">50 ms</button>
+                        <button type="button" data-fade-preset="in:0.25">250 ms</button>
+                        <button type="button" data-fade-preset="in:1">1 s</button>
+                        <button type="button" data-fade-preset="in:3">3 s</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="fade-control" id="fadeOutEditor">
+                    <label class="switch-row fade-switch"><span><strong>Uttoning</strong><small>Från full nivå till tystnad</small></span><input type="checkbox" id="fadeOutToggle"><i aria-hidden="true"></i></label>
+                    <div class="fade-controls" id="fadeOutControls" aria-disabled="true">
+                      <div class="value-unit-field"><input id="fadeOutNumber" type="number" min="0.01" max="60" step="0.01" value="1.00" inputmode="decimal" aria-label="Uttoningens längd i sekunder" disabled><span>s</span></div>
+                      <input id="fadeOutRange" class="accent-range" type="range" min="0.01" max="30" step="0.01" value="1" aria-label="Uttoningens längd" disabled>
+                      <div class="preset-row" aria-label="Förval för uttoning">
+                        <button type="button" data-fade-preset="out:0.05">50 ms</button>
+                        <button type="button" data-fade-preset="out:0.25">250 ms</button>
+                        <button type="button" data-fade-preset="out:1">1 s</button>
+                        <button type="button" data-fade-preset="out:3">3 s</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <p class="fine-print fade-note" id="fadeOverlapNotice">Toningarna påverkar bara det valda utsnittets ytterkanter.</p>
+              </section>
+
+              <section class="inspector-section gain-section">
+                <div class="inspector-heading"><h2>Gain för hela verket</h2><button class="text-button" id="resetGainButton" type="button">Återställ</button></div>
+                <p class="section-description">Samma nivåändring över hela inspelningen. Ingen kompressor eller limiter används.</p>
+                <div class="gain-value"><input id="gainNumber" type="number" min="-24" max="24" step="0.1" value="0.0" aria-label="Gain i decibel"><span>dB</span></div>
+                <input id="gainRange" class="accent-range" type="range" min="-24" max="24" step="0.1" value="0" aria-label="Gain i decibel">
+                <div class="projected-metrics">
+                  <div><span>Orienterande LUFS-I</span><strong id="projectedLufs">oförändrad</strong></div>
+                  <div><span>Orienterande True Peak</span><strong id="projectedPeak">oförändrad</strong></div>
+                </div>
+                <div class="neutral-notice" id="gainNotice" hidden></div>
+              </section>
+
+              <section class="inspector-section peak-section">
+                <div class="inspector-heading">
+                  <div><h2>Global toppmarginal</h2><span class="method-badge">Orienterande True Peak</span></div>
+                </div>
+                <p class="section-description">Om funktionen behövs sänks hela verket lika mycket. Enskilda toppar formas inte.</p>
+                <label class="switch-row peak-switch"><span><strong>Håll global toppmarginal</strong><small>Av som standard</small></span><input type="checkbox" id="peakHandlingToggle"><i aria-hidden="true"></i></label>
+                <fieldset class="peak-controls" id="peakHandlingControls" disabled>
+                  <legend>Önskad högsta orienterande True Peak</legend>
+                  <div class="value-unit-field peak-value"><input id="peakCeilingNumber" type="number" min="-12" max="-0.1" step="0.1" value="-2.0" inputmode="decimal" aria-label="Önskad toppmarginal i dBTP"><span>dBTP</span></div>
+                  <input id="peakCeilingRange" class="accent-range" type="range" min="-12" max="-0.1" step="0.1" value="-2" aria-label="Önskad toppmarginal i dBTP">
+                  <div class="preset-row peak-presets" aria-label="Förval för toppmarginal">
+                    <button type="button" data-peak-ceiling="-1">-1</button>
+                    <button type="button" data-peak-ceiling="-2" class="is-selected">-2</button>
+                    <button type="button" data-peak-ceiling="-3">-3</button>
+                    <button type="button" data-peak-ceiling="-6">-6</button>
+                  </div>
+                </fieldset>
+                <dl class="peak-readout" aria-live="polite">
+                  <div><dt>Källans estimat</dt><dd id="peakSourceValue">analysera först</dd></div>
+                  <div><dt>Global sänkning</dt><dd id="peakReductionValue">0,0 dB</dd></div>
+                  <div><dt>Beräknat efter nivåval</dt><dd id="peakResultValue">saknas</dd></div>
+                </dl>
+                <div class="neutral-notice peak-notice" id="peakHandlingStatus">Funktionen är av. True Peak-värdet är orienterande och är ingen leveransgaranti.</div>
+                <p class="fine-print peak-caveat"><strong>Detta är inte en limiter.</strong> Funktionen kan inte reparera ljud som redan är klippt eller distorderat.</p>
+              </section>
+
+              <section class="inspector-section">
+                <h2>Jämför lyssning</h2>
+                <label class="switch-row"><span><strong>Utjämnad medhörning</strong><small>Jämför klang utan nivåskillnaden</small></span><input type="checkbox" id="levelMatchToggle"><i aria-hidden="true"></i></label>
+                <p class="fine-print">Medhörningsvolymen och utjämnad lyssning påverkar aldrig exportfilen.</p>
+              </section>
+            </aside>
+          </div>
+        </section>
+
+        <section class="mode-panel" data-panel="export" aria-labelledby="exportTitle">
+          <div class="workspace-grid export-workspace">
+            <div class="workspace-main">
+              <div class="section-heading">
+                <div><span class="eyebrow">Steg 4</span><h1 id="exportTitle">Exportera</h1><p>Granska vad som ändras och välj en fil för nästa steg i arbetet.</p></div>
+              </div>
+
+              <article class="export-summary-card">
+                <div class="export-summary-heading"><span class="export-file-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h8l4 4v16H6V2Zm8 2.8V8h3.2L14 4.8ZM9 12v2h6v-2H9Zm0 4v2h6v-2H9Z"/></svg></span><div><span>Valt utsnitt</span><strong id="exportFileName">Ingen fil vald</strong></div></div>
+                <dl class="export-facts">
+                  <div><dt>Längd</dt><dd id="exportDuration">00:00.000</dd></div>
+                  <div><dt>Trimning</dt><dd id="exportTrimSummary">Oförändrad</dd></div>
+                  <div><dt>Gain</dt><dd id="exportGainSummary">0,0 dB</dd></div>
+                  <div><dt>Toningar</dt><dd id="exportFadeSummary">Av</dd></div>
+                  <div><dt>Toppmarginal</dt><dd id="exportPeakSummary">Av</dd></div>
+                </dl>
+              </article>
+
+              <fieldset class="profile-fieldset">
+                <legend>Välj exportprofil</legend>
+                <label class="profile-option">
+                  <input type="radio" name="exportProfile" value="preservation" checked>
+                  <span class="radio-visual"></span>
+                  <span class="profile-icon profile-blue"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4V5Zm3 3v8h2V8H7Zm4-2v12h2V6h-2Zm4 3v6h2V9h-2Z"/></svg></span>
+                  <span class="profile-copy"><strong>Bevarande master</strong><small>WAV med källans samplingsfrekvens och format. För arkiv och fortsatt redigering.</small><span class="profile-tags"><i>WAV</i><i>Förlustfri</i><i>Rekommenderad</i></span></span>
+                </label>
+                <label class="profile-option">
+                  <input type="radio" name="exportProfile" value="distribution">
+                  <span class="radio-visual"></span>
+                  <span class="profile-icon profile-violet"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v10.3a4 4 0 1 0 2 3.46V8h5V3h-7Z"/></svg></span>
+                  <span class="profile-copy"><strong>Redigerad distributionsmaster</strong><small>WAV för leverans. Vid formatändring visas exakt vad som sker före export.</small><span class="profile-tags"><i>WAV</i><i>Leverans</i></span></span>
+                </label>
+                <label class="profile-option" id="listeningProfile">
+                  <input type="radio" name="exportProfile" value="listening" disabled>
+                  <span class="radio-visual"></span>
+                  <span class="profile-icon profile-gold"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10a5 5 0 0 1 10 0v7h-2v-7a3 3 0 0 0-6 0v7H7v-7Zm-3 2h2v7H4v-7Zm14 0h2v7h-2v-7Z"/></svg></span>
+                  <span class="profile-copy"><strong>Lyssningskopia</strong><small>AAC eller MP3 aktiveras först när storfilsexporten är verifierad på iPad.</small><span class="profile-tags"><i>Kommer senare</i></span></span>
+                </label>
+              </fieldset>
+
+              <div class="export-progress" id="exportProgress" hidden aria-live="polite">
+                <div class="progress-copy"><strong id="exportProgressLabel">Förbereder export</strong><span id="exportProgressPercent">0 %</span></div>
+                <div class="progress-track"><i id="exportProgressFill"></i></div>
+              </div>
+            </div>
+
+            <aside class="inspector" aria-label="Metadata och exportåtgärder">
+              <section class="inspector-section metadata-section">
+                <div class="inspector-heading"><h2>Metadata</h2><button class="text-button" type="button" id="toggleMetadataButton" aria-expanded="true">Dölj</button></div>
+                <form id="metadataForm">
+                  <label class="field-label">Titel<input name="title" type="text" placeholder="Exempel: Cows at dusk"></label>
+                  <div class="field-row">
+                    <label class="field-label">Serie<input name="series" type="text" value="Twenty Minutes Here"></label>
+                    <label class="field-label field-short">Avsnitt<input name="episode" type="number" min="1" inputmode="numeric"></label>
+                  </div>
+                  <div class="field-row">
+                    <label class="field-label">Sessions-ID<input name="sessionId" type="text" placeholder="TMH-2026-001"></label>
+                    <label class="field-label">Projekt<input name="project" type="text" value="LjudR"></label>
+                  </div>
+                  <div class="field-row">
+                    <label class="field-label">Datum<input name="date" type="date"></label>
+                    <label class="field-label">Lokal tid<input name="localTime" type="time"></label>
+                  </div>
+                  <label class="field-label">Ljusläge och tid på dygnet<input name="lightConditions" type="text" placeholder="Skymning, strax efter solnedgång"></label>
+                  <label class="field-label">Plats<input name="place" type="text" placeholder="Tomarps ene, Skåne"></label>
+                  <div class="field-row">
+                    <label class="field-label">Latitud<input name="latitude" type="text" inputmode="decimal"></label>
+                    <label class="field-label">Longitud<input name="longitude" type="text" inputmode="decimal"></label>
+                  </div>
+                  <label class="field-label">Koordinatprecision<select name="coordinatePrecision"><option value="hidden">Dold</option><option value="rounded" selected>Avrundad</option><option value="exact">Exakt</option></select></label>
+                  <label class="field-label">Taggar och ljudkällor<input name="tags" type="text" placeholder="kor, bete, kväll, vind"></label>
+                  <label class="field-label">Inspelare och mikrofoner<input name="equipment" type="text"></label>
+                  <label class="field-label">Miljö och väder<input name="environment" type="text"></label>
+                  <label class="field-label">Anteckningar<textarea name="notes" rows="3"></textarea></label>
+                  <label class="field-label">Skapare<input name="creator" type="text"></label>
+                  <label class="field-label">Licens<input name="license" type="text" placeholder="Alla rättigheter förbehållna"></label>
+                  <label class="field-label">Relaterad bild eller länk<input name="relatedImage" type="url" inputmode="url" placeholder="https://"></label>
+                </form>
+              </section>
+
+              <section class="inspector-section capability-section">
+                <div class="inspector-heading"><h2>Teknisk status</h2><span class="status-pill" id="capabilityStatus">Kontrollerar</span></div>
+                <ul id="capabilityList"><li><span>Analysmotor</span><strong>Kontrollerar</strong></li><li><span>WAV-export</span><strong>Kontrollerar</strong></li><li><span>Projektfil</span><strong>Inbyggd reserv</strong></li></ul>
+              </section>
+
+              <section class="export-action-panel">
+                <button class="button button-primary button-large button-full" id="exportAudioButton" type="button">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 3h2v10.2l3.6-3.6L18 11l-6 6-6-6 1.4-1.4 3.6 3.6V3ZM5 19h14v2H5v-2Z"/></svg>
+                  Exportera ljudfil
+                </button>
+                <div class="secondary-export-actions">
+                  <button class="button button-quiet" id="exportReportButton" type="button">Skapa rapport</button>
+                  <button class="button button-quiet" id="exportJsonButton" type="button">Exportera JSON</button>
+                </div>
+                <p>Filen skapas lokalt. På stora inspelningar kan exporten ta flera minuter.</p>
+              </section>
+            </aside>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div class="toast-region" id="toastRegion" aria-live="polite" aria-atomic="true"></div>
+
+    <dialog class="help-dialog" id="helpDialog" aria-labelledby="helpDialogTitle">
+      <div class="dialog-header">
+        <div><span class="eyebrow">LjudR Analysverkstad</span><h2 id="helpDialogTitle">Varsam hjälp, steg för steg</h2></div>
+        <button class="icon-button" id="closeHelpButton" type="button" aria-label="Stäng hjälp"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6.4 5 5.6 5.6L17.6 5 19 6.4 13.4 12l5.6 5.6-1.4 1.4-5.6-5.6L6.4 19 5 17.6l5.6-5.6L5 6.4 6.4 5Z"/></svg></button>
+      </div>
+      <div class="dialog-content">
+        <nav class="help-nav" aria-label="Hjälpavsnitt">
+          <button class="is-active" type="button" data-help-section="principles">Grundprinciper</button>
+          <button type="button" data-help-section="lufs">LUFS och dynamik</button>
+          <button type="button" data-help-section="trim">Trimning</button>
+          <button type="button" data-help-section="privacy">Integritet</button>
+        </nav>
+        <div class="help-copy" id="helpCopy"></div>
+      </div>
+    </dialog>
+
+    <script type="module" src="./src/app.js"></script>
+  </body>
+</html>
