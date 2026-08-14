@@ -10,7 +10,7 @@ En lokal referens den 14 augusti 2026 använde 10 sekunder stereo float med 1 kH
 
 True Peak-motorn använder nu 49 taps polyfas FIR-oversampling. Ett periodiskt extremprov med samplingarna +0,99, +0,99, -0,99, -0,99 gav cirka +3,03 dBTP. Ett analytiskt 18 kHz sinusprov vid 48 kHz och amplituden 0,9 återgav den kontinuerliga signalens topp inom 0,05 dB. Ett lokalt skript kan köra EBU:s testfall 1 till 5, 15 till 23 samt LRA 1 till 4 när de officiella filerna lagts i en lokal, ignorerad valideringsmapp.
 
-Ett separat blockprov använde 60 sekunder stereo 32 bit float vid 96 kHz, cirka 44 MiB, genom en filbackad Blob. Analysen tog cirka 0,93 sekunder i utvecklingsmiljön och processens högsta observerade RSS var cirka 125 MiB inklusive Node. Resultatet stöder att läsningen är blockbaserad, men säger inte hur snabbt eller minnessnålt samma körning blir i Safari på iPad.
+Ett separat långfilsprov den 14 augusti 2026 använde en virtuell 20 minuters stereo WAV i 32 bit float vid 96 kHz. Motorn behandlade 115 200 000 ljudbildrutor, motsvarande cirka 879 MiB sample-payload, på 25,19 sekunder i utvecklingsmiljön. Processens RSS steg från cirka 56,5 till 223,9 MiB. Den virtuella filen skapade varje block vid läsning och tvingade därför motorn att genomföra samma block-, sample- och FIR-beräkningar som en faktisk fil utan att reservera hela ljudfilen i minnet. Resultatet stöder storfilsarkitekturen, men ersätter inte fysisk verifiering i Safari och installerad PWA på Håkans iPad Pro.
 
 ## Referenser
 

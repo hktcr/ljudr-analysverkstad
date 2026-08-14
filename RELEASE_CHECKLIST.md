@@ -7,6 +7,7 @@ Denna fil beskriver verifieringskedjan för LjudR Analysverkstad. En release är
 Kontrollerat lokalt den 14 augusti 2026:
 
 - [x] 48 av 48 automatiska tester godkända, inklusive 64 bitars bearbetning, FIR True Peak, vägledning, informationsrutor och exportskydd för PCM 16, 24 och 32 bit samt float 32 bit.
+- [x] Virtuell 20 minuters stereo 32 bit float vid 96 kHz analyserad i 115 200 000 bildrutor utan helfilsbuffert.
 - [x] Syntaxkontroll godkänd för app, WAV-motor, DSP-motor, workers, projektmodul och service worker.
 - [x] Samtliga resurser i appskalet svarar med HTTP 200 från lokal webbserver.
 - [x] PWA-ikonerna är giltiga PNG-filer i 192 x 192 och 512 x 512 bildpunkter.
@@ -110,6 +111,15 @@ Förväntad Pages-adress, som inte får redovisas som färdig innan den har öpp
 `https://hktcr.github.io/ljudr-analysverkstad/`
 
 ## Slutligt deploykvitto
+
+Kvalitetsrelease 0.12.0 publicerades den 14 augusti 2026:
+
+- Releasecommit: `077d058cbd6693d059cd1c9f9bf4a7df8b2dbfc1`
+- Git tree: `690e415bf367cd5186fa5a96338d1b745511d2c2`
+- GitHub Actions: `31827328228`, slutförd med resultatet success
+- Liveadress: `https://hktcr.github.io/ljudr-analysverkstad/`
+- Livekontroll: appversion 0.12.0, DSP-version 0.12.0, FIR 49 tappar och cacheversion 0.12.0
+- Lokal kontroll: 48 av 48 tester, 13 av 13 HTTP-resurser och 20 minuters virtuell långfil godkända
 
 Följande uppgifter ska dokumenteras i gAIa efter verifierad publicering:
 
