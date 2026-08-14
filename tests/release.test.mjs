@@ -10,7 +10,7 @@ const read = path => readFile(resolve(root, path), "utf8");
 
 test("releaseversionen är konsekvent i motorer, projekt och PWA-cache", async () => {
   const packageData = JSON.parse(await read("package.json"));
-  const [project, dsp, exporter, serviceWorker, validation, releaseMeta, validationManifest] = await Promise.all([
+  const [project, dsp, exporter, serviceWorker, validation, releaseMeta, validationManifest, html, app] = await Promise.all([
     read("src/project.js"),
     read("src/dsp-core.js"),
     read("src/export-worker.js"),
@@ -18,11 +18,16 @@ test("releaseversionen är konsekvent i motorer, projekt och PWA-cache", async (
     read("docs/VALIDATION.md"),
     read("src/release-meta.js"),
     read("validation-manifest.json"),
+    read("index.html"),
+    read("src/app.js"),
   ]);
   const version = packageData.version;
   for (const source of [project, dsp, exporter, serviceWorker, validation, releaseMeta, validationManifest]) {
     assert.match(source, new RegExp(version.replaceAll(".", "\\.")));
   }
+  assert.match(html, /id="appVersion"/);
+  assert.match(app, /appVersion\.textContent = `v\$\{RELEASE\.version\}`/);
+  assert.match(app, /import \{ RELEASE \} from "\.\/release-meta\.js"/);
 });
 
 test("Pages använder separata jobb och actions pinnade till full SHA", async () => {

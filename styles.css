@@ -205,6 +205,20 @@ svg {
   text-transform: uppercase;
 }
 
+.brand-version {
+  display: inline-block;
+  margin-left: 5px;
+  padding: 2px 5px;
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.11);
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 5px;
+  font-size: 0.62rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.035em;
+  text-transform: none;
+}
+
 .brand-mark {
   display: grid;
   width: 36px;
@@ -2888,7 +2902,12 @@ svg {
 
 @media (max-width: 430px) {
   .brand small {
-    display: none;
+    font-size: 0;
+  }
+
+  .brand-version {
+    margin-left: 0;
+    font-size: 0.58rem;
   }
 
   .brand {

@@ -1,5 +1,11 @@
 # Ändringslogg
 
+## 1.0.0-rc.2, 2026-08-15
+
+- visar aktuell programversion tydligt intill LjudR-logotypen
+- hämtar versionsetiketten från samma releasekälla som projekt, analys och export
+- behåller versionsetiketten synlig även i smal iPad-layout
+
 ## 1.0.0-rc.1, 2026-08-15
 
 Offentlig valideringskandidat. Versionsnumret 1.0.0 är blockerat tills den fysiska iPad-matrisen och hela releaseporten är godkända.

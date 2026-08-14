@@ -1,4 +1,4 @@
-# Releasechecklista för 1.0.0-rc.1
+# Releasechecklista för 1.0.0-rc.2
 
 Status: offentlig valideringskandidat. Inte produktionsverifierad 1.0.
 
@@ -11,12 +11,12 @@ Status: offentlig valideringskandidat. Inte produktionsverifierad 1.0.
 - [x] Pagespaket: 17 tillåtna filer, varav buildmanifestet binder de övriga 16 med SHA-256.
 - [x] Samtliga 17 resurser gav HTTP 200 från lokal server.
 - [x] Inga spårade ljudfiler, rapporter, projekt, uppenbara hemligheter eller U+2013 hittades.
-- [x] Kandidaten är releasecommittad och commit-, Actions-, artifact- och livekvitton är verifierade.
+- [ ] Commit-, Actions-, artifact- och livekvitton fylls efter publicering.
 
 ## Lokal kandidat
 
 - [x] Varje releasefil är avsiktligt inkluderad och det publicerade GitHub-trädet matchar det lokalt beräknade trädet exakt.
-- [x] Versionen `1.0.0-rc.1` är konsekvent i paket, app, workers, projekt, rapport, dokumentation, PWA-cache och validation-manifest.
+- [x] Versionen `1.0.0-rc.2` är konsekvent i paket, app, workers, projekt, rapport, dokumentation, PWA-cache och validation-manifest.
 - [x] Syntaxkommandona i `npm run check`, hela fixerade testsuiten och `git diff --check` passerar.
 - [x] EBU visar 68/68 och ITU visar 19/19 för exakt releasekod.
 - [x] Build skapar endast den uttryckliga allowlisten och `build-manifest.json`.
@@ -40,10 +40,10 @@ Status: offentlig valideringskandidat. Inte produktionsverifierad 1.0.
 - [x] Actions är pinnade till granskade fulla commit-SHA.
 - [x] Checkout använder `persist-credentials: false`.
 - [x] Test/build och deploy har separata jobb och minsta rättigheter.
-- [x] Releasecommit, tree-id, Actions run-id, artifact digest och tidsstämplar är sparade nedan. RC:n saknar separat Git-tagg.
-- [x] GitHub `main` och buildmanifestets commit är exakt den verifierade releasecommitten.
-- [x] Pages använder GitHub Actions och deployjobbet anger slutlig URL.
-- [x] Liveversionen på `https://hktcr.github.io/ljudr-analysverkstad/` matchar releasecommit och alla 16 manifestbundna filer matchar SHA-256.
+- [ ] Spara releasecommit, tree-id, Actions run-id, artifact digest och tidsstämplar.
+- [ ] GitHub `main` och buildmanifestets commit är exakt releasecommitten.
+- [x] Pages använder GitHub Actions.
+- [ ] Liveversionen på `https://hktcr.github.io/ljudr-analysverkstad/` visar `1.0.0-rc.2` och matchar releasecommitten.
 
 ## Live smoke
 
@@ -59,14 +59,14 @@ Status: offentlig valideringskandidat. Inte produktionsverifierad 1.0.
 
 ## RC-kvitto
 
-- Releaseversion: `1.0.0-rc.1`
-- Releasecommit: `fd416f3e62384143cbed921b6ed6122976751b77`
-- Tree-id: `38e3728b324bc873e4d227fc5380c94402f6c3a4`
-- Actions run-id: `31849654609`, körning 7, start `2026-08-14T23:14:35Z`, klar `2026-08-14T23:15:06Z`
-- Artifact digest: `sha256:4851723b6f7c65099887dec666f1506aa671d369cc4500211dd258166c7127db`
+- Releaseversion: `1.0.0-rc.2`
+- Releasecommit: _fylls efter commit_
+- Tree-id: _fylls efter commit_
+- Actions run-id: _fylls efter grön körning_
+- Artifact digest: _fylls efter grön körning_
 - Pages-URL: `https://hktcr.github.io/ljudr-analysverkstad/`
-- Buildmanifest SHA-256: `e602a71142cf3f63e7cb9e4a02b47fcd6ee8139b6c15668a75d86747c6ae4cf4`
-- Livekontroll: HTTP 200 och `16/16` publicerade filhashar matchar manifestet
+- Buildmanifest SHA-256: _fylls efter bygg_
+- Livekontroll: _fylls efter publicering_
 - Fixerad testsuite: `72/72, 0 fel`
 - EBU/ITU: `68/68 respektive 19/19`
 - Status: `publik valideringskandidat`

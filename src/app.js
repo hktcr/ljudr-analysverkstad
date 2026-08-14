@@ -1,4 +1,5 @@
 import { inspectWav } from "./wav.js";
+import { RELEASE } from "./release-meta.js";
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
@@ -109,6 +110,7 @@ let detailTimer = 0;
 let regionTimer = 0;
 
 const elements = {
+  appVersion: $("#appVersion"),
   audioInput: $("#audioFileInput"),
   dropZone: $("#dropZone"),
   fileStrip: $("#fileStrip"),
@@ -2938,6 +2940,10 @@ function bindEvents() {
 }
 
 async function initialize() {
+  elements.appVersion.textContent = `v${RELEASE.version}`;
+  elements.appVersion.title = RELEASE.commit && RELEASE.commit !== "local-working-tree"
+    ? `Version ${RELEASE.version}, commit ${RELEASE.commit.slice(0, 12)}`
+    : `Version ${RELEASE.version}`;
   bindEvents();
   applyMetadata(state.metadata);
   elements.recordingType.value = state.assessment.recordingType;
