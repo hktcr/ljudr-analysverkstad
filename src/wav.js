@@ -1,4 +1,9 @@
 const RIFF_LIMIT = 0xffffffff;
+export const SUPPORTED_SAMPLE_RATES = Object.freeze([44100, 48000, 88200, 96000, 176400, 192000]);
+const EXTENSIBLE_GUID_TAIL = Object.freeze([
+  0x00, 0x00, 0x10, 0x00, 0x80, 0x00, 0x00, 0xaa,
+  0x00, 0x38, 0x9b, 0x71,
+]);
 
 const ascii = (view, offset, length) => {
   let value = "";
@@ -40,13 +45,21 @@ const parseFormat = (bytes) => {
   let channelMask = null;
   let effectiveFormatTag = formatTag;
   let subFormatGuid = null;
+  let extensible = false;
 
   if (formatTag === 0xfffe) {
     if (bytes.byteLength < 40) throw new Error("WAVE_FORMAT_EXTENSIBLE saknar obligatoriska fält.");
-    validBitsPerSample = view.getUint16(18, true);
+    const extensionSize = view.getUint16(16, true);
+    if (extensionSize < 22) throw new Error("WAVE_FORMAT_EXTENSIBLE saknar obligatoriska fält.");
+    validBitsPerSample = view.getUint16(18, true) || bitsPerSample;
     channelMask = view.getUint32(20, true);
-    effectiveFormatTag = view.getUint16(24, true);
+    effectiveFormatTag = view.getUint32(24, true);
     subFormatGuid = Array.from(bytes.slice(24, 40), value => value.toString(16).padStart(2, "0")).join("");
+    const canonicalTail = EXTENSIBLE_GUID_TAIL.every((value, index) => view.getUint8(28 + index) === value);
+    if (!canonicalTail || ![1, 3].includes(effectiveFormatTag)) {
+      throw new Error("WAVE_FORMAT_EXTENSIBLE använder en subformat-GUID som inte stöds.");
+    }
+    extensible = true;
   }
 
   const encoding = effectiveFormatTag === 1
@@ -55,11 +68,28 @@ const parseFormat = (bytes) => {
       ? "IEEE_FLOAT"
       : "UNSUPPORTED";
 
+  if (![1, 2].includes(channels)) throw new Error(`Filen har ${channels} kanaler. LjudR 1.0 stöder mono och stereo.`);
+  if (!SUPPORTED_SAMPLE_RATES.includes(sampleRate)) {
+    throw new Error(`Samplingsfrekvensen ${sampleRate} Hz stöds inte. Tillåtna värden är ${SUPPORTED_SAMPLE_RATES.join(", ")} Hz.`);
+  }
+  if (encoding === "UNSUPPORTED") throw new Error(`Ljudformat ${effectiveFormatTag} stöds inte. Använd PCM eller IEEE float.`);
+  if (encoding === "IEEE_FLOAT" && bitsPerSample !== 32) throw new Error("IEEE float stöds endast med 32 bitar.");
+  if (encoding === "PCM" && ![16, 24, 32].includes(bitsPerSample)) {
+    throw new Error("PCM stöds endast med 16, 24 eller 32 bitar.");
+  }
+  if (validBitsPerSample < 1 || validBitsPerSample > bitsPerSample) {
+    throw new Error("WAVE_FORMAT_EXTENSIBLE har ett ogiltigt antal giltiga bitar.");
+  }
+  if (encoding === "IEEE_FLOAT" && validBitsPerSample !== 32) {
+    throw new Error("IEEE float kräver 32 giltiga bitar.");
+  }
+  if (blockAlign !== channels * (bitsPerSample / 8)) {
+    throw new Error("blockAlign stämmer inte med kanalantal och bitdjup.");
+  }
+  if (byteRate !== sampleRate * blockAlign) {
+    throw new Error("byteRate stämmer inte med samplingsfrekvens och blockAlign.");
+  }
   const warnings = [];
-  if (!channels || channels > 32) warnings.push("Oväntat kanalantal.");
-  if (!sampleRate) warnings.push("Samplingsfrekvens saknas.");
-  if (blockAlign !== channels * Math.ceil(bitsPerSample / 8)) warnings.push("blockAlign stämmer inte med kanalantal och bitdjup.");
-  if (byteRate !== sampleRate * blockAlign) warnings.push("byteRate stämmer inte med samplingsfrekvens och blockAlign.");
 
   return {
     formatTag,
@@ -73,6 +103,9 @@ const parseFormat = (bytes) => {
     validBitsPerSample,
     channelMask,
     subFormatGuid,
+    extensible,
+    requiresValidBitsAwareProcessing: encoding === "PCM" && validBitsPerSample !== bitsPerSample,
+    canReencode: encoding !== "PCM" || validBitsPerSample === bitsPerSample,
     warnings,
     raw: bytes
   };
@@ -86,8 +119,11 @@ export async function inspectWav(blob) {
   const leadView = new DataView(lead.buffer, lead.byteOffset, lead.byteLength);
   const container = ascii(leadView, 0, 4);
   const wave = ascii(leadView, 8, 4);
-  if (!["RIFF", "RF64", "BW64"].includes(container) || wave !== "WAVE") {
-    throw new Error("Filen är inte en RIFF-, RF64- eller BW64-WAVE.");
+  if (["RF64", "BW64"].includes(container)) {
+    throw new Error("RF64 och BW64 ligger utanför LjudR 1.0 och kan inte öppnas.");
+  }
+  if (container !== "RIFF" || wave !== "WAVE") {
+    throw new Error("Filen är inte en little-endian RIFF/WAVE-fil.");
   }
 
   let offset = 12;
@@ -115,20 +151,7 @@ export async function inspectWav(blob) {
     const chunk = { id, headerOffset: offset, dataOffset, declaredSize, size, boundedSize };
     chunks.push(chunk);
 
-    if (id === "ds64") {
-      const body = await readSlice(blob, dataOffset, Math.min(boundedSize, 40));
-      if (body.byteLength >= 28) {
-        const bodyView = new DataView(body.buffer, body.byteOffset, body.byteLength);
-        ds64 = {
-          riffSize: getUint64LE(bodyView, 0),
-          dataSize: getUint64LE(bodyView, 8),
-          sampleCount: getUint64LE(bodyView, 16),
-          tableLength: bodyView.getUint32(24, true)
-        };
-      } else {
-        warnings.push("ds64-blocket är ofullständigt.");
-      }
-    } else if (id === "fmt ") {
+    if (id === "fmt ") {
       const body = await readSlice(blob, dataOffset, Math.min(boundedSize, 256));
       format = parseFormat(body);
     } else if (id === "data" && !data) {
@@ -145,11 +168,6 @@ export async function inspectWav(blob) {
   if (!format) throw new Error("WAV-filen saknar fmt-block.");
   if (!data) throw new Error("WAV-filen saknar data-block.");
   warnings.push(...format.warnings);
-  if (![1, 2].includes(format.channels)) warnings.push("Analysen är optimerad för mono eller stereo.");
-  if (![16, 24, 32].includes(format.bitsPerSample)) warnings.push("Bitdjupet stöds inte av exportmotorn.");
-  if (format.encoding === "UNSUPPORTED") warnings.push(`Ljudformat ${format.effectiveFormatTag} stöds inte.`);
-  if (format.encoding === "IEEE_FLOAT" && format.bitsPerSample !== 32) warnings.push("Endast 32 bit IEEE float stöds.");
-
   const completeDataBytes = data.boundedSize - (data.boundedSize % format.blockAlign);
   if (completeDataBytes !== data.boundedSize) warnings.push("Data-blocket slutar mitt i en ljudbildruta.");
   const frameCount = Math.floor(completeDataBytes / format.blockAlign);
@@ -169,6 +187,59 @@ export async function inspectWav(blob) {
   };
 }
 
+export async function parseWavHeader(blob) {
+  const inspected = await inspectWav(blob);
+  return {
+    container: "RIFF/WAVE",
+    formatTag: inspected.format.effectiveFormatTag,
+    encoding: inspected.format.encoding === "IEEE_FLOAT" ? "IEEE float" : "PCM",
+    channels: inspected.format.channels,
+    sampleRate: inspected.format.sampleRate,
+    byteRate: inspected.format.byteRate,
+    blockAlign: inspected.format.blockAlign,
+    bitsPerSample: inspected.format.bitsPerSample,
+    validBitsPerSample: inspected.format.validBitsPerSample,
+    channelMask: inspected.format.channelMask,
+    extensible: inspected.format.extensible,
+    byteRateConsistent: true,
+    dataOffset: inspected.data.dataOffset,
+    dataBytes: inspected.data.completeDataBytes,
+    declaredDataBytes: inspected.data.declaredSize,
+    truncated: inspected.isTruncated || inspected.data.completeDataBytes !== inspected.data.boundedSize,
+    frameCount: inspected.frameCount,
+    durationSeconds: inspected.durationSeconds,
+    chunks: inspected.chunks.map(chunk => ({
+      id: chunk.id,
+      offset: chunk.dataOffset,
+      declaredSize: chunk.declaredSize,
+      availableSize: chunk.boundedSize,
+    })),
+    inspected,
+  };
+}
+
+export function decodeSampleAt(view, offset, format) {
+  const encoding = format.encoding === "IEEE float" ? "IEEE_FLOAT" : format.encoding;
+  const bits = format.bitsPerSample;
+  if (encoding === "IEEE_FLOAT" && bits === 32) return view.getFloat32(offset, true);
+  if (encoding !== "PCM") throw new Error(`Kodningen ${encoding} ${bits} bit stöds inte.`);
+
+  let integer;
+  if (bits === 16) integer = view.getInt16(offset, true);
+  else if (bits === 24) {
+    integer = view.getUint8(offset)
+      | (view.getUint8(offset + 1) << 8)
+      | (view.getUint8(offset + 2) << 16);
+    if (integer & 0x800000) integer |= 0xff000000;
+  } else if (bits === 32) integer = view.getInt32(offset, true);
+  else throw new Error(`PCM ${bits} bit stöds inte.`);
+
+  const validBits = format.validBitsPerSample || bits;
+  const paddingBits = bits - validBits;
+  if (paddingBits > 0) integer >>= paddingBits;
+  return integer / (2 ** (validBits - 1));
+}
+
 export function decodeInterleaved(bytes, format, target = null) {
   const { channels, bitsPerSample, encoding, blockAlign } = format;
   const frameCount = Math.floor(bytes.byteLength / blockAlign);
@@ -184,25 +255,8 @@ export function decodeInterleaved(bytes, format, target = null) {
   for (let frame = 0; frame < frameCount; frame += 1) {
     for (let channel = 0; channel < channels; channel += 1) {
       let value;
-      if (encoding === "IEEE_FLOAT" && bitsPerSample === 32) {
-        value = view.getFloat32(byteOffset, true);
-        byteOffset += 4;
-      } else if (encoding === "PCM" && bitsPerSample === 16) {
-        value = view.getInt16(byteOffset, true) / 32768;
-        byteOffset += 2;
-      } else if (encoding === "PCM" && bitsPerSample === 24) {
-        let integer = view.getUint8(byteOffset)
-          | (view.getUint8(byteOffset + 1) << 8)
-          | (view.getUint8(byteOffset + 2) << 16);
-        if (integer & 0x800000) integer |= 0xff000000;
-        value = integer / 8388608;
-        byteOffset += 3;
-      } else if (encoding === "PCM" && bitsPerSample === 32) {
-        value = view.getInt32(byteOffset, true) / 2147483648;
-        byteOffset += 4;
-      } else {
-        throw new Error(`Kodningen ${encoding} ${bitsPerSample} bit stöds inte.`);
-      }
+      value = decodeSampleAt(view, byteOffset, format);
+      byteOffset += bitsPerSample / 8;
       output[sampleIndex] = value;
       sampleIndex += 1;
     }
@@ -226,6 +280,9 @@ export function createTpdf(seed = 0x6d2b79f5) {
 
 export function encodeInterleaved(samples, format, { dither = false, ditherSource = createTpdf() } = {}) {
   const { bitsPerSample, encoding } = format;
+  if (encoding === "PCM" && (format.validBitsPerSample || bitsPerSample) !== bitsPerSample) {
+    throw new Error("Omräkning av PCM med avvikande validBitsPerSample är blockerad i LjudR 1.0.");
+  }
   const bytesPerSample = Math.ceil(bitsPerSample / 8);
   const bytes = new Uint8Array(samples.length * bytesPerSample);
   const view = new DataView(bytes.buffer);
@@ -273,7 +330,8 @@ const chunkBytes = (id, payload) => {
 
 export async function createWaveHeader(source, selectionFrames, startFrame = 0) {
   const dataBytes = selectionFrames * source.format.blockAlign;
-  const safeIds = new Set(["fmt ", "fact", "bext", "iXML", "axml", "chna", "LIST"]);
+  const dataPadBytes = dataBytes & 1;
+  const safeIds = new Set(["fmt ", "fact", "bext", "LIST"]);
   const chunks = [];
   const droppedChunks = [];
 
@@ -311,7 +369,7 @@ export async function createWaveHeader(source, selectionFrames, startFrame = 0) 
   }
 
   const headerLength = 12 + chunks.reduce((total, bytes) => total + bytes.byteLength, 0) + 8;
-  const riffSize = headerLength - 8 + dataBytes;
+  const riffSize = headerLength - 8 + dataBytes + dataPadBytes;
   if (riffSize > RIFF_LIMIT) throw new Error("Exporten överskrider RIFF-gränsen 4 GiB. RF64-export är ännu inte aktiverad.");
   const header = new Uint8Array(headerLength);
   const view = new DataView(header.buffer);
@@ -325,11 +383,11 @@ export async function createWaveHeader(source, selectionFrames, startFrame = 0) 
   }
   for (const [index, value] of Array.from("data").entries()) view.setUint8(cursor + index, value.charCodeAt(0));
   view.setUint32(cursor + 4, dataBytes, true);
-  return { header, dataBytes, droppedChunks };
+  return { header, dataBytes, dataPadBytes, droppedChunks };
 }
 
 export function attachBlob(source, blob) {
   return { ...source, blob };
 }
 
-export const wavInternals = { ascii, readSlice, getUint64LE, setUint64LE, parseFormat, RIFF_LIMIT };
+export const wavInternals = { ascii, readSlice, getUint64LE, setUint64LE, parseFormat, RIFF_LIMIT, EXTENSIBLE_GUID_TAIL };

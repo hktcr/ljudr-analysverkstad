@@ -1,98 +1,80 @@
 # LjudR Analysverkstad
 
-Ett lokalt och icke destruktivt analysverktyg för fältinspelningar och ljudlandskap. Appen är byggd för långa WAV-filer från bland annat Tascam-inspelare, inklusive stereo 32 bit float vid 96 kHz.
+LjudR är ett lokalt och icke destruktivt verktyg för analys och varsam redigering av fältinspelningar och ljudlandskap. Version `1.0.0-rc.1` är en offentlig valideringskandidat, inte en produktionsverifierad 1.0.
 
-## Grundprincip
+## Integritet och princip
 
-Ljudfilen lämnar inte enheten. Den väljs lokalt och läses i små block i en separat worker. Koden innehåller ingen analys, telemetri, extern font eller nätanslutning till tredje part. Endast filer som användaren själv exporterar lämnar verktyget.
+Ljudfilen behandlas lokalt i webbläsaren. Appen innehåller ingen AI, telemetri, annonskod, extern font eller tredjepartsanslutning. Originalfilen skrivs aldrig över. Projekt och rapporter innehåller mätdata och metadata men inga ljudsamplingar.
 
-Analysen får vara rik, men varje ljudingrepp måste vara uttryckligt. Originalfilen ändras aldrig.
+Alla ändringar är uttryckliga. LjudR använder ingen automatisk nivåändring, lokal gain, kompressor, limiter, EQ, brusreducering eller omsampling. En eventuell gain gäller hela urvalet och måste bekräftas av användaren.
 
-## Funktioner
+## Sluten formatmatris för 1.0
 
-- RIFF/WAVE och WAVE_FORMAT_EXTENSIBLE
-- PCM 16, 24 och 32 bit
-- IEEE float 32 bit, inklusive värden över full skala
-- mono och stereo, 44,1 till 192 kHz
-- blockbaserad analys utan helfilsavkodning i minnet
-- stereovågform och synkroniserade mättidslinjer
-- LUFS-I, LUFS-M, LUFS-S och LRA
-- sample peak och högupplöst True Peak-estimering
-- RMS, crest factor, DC-offset, stereobalans, korrelation samt Mid/Side-energi
-- observationer för över full skala, ogiltiga floatvärden, digital noll, låg nivå, diskontinuiteter och möjlig flat-topping
-- markörer med teknisk, beskrivande eller egen typ
-- sample-exakt trimning av början och slutet
-- valfri gemensam gain för hela verket
-- flexibla linjära fade in och fade out, avstängda som standard
-- medhörning med samma fadekurva och globala nivå som exporten
-- valfri global toppmarginal som bara kan sänka hela urvalet
-- blockvis toppförkontroll av det valda intervallet efter fades
-- spärr mot positiv gain som skulle klampa PCM-samplingar
-- WAV-export i originalets kodning och samplingsfrekvens
-- 64 bit float som intern arbetsprecision för gain och fades
-- bitidentisk sample-payload när endast trimgränser används
-- TPDF-dither när PCM-samplingar måste räknas om
-- projektfil utan ljuddata
-- reproducerbar HTML- och JSON-rapport
-- PWA och offlinecache av appskalet
-- regelbaserad första reflektion utifrån inspelningstyp och användning
-- klickbara informationsrutor för samtliga mätvärden, bearbetningar och exportval
-- aktuella värden jämförda med relaterade mått och tydligt redovisade begränsningar
+Följande kombinationer ingår:
 
-## Vetenskaplig status
+- RIFF/WAVE och giltig WAVE_FORMAT_EXTENSIBLE
+- mono och stereo
+- PCM 16, 24 eller 32 bit samt IEEE float 32 bit
+- 44,1, 48, 88,2, 96, 176,4 eller 192 kHz
 
-Beräkningarna är utformade efter ITU-R BS.1770-5 och EBU Tech 3341/3342. Verktyget skiljer därför på mätresultat, observationer och konstnärliga val.
+Extensible kräver fullständigt giltig PCM- eller IEEE-float-GUID. PCM där `validBitsPerSample` skiljer sig från containerbitdjup får analyseras endast när vänsterjusteringen stöds och har verifierats. Obruten sample-payload kan trimmas bitidentiskt, men omräkning av sådana filer blockeras i 1.0.
 
-Version 0.12.1 är verifierad mot hela den relevanta filbaserade mono/stereo-delen av EBU Loudness Test Set v5.0 och ITU-R BS.2217-2. EBU-körningen omfattar 62 officiella filer och 68 mätkrav. ITU-körningen omfattar samtliga 19 mono/stereo-filer och använder rapportens tolerans ±0,1 LKFS. Samtliga krav godkändes. Gain och fades beräknas med 64 bit float. True Peak använder en 49 taps polyfas FIR-modell. Resultatet är inte en produktcertifiering eller garanti för varje möjlig signal. Fysisk långfilsverifiering på iPad Pro återstår. Varje rapport innehåller motorversion, mätmetod och aktuell valideringsstatus.
+RF64 och BW64 avvisas som indata. RF64/BW64-export, flerkanal, AAC, MP3, FLAC, omsampling och inbäddning av formulärmetadata i WAV ligger uttryckligen utanför 1.0. En WAV kan föras vidare till Ferrite för codec- och publiceringsarbete.
 
-Den första reflektionen är ett lokalt och deterministiskt expertsystem. Ingen AI används. Referensintervallen är dokumenterad vägledning och får inte förväxlas med plattformsstandarder eller kvalitetsbetyg. Varje informationsruta redovisar aktuellt värde, relevant jämförelse, rekommendation och begränsning.
+## Arbetsflöde
 
-Se [Validering](docs/VALIDATION.md) och [Metod](docs/METHOD.md).
+1. Öppna en lokal WAV och analysera källfilen.
+2. Granska signalmått, observationer, markörer och den adaptiva vågformen.
+3. Trimma början och slutet. Fade är frivillig och av från början.
+4. Välj antingen att bevara nivån eller beräkna en frivillig serieorientering.
+5. Prova resultatet innan en global gain används.
+6. Exportera antingen ett sample-payload-identiskt trimutdrag eller en redigerad WAV-master.
+7. Låt appen återöppna och verifiera den faktiskt skrivna WAV-filen.
+8. Spara projekt och rapport för spårbarhet.
 
-## Varsamt soundscape-flöde
+Rapporten skiljer strikt mellan:
 
-1. Öppna WAV-originalet.
-2. Kör analysen och läs observationerna neutralt.
-3. Trimma bara handhavandeljud i början och slutet.
-4. Låt fade vara av om klippunkten redan är ren.
-5. Bedöm eventuell gain för hela verket med öronen och mätningen tillsammans.
-6. Aktivera bara global toppmarginal om hela verket får sänkas för att skapa marginal.
-7. Exportera en ny WAV. Originalet påverkas inte.
-8. Spara projektfil och rapport för spårbarhet.
+- **Källfil**, analys av originalet
+- **Beräknat exporturval**, editkedjan före kvantisering
+- **Verifierad exportfil**, återöppnad och uppmätt faktisk WAV
 
-Ett riktvärde som exempelvis -20 till -18 LUFS-I är ett lyssningsreferensvärde, inte ett krav. Tystnad och dynamik kan motivera en lägre integrerad nivå. Verktyget normaliserar aldrig automatiskt.
+## Frivillig serieorientering
 
-Den globala toppmarginalen är av som standard och använder -2 dBTP som försiktigt grundvärde. Om förkontrollen bedömer att marginalen överskrids minskas samma gainvärde över hela urvalet. Funktionen är inte en limiter och kan inte reparera ljud som redan är klippt eller distorderat.
+Serien kan använda -19 LUFS-I som redaktionell orientering, intervallet -20 till -18 LUFS-I som frivillig arbetsreferens och -2 dBTP som frivill topporientering. Detta är inte en teknisk acceptansgräns eller ett kvalitetsbetyg. Flödet är separat: **Beräkna**, **Prova**, **Använd**. Bevara oförändrat är ett likvärdigt huvudval. Om toppmarginalen begränsar gain visas att loudnessreferensen inte nås. Ingen dold extra sänkning används.
 
-## iPad
+## Projekt, hash och koordinater
 
-Öppna webbappen i Safari och välj Lägg till på hemskärmen för en mer app-lik miljö. Lägg gärna stora original under På min iPad eller på ett anslutet lagringsmedium. Om filen ligger i iCloud kan iPad först behöva hämta den från Apple.
+Projektformatet har strikt schema och migrering från tidigare schema. Full SHA-256 över hela källfilens bytes är säker identitet. En snabb hash av filkanterna får endast användas som förkontroll. Äldre projekt utan full hash kräver ny analys innan sparad analys kan återanvändas.
 
-Håll appen i förgrunden under en lång analys eller export. iPadOS kan pausa webbarbete i bakgrunden. Överlämningen av exporter nära 1 GB måste verifieras praktiskt på den aktuella iPaden innan den betraktas som produktionssäker.
+Projektfilen kan behålla privata exakta koordinater. Publika rapporter följer ett aktivt val:
 
-## Format som inte aktiverats
+- `Dold`: latitud och longitud utelämnas
+- `Avrundad`: tre decimaler, ungefär 110 meter i latitud
+- `Exakt`: exakta koordinater tas med och märks som aktivt val
 
-FLAC, AAC/M4A och MP3 är inte aktiverade i denna version. WAV-exporten är säkrare för stora filer och bevarar originalets format utan onödig omsampling. En distributionskopia kan tills vidare skapas i Ferrite efter WAV-export. Codecs aktiveras först när strömning, metadata, dither, omsampling och storfilshantering är verifierade på iPad.
+## OPFS och stora exporter
+
+Stora exporter kan använda webbläsarens privata lokala filsystem, OPFS. En partiell arbetsfil stängs och raderas vid fel eller avbrott. En slutförd fil behålls lokalt när webbläsaren inte kan bekräfta att filen verkligen sparats till Filer. Appen listar därför slutförda arbetsfiler med status, storlek och tid. De kan hämtas igen eller rensas uttryckligen.
+
+## Mätstatus
+
+Mätmotorn är kontrollerad mot den relevanta filbaserade mono/stereo-delen av EBU Loudness Test Set v5.0: 68 av 68 krav för 62 filer. Samtliga 19 relevanta mono/stereo-filer i ITU-R BS.2217-2 klaras inom rapportens tolerans på +/-0,1 LKFS. Detta är verifiering inom dokumenterad scope, inte extern produktcertifiering eller garanti för varje signal eller leveranskedja.
+
+Se [valideringsplanen](docs/VALIDATION.md), [metoden](docs/METHOD.md), [integritetstexten](PRIVACY.md) och [releasechecklistan](RELEASE_CHECKLIST.md).
+
+## Releaseport
+
+`1.0.0-rc.1` får publiceras som valideringskandidat. Versionsnumret `1.0.0` är förbjudet tills hela den fixerade testsuiten, EBU 68/68, ITU 19/19 och den fysiska iPad-matrisen är godkända. Matrisen omfattar en 15 till 20 minuter lång stereo float32/96 kHz-fil nära 1 GB i både Safari och installerad PWA, inklusive export, Filer-handoff, bakgrund/återgång, quota, avbrott, OPFS-städning, offline och uppdatering.
 
 ## Lokal utveckling
 
 ```bash
+npm run check
+npm test
+npm run build
 python3 -m http.server 8080
 ```
 
-Öppna sedan `http://localhost:8080`. Tester körs med:
+Det officiella EBU- och ITU-materialet lagras aldrig i repot. Lokala fixtures kan kontrolleras med `npm run validate:ebu` och `npm run validate:itu`. Maskinläsbar status finns i `validation-manifest.json`; Pages-bygget skapar även `build-manifest.json` med releasecommit och SHA-256 för varje publik fil.
 
-```bash
-node --test tests/*.test.mjs
-```
-
-Det officiella EBU-materialet kan läggas lokalt i `validation-fixtures` och kontrolleras utan att ljudfilerna hamnar i repot:
-
-```bash
-npm run validate:ebu -- validation-fixtures
-npm run validate:itu -- validation-fixtures/itu-bs2217
-```
-
-## Projekt
-
-LjudR Analysverkstad utvecklas inom gAIa-projektet LjudR och publiceringsserien Twenty Minutes Here. Koden är offentlig under MIT-licens. Ljudfiler och privata projektfiler ingår aldrig i kodarkivet.
+Koden publiceras under MIT-licens. Ljudfiler, privata projekt och lokala rapporter ingår aldrig i kodarkivet.

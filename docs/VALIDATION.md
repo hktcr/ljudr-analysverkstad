@@ -1,69 +1,58 @@
-# Valideringsplan
+# Valideringsplan för 1.0.0-rc.1
 
 ## Status
 
-Version 0.12.1 klarar hela den relevanta filbaserade mono/stereo-delen av EBU Loudness Test Set v5.0 och ITU-R BS.2217-2. WAV-parsning, sample-exakt trimning, linjära fades, 64 bitars intern bearbetning, global gain, global toppmarginal, PCM-klamprisk och det regelbaserade förklaringslagret täcks dessutom av 48 automatiska regressionstester. Testresultatet är inte en produktcertifiering eller garanti för varje möjlig signal. Fysisk långfilsverifiering på iPad Pro återstår.
+`1.0.0-rc.1` är en offentlig valideringskandidat. Den får inte beskrivas som produktionsverifierad 1.0.
 
-Den kontextuella nivåskalan är ett transparent expertsystem utan AI. Den måste provas mot kända exempel inom lågmälda soundscapes, aktiva miljöer, intervjuer och musik. Testningen ska kontrollera både korrekta råd och att systemet avstår från råd när underlaget är otillräckligt.
+Loudnessmotorn klarar hela den relevanta filbaserade mono/stereo-delen av EBU Loudness Test Set v5.0: 68 av 68 krav för 62 filer. Den klarar även samtliga 19 relevanta mono/stereo-filer i ITU-R BS.2217-2 inom +/-0,1 LKFS. EBU:s flerkanalsfall och uttryckliga live-mätarfall ligger utanför verktygets filbaserade mono/stereo-scope. Resultaten är verifiering inom dokumenterad scope, inte produktcertifiering.
 
-En lokal referens den 14 augusti 2026 använde 10 sekunder stereo float med 1 kHz sinus. LjudR-motorn och FFmpeg `ebur128` gav samma Integrated loudness efter avrundning till 0,1 LU. Det är en värdefull regression, men inte ett substitut för EBU:s fullständiga testmaterial.
+Maskinläsbar status finns i `validation-manifest.json`. Manifestet binder testinventeringen och de lokala fixturemanifesten med SHA-256. Valideringsskripten skriver filnamn, byteantal och full SHA-256 för varje officiell fixture i sitt JSON-resultat. Den fixerade regressionstestinventeringen finns i `tests/test-inventory.json`. Officiella ljudfixtures lagras lokalt och är ignorerade av Git.
 
-True Peak-motorn använder 49 taps polyfas FIR-oversampling. Ett periodiskt extremprov med samplingarna +0,99, +0,99, -0,99, -0,99 gav cirka +3,03 dBTP. Ett analytiskt 18 kHz sinusprov vid 48 kHz och amplituden 0,9 återgav den kontinuerliga signalens topp inom 0,05 dB.
+## Obligatoriska automatiska och statiska prov
 
-Den 14 augusti 2026 kördes det officiella EBU Loudness Test Set v5.0. Kontrollen omfattade 62 relevanta filbaserade mono/stereo-filer och 68 separata krav för Integrated, Max Momentary, Max Short-term, LRA och True Peak. Samtliga 68 krav godkändes. Största absoluta avvikelsen var -0,1814 dB i True Peak-fall 22, inom EBU:s tillåtna intervall -0,4 till +0,2 dBTP. Flerkanalsfall 6 och live-mätarfallen 11 och 14 ligger uttryckligen utanför LjudR:s filbaserade mono/stereo-omfattning.
+- gemensam parser för RIFF och WAVE_FORMAT_EXTENSIBLE
+- fullständig PCM- och IEEE-float-GUID
+- direkt avslag för RF64 och BW64
+- diskreta frekvenser 44,1/48/88,2/96/176,4/192 kHz
+- PCM16/24/32 och float32, mono/stereo
+- vänsterjusterad `validBitsPerSample`-analys med omräkningsspärr
+- avklippta chunkar, udda padding, fel blockAlign och okänd GUID
+- digital noll, float overrange, NaN och Infinity som regioner
+- Integrated, Max Momentary, Max Short-term, LRA, True Peak och PLR
+- True Peak-tid korrigerad för FIR-gruppfördröjning
+- exakt Beräknat exporturval efter trim/fades/global gain/toppmarginal
+- editändring invalidierar regionsanalys
+- sample-payload-identisk obruten trim för varje stödformat
+- gain/fade/dither/klamprisk med deterministiska referenser
+- återöppnad Verifierad exportfil och full outputinspektion
+- full filhash och separat sample-payload-hash
+- worker-jobb med jobId, cancel och stale-resultatfilter
+- OPFS partial-cleanup, complete-lista, quota och uttrycklig rensning
+- strikt projektschema, storleksgräns och migreringsfixtures från äldre schema
+- full SHA-256 som källidentitet; ändring i filens mitt måste upptäckas
+- koordinatpolicy Dold/Avrundad/Exakt
+- semantisk HTML/JSON utan `[object Object]` och med HTML-escaping
+- PWA-resurser, cacheversionsbyte och update-UX kontrolleras statiskt; faktisk offlinekörning ingår i den fysiska matrisen
+- canvasens textmotsvarighet och tangentbordskontrakt kontrolleras statiskt; VoiceOver och faktisk tangentbordsoperation ingår i den manuella matrisen
 
-Samma datum kördes ITU-R BS.2217-2:s samtliga 19 mono/stereo-filer: absoluta och relativa gateprov, frekvenssvep, tolv frekvensprov samt fyra mono/stereo-prov med tal och musik. Samtliga godkändes inom rapportens tolerans ±0,1 LKFS. Största absoluta avvikelsen var -0,0721 LU i det relativa gateprovet. Valideringsskripten skriver ut varje oavrundat mätvärde och dess avvikelse.
+## Fysisk iPad-matris
 
-Ett separat långfilsprov den 14 augusti 2026 använde en virtuell 20 minuters stereo WAV i 32 bit float vid 96 kHz. Motorn behandlade 115 200 000 ljudbildrutor, motsvarande cirka 879 MiB sample-payload, på 25,19 sekunder i utvecklingsmiljön. Processens RSS steg från cirka 56,5 till 223,9 MiB. Den virtuella filen skapade varje block vid läsning och tvingade därför motorn att genomföra samma block-, sample- och FIR-beräkningar som en faktisk fil utan att reservera hela ljudfilen i minnet. Resultatet stöder storfilsarkitekturen, men ersätter inte fysisk verifiering i Safari och installerad PWA på Håkans iPad Pro.
+Följande är blockerande för versionsnumret `1.0.0`:
 
-## Referenser
+1. Dokumentera iPad Pro-modell, minne, iPadOS-version och ledigt utrymme.
+2. Använd en faktisk 15 till 20 minuter lång stereo float32/96 kHz-fil nära 1 GB.
+3. Kör hela flödet i Safari och installerad PWA.
+4. Verifiera analys, adaptiv zoom, käll/export-preview och monitor routing.
+5. Exportera, lämna över till Filer, återöppna och verifiera WAV samt hash.
+6. Testa bakgrund/återgång under analys och export.
+7. Testa quota-fel, manuellt cancel och cleanup av partial.
+8. Verifiera lista, återhämtning och explicit rensning av complete i OPFS.
+9. Verifiera kall offline-start och uppdatering från föregående version.
+10. Kör VoiceOver, externt tangentbord, 200/400 procents zoom, kontrast och reduced motion.
+11. Logga tid, maximal observerbar minnesbelastning, temperaturvarning och varje fel.
 
-- ITU-R BS.1770-5, Algorithms to measure audio programme loudness and true-peak audio level
-- EBU Tech 3341, Loudness Metering
-- EBU Tech 3342, Loudness Range
-- EBU Loudness Test Set
-- ITU-R BS.2217-2, material för True Peak-test
+## Releaseport
 
-## Obligatoriska signalprov
+1.0.0 kräver noll öppna P0/P1-fel, ren taggad commit, konsekvent version och commit i app/workers/projekt/rapport/PWA/buildmanifest, hela fixerade testsuiten, EBU 68/68, ITU 19/19, fysisk iPad-matris, manuell WCAG 2.2 AA-matris, pinned GitHub Actions, grön deploy och livekontroll mot exakt releasecommit.
 
-- digital noll
-- 997 Hz och 1 kHz sinus
-- fullskalesinus med crest factor omkring 3,0103 dB
-- DC 0,001, motsvarande cirka -60 dBFS
-- vänster lika med höger, korrelation +1
-- höger lika med inverterad vänster, korrelation -1
-- okorrelerat brus
-- vänster kanal 6 dB starkare än höger
-- floatvärden över full skala
-- NaN och Infinity i floatfil
-- upprepade PCM-rälsvärden
-- udda chunkstorlek och padding
-- WAVE_FORMAT_EXTENSIBLE med float
-- avklippt header och data-block
-
-## Exportprov
-
-För ren trimning ska SHA-256 av exporterad sample-payload vara identisk med SHA-256 av samma byteintervall i källfilen. Testet ska köras för PCM 16, 24 och 32 bit samt IEEE float 32 bit, mono och stereo.
-
-För gain och fade ska filens deklarerade bildrutor, data-storlek, kanaler, samplingsfrekvens och kodning stämma. PCM-proven ska kontrollera klampning och TPDF-dither. PCM32-avkodning ska bevara även de lägsta heltalsbitarna i 64 bitars arbetsbuffert. Float32-export ska motsvara den samplebaserade gain- och fadeformeln exakt efter den enda slutliga float32-avrundningen.
-
-Global toppmarginal ska testas både när den ingriper och när den lämnar signalen oförändrad. Förkontrollen ska använda valt intervall efter fades. När ingen sänkning behövs ska ren trimning fortfarande vara bitidentisk. Positiv gain som skulle klampa PCM ska stoppas innan exportfilen skapas.
-
-## Jämförelsemätning
-
-LUFS-I, max LUFS-M, max LUFS-S, LRA och True Peak är jämförda med EBU:s och ITU:s officiella förväntade resultat inom verktygets filbaserade mono/stereo-omfattning. Skillnaderna redovisas per signal utan dold avrundning. Den tidigare kubiska True Peak-estimatorn är borttagen. Att minimikraven klaras får beskrivas som verifierat, men inte som extern produktcertifiering eller som garanti för varje möjlig signal och leveranskedja.
-
-## iPad-prov
-
-Följande måste provas på Håkans faktiska iPad Pro:
-
-1. 20 minuter stereo 32 bit float vid 96 kHz.
-2. Analys i Safari-flik och installerad PWA.
-3. Minnesanvändning och temperatur under hela genomgången.
-4. Bakgrundning och återgång.
-5. OPFS-kvot och felhantering.
-6. Export nära 1 GB och sparande till Filer.
-7. Uppspelning av original och valt trimintervall.
-8. Rapport och projektfil.
-
-Produktionsstatus ges först när dessa prov är dokumenterade med appversion, iPadmodell och iPadOS-version.
+RC-resultat får endast återanvändas för oförändrade bytes. Varje kodändring kräver omkörning av berörda och releasekritiska kontroller.

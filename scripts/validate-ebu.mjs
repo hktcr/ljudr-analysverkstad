@@ -1,7 +1,7 @@
 import { File } from "node:buffer";
 import { readFile, readdir } from "node:fs/promises";
 import { basename, resolve } from "node:path";
-import { analyzeWav } from "../src/dsp-core.js";
+import { ENGINE_VERSION, analyzeWav } from "../src/dsp-core.js";
 
 const directory = resolve(process.argv[2] || "validation-fixtures");
 const entries = await readdir(directory, { recursive: true, withFileTypes: true });
@@ -81,12 +81,18 @@ const counts = results.reduce((summary, result) => {
 }, {});
 console.log(JSON.stringify({
   engine: "LjudR",
+  engineVersion: ENGINE_VERSION,
   standard: "EBU Tech 3341/3342",
   scope: "62 mono/stereo file-based compliance files, 68 metric assertions",
   exclusions: [
     "Tech 3341 case 6: multichannel, outside LjudR mono/stereo scope",
     "Tech 3341 cases 11 and 14: live-meter tests, outside file-based scope",
   ],
+  fixtures: Array.from(analyses.entries(), ([path, analysis]) => ({
+    file: basename(path),
+    bytes: analysis.sourceIdentity?.bytes ?? null,
+    sha256: analysis.sourceIdentity?.value ?? null,
+  })).sort((left, right) => left.file.localeCompare(right.file)),
   results,
   counts,
 }, null, 2));

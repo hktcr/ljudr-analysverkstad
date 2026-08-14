@@ -1,155 +1,87 @@
-# Releasechecklista
+# Releasechecklista för 1.0.0-rc.1
 
-Denna fil beskriver verifieringskedjan för LjudR Analysverkstad. En release är färdig först när både den lokala MASTER-versionen, GitHub-repot och den publika GitHub Pages-versionen har kontrollerats.
+Status: offentlig valideringskandidat. Inte produktionsverifierad 1.0.
 
-## Status före publicering
+## Förverifiering 15 augusti 2026
 
-Kontrollerat lokalt den 14 augusti 2026:
+- [x] Fixerad testsuite: 72 av 72 godkända, 0 fel.
+- [x] EBU Loudness Test Set v5.0: 68 av 68 krav för 62 relevanta filer.
+- [x] ITU-R BS.2217-2: 19 av 19 relevanta filer inom +/-0,1 LKFS.
+- [x] Syntaxkontroll och `git diff --check` godkända.
+- [x] Pagespaket: 17 tillåtna filer, varav buildmanifestet binder de övriga 16 med SHA-256.
+- [x] Samtliga 17 resurser gav HTTP 200 från lokal server.
+- [x] Inga spårade ljudfiler, rapporter, projekt, uppenbara hemligheter eller U+2013 hittades.
+- [ ] Kandidaten är ännu inte releasecommittad; commit-, Actions-, artifact- och livekvitton återstår.
 
-- [x] 49 av 49 automatiska tester godkända, inklusive 64 bitars bearbetning, FIR True Peak, filbaserad M/S-maxprecision, vägledning, informationsrutor och exportskydd för PCM 16, 24 och 32 bit samt float 32 bit.
-- [x] EBU Loudness Test Set v5.0: 68 av 68 krav godkända för 62 relevanta filbaserade mono/stereo-filer.
-- [x] ITU-R BS.2217-2: 19 av 19 relevanta mono/stereo-filer godkända inom ±0,1 LKFS.
-- [x] Virtuell 20 minuters stereo 32 bit float vid 96 kHz analyserad i 115 200 000 bildrutor utan helfilsbuffert.
-- [x] Syntaxkontroll godkänd för app, WAV-motor, DSP-motor, workers, projektmodul och service worker.
-- [x] Samtliga resurser i appskalet svarar med HTTP 200 från lokal webbserver.
-- [x] PWA-ikonerna är giltiga PNG-filer i 192 x 192 och 512 x 512 bildpunkter.
-- [x] Alla publicerade sökvägar använder ASCII-tecken.
-- [x] Releaseversionen 0.12.1 är bekräftad i paketdata, projektmodul, DSP-motor, exportmotor, service worker och dokumentation.
-- [x] CSP blockerar externa anslutningar genom `connect-src 'none'`.
-- [x] Inga externa script, typsnitt, spårare eller analysverktyg används.
-- [x] Inga ljudfiler ingår i den återställda källan.
-- [x] Slutkontrollerna nedan har körts mot den färdiga arbetskopian före commit.
+## Lokal kandidat
 
-Återställd basartefakt från version 0.9.0:
+- [ ] Arbetskatalogen är ren och varje releasefil är avsiktligt inkluderad.
+- [x] Versionen `1.0.0-rc.1` är konsekvent i paket, app, workers, projekt, rapport, dokumentation, PWA-cache och validation-manifest.
+- [x] Syntaxkommandona i `npm run check`, hela fixerade testsuiten och `git diff --check` passerar.
+- [x] EBU visar 68/68 och ITU visar 19/19 för exakt releasekod.
+- [x] Build skapar endast den uttryckliga allowlisten och `build-manifest.json`.
+- [x] Varje publik fil har SHA-256 i buildmanifestet.
+- [x] Inga ljudfiler, projekt, rapporter, credentials, hemligheter eller U+2013 finns i releasepaketet.
+- [x] Alla publicerade sökvägar är ASCII.
+- [x] Privacy, metod, formatmatris och kända begränsningar motsvarar koden.
 
-- Fil: `LjudR-Analysverkstad-MASTER-v0.9.0.zip`
-- SHA-256: `f59bdcc34baaa0a830034d826032320d298480bd514017b71f0c8c9c31455c8d`
-- Arkivkommentar med tidigare commit-id: `e882588b2e3ce26b8400f7a210d737f4a68f5020`
+## Säkerhet och integritet
 
-Basartefakten är endast proveniens. Om någon fil ändras ska en ny releaseartefakt skapas och få ett nytt SHA-256-värde.
+- [x] CSP blockerar tredjepartsanslutningar; statisk nätgranskning visar inga appinitierade tredjepartsanrop.
+- [x] Full SHA-256, inte edge-hash, krävs innan sparad analys återanvänds.
+- [x] Projektimport har schema-, typ-, storleks- och intervallvalidering.
+- [x] Rapporten redigerar koordinater enligt Dold/Avrundad/Exakt.
+- [x] OPFS partial tas bort vid fel/cancel; complete listas och rensas uttryckligen.
+- [x] Cache, repo, Pages-artefakt och rapport saknar ljudsamplingar.
 
-## Lokal releasekontroll
+## GitHub och Pages
 
-- [x] Bekräfta att arbetskatalogen är rätt repo.
-- [x] Granska `git status --short` och redovisa varje fil som ska ingå.
-- [x] Kör samtliga syntaxkontroller som workflowen använder.
-- [x] Kör `node --test tests/*.test.mjs`.
-- [x] Bekräfta att testresultatet visar noll fel.
-- [x] Starta en lokal HTTP-server och kontrollera `index.html`, CSS, manifest, service worker, ikoner och samtliga JavaScript-moduler.
-- [x] Bekräfta att arbetskopian och stagingpaketet saknar ljudfiler, projektfiler och analysrapporter, oavsett skiftläge.
-- [x] Bekräfta efter releasecommit att ingen sådan fil är spårad av Git.
-- [x] Bekräfta att inga nycklar, tokens, lösenord eller lokala projektdata finns i arbetskopian eller stagingpaketet.
-- [x] Bekräfta att alla publicerade filnamn kan kodas som ASCII.
-- [x] Bekräfta att ingen textfil innehåller U+2013.
-- [x] Bekräfta att `.nojekyll` finns i källrepot.
-- [x] Bekräfta att `manifest.webmanifest` har relativ `start_url` och relativt `scope`.
-- [x] Bekräfta att service workerns cache-id innehåller aktuellt versionsnummer.
-- [x] Bekräfta att service workerns lista endast pekar på filer som finns.
-- [x] Bekräfta att README, ändringslogg, integritetstext och valideringsstatus motsvarar den kod som ska publiceras.
-- [x] Bekräfta att True Peak beskrivs som godkänd mot EBU:s minimikrav men inte som produktcertifiering eller leveransgaranti.
-- [x] Bygg `_site` och bekräfta exakt 13 tillåtna, byteidentiska filer utan symlänkar eller förbjudna filtyper.
-- [x] Bekräfta att arbetskatalogen är ren efter releasecommit.
+- [ ] Repo är publikt på `https://github.com/hktcr/ljudr-analysverkstad` med `main` som standardgren.
+- [x] Actions är pinnade till granskade fulla commit-SHA.
+- [x] Checkout använder `persist-credentials: false`.
+- [x] Test/build och deploy har separata jobb och minsta rättigheter.
+- [ ] Spara lokal commit, tree-id, tagg, Actions run-id, artifact digest och tidsstämplar.
+- [ ] GitHub `main` och buildmanifestets commit är exakt lokal releasecommit.
+- [ ] Pages använder GitHub Actions och deployjobbet anger slutlig URL.
+- [ ] Liveversionen på `https://hktcr.github.io/ljudr-analysverkstad/` matchar releasecommit.
 
-Exempel på kontroll av spårade ljudfiler:
+## Live smoke
 
-```bash
-git ls-files -z | rg -z -i '\.(wav|wave|flac|m4a|aac|mp3|aif|aiff|caf|opus|ogg|w64|rf64|bw64|bwf|raw)$'
-```
+- [ ] Bred och smal layout, Safari och aktuell Chromium.
+- [ ] Konsol och nätlogg utan oväntade fel.
+- [ ] Öppna, analysera, adaptiv zoom, markörer, preview och monitor routing.
+- [ ] Sample-payload-identiskt trimutdrag verifieras med hash.
+- [ ] Redigerad WAV-master återöppnas och får verifierade signalmått/containerdata.
+- [ ] Projekt sparas, migreras, öppnas och matchas med full källhash.
+- [ ] HTML/JSON innehåller Källfil, Beräknat exporturval och Verifierad exportfil.
+- [ ] Offline cold start och update från föregående cacheversion.
+- [ ] Inga ljudbytes finns i Cache Storage eller nättrafik.
 
-Kommandot ska inte ge någon träff.
+## RC-kvitto
 
-## Repo på GitHub
+- Releaseversion: `1.0.0-rc.1`
+- Releasecommit: _fylls efter commit_
+- Tree-id: _fylls efter commit_
+- Actions run-id: _fylls efter grön körning_
+- Artifact digest: _fylls efter grön körning_
+- Pages-URL: _fylls från deploysteget_
+- Buildmanifest SHA-256: _fylls efter bygg_
+- Fixerad testsuite: `72/72, 0 fel`
+- EBU/ITU: `68/68 respektive 19/19`
+- Status: `publik valideringskandidat`
 
-- [ ] Skapa det publika repot `hktcr/ljudr-analysverkstad`.
-- [ ] Använd `main` som standardgren.
-- [ ] Lägg till repot som `origin` och kontrollera den exakta adressen med `git remote -v`.
-- [ ] Skapa en avsiktlig releasecommit med tydligt commitmeddelande.
-- [ ] Spara lokalt commit-id och tree-id före push.
-- [ ] Pusha exakt den granskade committen till `origin/main`.
-- [ ] Öppna GitHub och kontrollera att commit-id på `main` är identiskt med det lokala.
-- [ ] Kontrollera att GitHub inte visar någon spårad ljudfil eller hemlighet.
-- [ ] Aktivera relevanta säkerhetsfunktioner som är tillgängliga för det publika repot.
+## Produktionsport för 1.0.0
 
-Förväntad repoadress, som måste öppnas och verifieras:
+Versionsnumret `1.0.0` är förbjudet tills samtliga punkter nedan är verifierade och dokumenterade:
 
-`https://github.com/hktcr/ljudr-analysverkstad`
+- [ ] Noll öppna P0/P1-fel.
+- [ ] Fysisk 15 till 20 min stereo float32/96 kHz nära 1 GB på dokumenterad faktisk iPad Pro/iPadOS.
+- [ ] Hela flödet i både Safari och installerad PWA.
+- [ ] Export till Filer, återöppning, outputhash och sample-payload-hash.
+- [ ] Bakgrund/återgång, quota, cancel, partial-cleanup och complete-rensning.
+- [ ] Kall offline-start och kontrollerad PWA-uppdatering.
+- [ ] Manuell VoiceOver, externt tangentbord, 200/400 procent, kontrast och reduced motion.
+- [ ] EBU 68/68, ITU 19/19 och hela fixerade testsuiten mot finala bytes.
+- [ ] Ren taggad commit, grön pinned Actions-körning och livekontroll mot exakt commit.
 
-## GitHub Actions och Pages
-
-- [x] Workflow-filen ligger i `.github/workflows/pages.yml`.
-- [x] Workflow triggas av push till `main` och kan startas manuellt.
-- [x] Test och deploy ligger i separata jobb med minsta nödvändiga rättigheter.
-- [x] Syntaxkontroll och alla tester måste slutföras före staging och paketering.
-- [x] Actionversionerna är `checkout@v6`, `setup-node@v6`, `upload-pages-artifact@v5`, `configure-pages@v5` och `deploy-pages@v4`.
-- [x] Endast `_site` skickas till Pages-artefakten.
-- [x] Deployjobbet använder miljön `github-pages`.
-- [ ] Pages ska ha `GitHub Actions` som källa under Settings och Pages.
-- [ ] Öppna den faktiska workflow-körningen och kontrollera att varje steg är grönt.
-- [ ] Kontrollera att deploy-steget anger den slutliga sidans URL.
-- [ ] Spara workflow run-id, commit-id, starttid, sluttid och resultat.
-
-En grön lokal testkörning räcker inte som deploykvitto. En grön Actions-körning räcker inte heller utan kontroll av den levande sidan.
-
-## Kontroll av den levande sidan
-
-- [ ] Öppna den URL som deploy-steget faktiskt rapporterar.
-- [ ] Bekräfta att sidan svarar utan omdirigeringsfel eller 404.
-- [ ] Bekräfta att sidans commit motsvarar releasecommitten.
-- [ ] Kontrollera startsidan visuellt i bred och smal vy.
-- [ ] Kontrollera konsolen och nätverksloggen utan oväntade fel.
-- [ ] Bekräfta att inga förfrågningar görs till tredje part.
-- [ ] Öppna en liten, icke privat WAV-testfil och kör hela flödet.
-- [ ] Kontrollera analys, uppspelning, trimning, gain, intoning, uttoning och WAV-export.
-- [ ] Kontrollera att ren trimning markeras som bitidentisk sample-payload.
-- [ ] Kontrollera att gain eller toning markeras som omräkning med dither för PCM.
-- [ ] Spara och öppna en projektfil.
-- [ ] Skapa både HTML-rapport och JSON-rapport.
-- [ ] Ladda om sidan, stäng nätverket och verifiera appskalet offline.
-- [ ] Installera som PWA och kontrollera ikon, namn, startadress och scope.
-- [ ] Kontrollera på fysisk iPad Pro enligt `docs/VALIDATION.md` innan produktionsstatus används.
-
-Förväntad Pages-adress, som inte får redovisas som färdig innan den har öppnats och verifierats:
-
-`https://hktcr.github.io/ljudr-analysverkstad/`
-
-## Slutligt deploykvitto
-
-Standardvaliderad kvalitetsrelease 0.12.1 publicerades den 14 augusti 2026:
-
-- Releasecommit: `164f46c264250453c955eab26b4f6302811e9ee6`
-- Git tree: `b624ab9f329947ec5648a84e0ca9e4aaf5326385`
-- GitHub Actions: `31843694559`, slutförd med resultatet success
-- Liveadress: `https://hktcr.github.io/ljudr-analysverkstad/`
-- Livekontroll: appversion 0.12.1, DSP-version 0.12.1, EBU-valideringsstatus, 10 ms maxfönstersökning och cacheversion 0.12.1
-- Lokal kontroll: 49 av 49 regressionstester, 68 av 68 EBU-krav och 19 av 19 ITU-filer godkända
-- Kvarstående produktionsprov: fysisk 15 till 20 minuters 32 bit float, 96 kHz-fil på Håkans iPad Pro
-
-Kvalitetsrelease 0.12.0 publicerades den 14 augusti 2026:
-
-- Releasecommit: `077d058cbd6693d059cd1c9f9bf4a7df8b2dbfc1`
-- Git tree: `690e415bf367cd5186fa5a96338d1b745511d2c2`
-- GitHub Actions: `31827328228`, slutförd med resultatet success
-- Liveadress: `https://hktcr.github.io/ljudr-analysverkstad/`
-- Livekontroll: appversion 0.12.0, DSP-version 0.12.0, FIR 49 tappar och cacheversion 0.12.0
-- Lokal kontroll: 48 av 48 tester, 13 av 13 HTTP-resurser och 20 minuters virtuell långfil godkända
-
-Följande uppgifter ska dokumenteras i gAIa efter verifierad publicering:
-
-- Reponamn och exakt repoadress.
-- Standardgren.
-- Releaseversion.
-- Lokalt commit-id.
-- GitHub commit-id.
-- Git tree-id.
-- Workflow run-id och länk till körningen.
-- Pages-adress från deploysteget.
-- Tidpunkt för publicering i Europe/Stockholm.
-- Resultat från syntaxkontroll och tester.
-- Resultat från kontroll av spårade ljudfiler.
-- Resultat från säkerhets- och integritetskontroll.
-- Resultat från livekontroll i bred och smal vy.
-- Resultat från PWA- och offlinekontroll.
-- Kända begränsningar, särskilt True Peak-validering och fysisk storfilskontroll på iPad.
-- SHA-256 för den nya releaseartefakten.
-
-Status får anges som `deployad och verifierad` först när samtliga obligatoriska punkter ovan är uppfyllda. Om fysisk iPad-validering återstår ska statusen i stället vara `publik valideringskandidat`.
+RC-resultat får endast återanvändas för oförändrade bytes. Efter varje kodändring körs berörda och samtliga releasekritiska kontroller om.

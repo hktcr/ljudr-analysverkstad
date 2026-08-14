@@ -1,36 +1,47 @@
-import { analyzeWav } from "./dsp-core.js";
+import { analyzeRegion, analyzeWaveformDetail, analyzeWav } from "./dsp-core.js";
 
-let cancellationRequested = false;
+const cancelledJobs = new Set();
+const latestByOperation = new Map();
 
-self.addEventListener("message", async (event) => {
+const post = (type, jobId, operation, payload = {}) => self.postMessage({ type, jobId, operation, ...payload });
+
+self.addEventListener("message", async event => {
   const message = event.data || {};
+  const jobId = String(message.jobId || "");
   if (message.type === "cancel") {
-    cancellationRequested = true;
+    if (jobId) cancelledJobs.add(jobId);
     return;
   }
-  if (message.type !== "analyze") return;
-  cancellationRequested = false;
+  if (!["analyze", "analyze-region", "waveform-detail"].includes(message.type) || !jobId) return;
+
+  const operation = message.type;
+  latestByOperation.set(operation, jobId);
+  cancelledJobs.delete(jobId);
+  const shouldCancel = () => cancelledJobs.has(jobId) || latestByOperation.get(operation) !== jobId;
+  const progress = details => {
+    if (!shouldCancel()) post("progress", jobId, operation, details);
+  };
+
   try {
-    const result = await analyzeWav(
-      message.file,
-      {
-        ...(message.options || {}),
-        shouldCancel: () => cancellationRequested,
-      },
-      ({ phase, fraction, message: progressMessage }) => {
-        self.postMessage({
-          type: "progress",
-          phase,
-          fraction,
-          message: progressMessage,
-        });
-      },
-    );
-    if (!cancellationRequested) self.postMessage({ type: "result", result });
+    const options = { ...(message.options || {}), shouldCancel };
+    const result = operation === "analyze"
+      ? await analyzeWav(message.file, options, progress)
+      : operation === "analyze-region"
+        ? await analyzeRegion(message.file, options, progress)
+        : await analyzeWaveformDetail(message.file, options, progress);
+    if (shouldCancel()) post("cancelled", jobId, operation);
+    else post("result", jobId, operation, { result });
   } catch (error) {
-    self.postMessage({
-      type: "error",
-      message: error?.name === "AbortError" ? "Analysen avbröts." : (error?.message || "Analysen misslyckades."),
-    });
+    if (error?.name === "AbortError" || shouldCancel()) {
+      post("cancelled", jobId, operation);
+    } else {
+      post("error", jobId, operation, {
+        message: error?.message || "Arbetet misslyckades.",
+        code: error?.code || null,
+        details: error?.details || null,
+      });
+    }
+  } finally {
+    cancelledJobs.delete(jobId);
   }
 });

@@ -31,23 +31,59 @@ test("medhörningen schemalägger samma linjära fadefunktion med AudioParam", (
   assert.match(app, /fadeOutFrames:\s*Math\.round\(state\.trim\.fadeOutSeconds \* sampleRate\(\)\)/);
 });
 
-test("global toppmarginal är av med minus två dBTP som försiktigt grundvärde", () => {
-  assert.match(html, /id="peakHandlingToggle"/);
-  assert.doesNotMatch(html, /id="peakHandlingToggle"[^>]+checked/);
-  assert.match(html, /id="peakCeilingNumber"[^>]+value="-2\.0"/);
-  assert.match(html, /True Peak-värdet är orienterande och är ingen leveransgaranti/);
-  assert.match(html, /Detta är inte en limiter/);
-  assert.match(html, /kan inte reparera ljud som redan är klippt eller distorderat/);
+test("seriereferensen har tre uttryckliga steg och ingen dold toppsänkning", () => {
+  assert.match(html, /id="calculateSeriesButton"[^>]*>Beräkna nivåförslag/);
+  assert.match(html, /id="previewSeriesButton"[^>]*>Prova förslag/);
+  assert.match(html, /id="applySeriesButton"[^>]*>Använd föreslagen global gain/);
+  assert.match(html, /id="preserveSeriesButton"[^>]*>Bevara oförändrat/);
+  assert.match(html, /-19 LUFS-I, acceptans -20 till -18 LUFS-I och -2 dBTP/);
+  assert.match(html, /Ingen dold toppsänkning/);
+  assert.match(html, /Redan klippt ljud repareras inte/);
 });
 
-test("toppmarginalens API sparas i appstatus, projekt och exportanrop", () => {
-  assert.match(app, /mode:\s*"global-attenuation"/);
+test("exporten använder endast synlig global gain och sparar serieflödet", () => {
+  assert.match(app, /series:\s*\{ status: "preserved"/);
+  assert.match(app, /targetLufs:\s*-19/);
   assert.match(app, /ceilingDbtp:\s*-2/);
-  assert.match(app, /peakHandling:\s*\{ \.\.\.state\.peakHandling \}/);
   const projectEdit = app.match(/function projectEdit\(\)[\s\S]*?\n}/)?.[0] || "";
-  assert.match(projectEdit, /peakHandling:\s*normalizedPeakHandling\(\)/);
+  assert.match(projectEdit, /globalGainDb:\s*state\.trim\.gainDb/);
+  assert.doesNotMatch(projectEdit, /peakHandling/);
   const exportCall = app.match(/exportWorker\.postMessage\([\s\S]*?\n\s*}\);/)?.[0] || "";
-  assert.match(exportCall, /peakHandling:\s*normalizedPeakHandling\(\)/);
+  assert.match(exportCall, /globalGainDb:\s*state\.trim\.gainDb/);
+  assert.doesNotMatch(exportCall, /peakHandling/);
+});
+
+test("redigering ogiltigförklarar hela tidigare exportverifieringen", () => {
+  const invalidation = app.match(/function markEditChanged\([^)]*\)[\s\S]*?\n}/)?.[0] || "";
+  assert.match(invalidation, /state\.regionAnalysis = null/);
+  assert.match(invalidation, /state\.verifiedExport = null/);
+  assert.match(invalidation, /state\.lastExportReport = null/);
+  assert.match(invalidation, /state\.exportStatus === "complete"/);
+
+  const report = app.match(/function reportInput\(\)[\s\S]*?\n}/)?.[0] || "";
+  assert.match(report, /state\.exportStatus === "complete" && Boolean\(state\.verifiedExport\)/);
+  assert.match(report, /verifiedExport: hasCurrentVerifiedExport \? state\.verifiedExport : null/);
+
+  const exportStart = app.match(/function startExport\(\)[\s\S]*?\n}\n\nfunction handleExportMessage/)?.[0] || "";
+  assert.match(exportStart, /state\.lastExportReport = null/);
+  assert.match(exportStart, /state\.verifiedExport = null/);
+});
+
+test("adaptiv detalj, previewkanaler och workerjobb är operabla", () => {
+  assert.match(app, /type:\s*"waveform-detail"/);
+  assert.match(app, /function bindTimelineGestures/);
+  assert.match(app, /timelinePointers\.size === 2/);
+  assert.match(app, /function configureMonitorRouting/);
+  assert.match(app, /mode === "mono" \? 0\.5 : 1/);
+  assert.match(html, /name="previewMode" value="source"/);
+  assert.match(html, /name="previewMode" value="export"/);
+  assert.match(html, /name="monitorMode" value="left"/);
+  assert.match(html, /name="monitorMode" value="right"/);
+  assert.match(html, /name="monitorMode" value="mono"/);
+  assert.match(app, /function nextJobId/);
+  assert.match(app, /function isCurrentJob/);
+  assert.match(html, /id="cancelAnalysisButton"/);
+  assert.match(html, /id="cancelExportButton"/);
 });
 
 test("importerade markörtider normaliseras numeriskt före DOM-rendering", () => {
@@ -56,4 +92,23 @@ test("importerade markörtider normaliseras numeriskt före DOM-rendering", () =
   assert.match(renderer, /if \(seconds === null\) return null/);
   assert.match(renderer, /data-marker-jump="\$\{String\(marker\.seconds\)\}"/);
   assert.match(renderer, /escapeHtml\(marker\.text\)/);
+  for (const field of ["endSeconds", "severity", "channel", "detail", "objective", "origin", "reviewStatus"]) assert.match(renderer, new RegExp(field));
+});
+
+test("mätkedja, canvastext och lokala arbetsfiler är synliga", () => {
+  assert.match(html, />Källfil</);
+  assert.match(html, />Beräknat exporturval</);
+  assert.match(html, />Verifierad exportfil</);
+  assert.match(html, /id="canvasTextAlternative"/);
+  assert.match(html, /id="storedExportsList"/);
+  assert.match(app, />Hämta igen</);
+  assert.match(app, /item\.status \|\| "complete"/);
+  assert.match(app, /item\.status === "partial" \? "Ofullständig kraschrest"/);
+  assert.match(app, /const download = complete \?/);
+  assert.match(app, /storage-list/);
+  assert.match(app, /storage-get/);
+  assert.match(app, /storage-remove/);
+  assert.match(app, /storage-clear/);
+  assert.match(html, /id="updateBanner"/);
+  assert.match(app, /hasUnsafeUpdateState/);
 });

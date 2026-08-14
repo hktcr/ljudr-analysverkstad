@@ -5,7 +5,10 @@
  * Ljudfilen ändras inte. Mätvärdena är avsedda som sakliga beslutsunderlag.
  */
 
-export const ENGINE_VERSION = "0.12.1";
+import { decodeSampleAt, inspectWav, parseWavHeader as parseSharedWavHeader } from "./wav.js";
+import { sha256Blob } from "./sha256.js";
+
+export const ENGINE_VERSION = "1.0.0-rc.1";
 
 export const DEFAULT_PEAK_HANDLING = Object.freeze({
   enabled: false,
@@ -48,12 +51,6 @@ const DEFAULTS = Object.freeze({
   flatTopMinimumSamples: 3,
   maxMarkersPerKind: 100,
 });
-
-const textDecoder = new TextDecoder("ascii");
-
-function ascii(bytes, offset, length) {
-  return textDecoder.decode(bytes.subarray(offset, offset + length));
-}
 
 function finiteDb(value, floor = -Infinity) {
   return value > 0 && Number.isFinite(value) ? 20 * Math.log10(value) : floor;
@@ -133,132 +130,8 @@ async function readBytes(blob, offset, length) {
   return new Uint8Array(await blob.slice(offset, offset + safeLength).arrayBuffer());
 }
 
-function parseFormat(bytes, chunkSize) {
-  if (chunkSize < 16 || bytes.byteLength < 16) {
-    throw new Error("WAVE-filens fmt-block är ofullständigt.");
-  }
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  let formatTag = view.getUint16(0, true);
-  const channels = view.getUint16(2, true);
-  const sampleRate = view.getUint32(4, true);
-  const byteRate = view.getUint32(8, true);
-  const blockAlign = view.getUint16(12, true);
-  const bitsPerSample = view.getUint16(14, true);
-  let validBitsPerSample = bitsPerSample;
-  let channelMask = null;
-  let extensible = false;
-
-  if (formatTag === 0xfffe) {
-    if (chunkSize < 40 || bytes.byteLength < 40) {
-      throw new Error("WAVE_FORMAT_EXTENSIBLE-blocket är ofullständigt.");
-    }
-    const extensionSize = view.getUint16(16, true);
-    if (extensionSize < 22) {
-      throw new Error("WAVE_FORMAT_EXTENSIBLE saknar obligatoriska fält.");
-    }
-    validBitsPerSample = view.getUint16(18, true) || bitsPerSample;
-    channelMask = view.getUint32(20, true);
-    const subFormatTail = [0x00, 0x00, 0x10, 0x00, 0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71];
-    const canonicalTail = subFormatTail.every((value, index) => view.getUint8(28 + index) === value);
-    formatTag = view.getUint32(24, true);
-    if (!canonicalTail) {
-      throw new Error("WAVE_FORMAT_EXTENSIBLE använder en subformat-GUID som inte stöds.");
-    }
-    extensible = true;
-  }
-
-  if (![1, 3].includes(formatTag)) {
-    throw new Error(`Ljudformatet ${formatTag} stöds inte. Använd PCM eller IEEE float WAVE.`);
-  }
-  if (channels < 1 || channels > 2) {
-    throw new Error(`Filen har ${channels} kanaler. Denna version stöder mono och stereo.`);
-  }
-  if (!Number.isFinite(sampleRate) || sampleRate < 8000 || sampleRate > 384000) {
-    throw new Error(`Samplingsfrekvensen ${sampleRate} Hz stöds inte.`);
-  }
-  if (formatTag === 3 && bitsPerSample !== 32) {
-    throw new Error("IEEE float stöds för 32 bitar.");
-  }
-  if (formatTag === 1 && ![16, 24, 32].includes(bitsPerSample)) {
-    throw new Error("PCM stöds för 16, 24 och 32 bitar.");
-  }
-  const expectedBlockAlign = channels * (bitsPerSample / 8);
-  if (blockAlign !== expectedBlockAlign) {
-    throw new Error("WAVE-filens blockstorlek stämmer inte med kanal- och bitdjup.");
-  }
-
-  return {
-    formatTag,
-    encoding: formatTag === 3 ? "IEEE float" : "PCM",
-    channels,
-    sampleRate,
-    byteRate,
-    blockAlign,
-    bitsPerSample,
-    validBitsPerSample,
-    channelMask,
-    extensible,
-    byteRateConsistent: byteRate === sampleRate * blockAlign,
-  };
-}
-
 export async function parseWavHeader(blob) {
-  if (!blob || typeof blob.slice !== "function" || typeof blob.size !== "number") {
-    throw new TypeError("En fil eller Blob krävs.");
-  }
-  if (blob.size < 44) throw new Error("Filen är för liten för att vara en WAVE-fil.");
-  const root = await readBytes(blob, 0, 12);
-  const rootId = ascii(root, 0, 4);
-  if (rootId === "RF64" || rootId === "BW64") {
-    throw new Error("RF64 och BW64 är ännu inte aktiverade i denna version.");
-  }
-  if (rootId !== "RIFF" || ascii(root, 8, 4) !== "WAVE") {
-    throw new Error("Filen är inte en RIFF/WAVE-fil med little endian byteordning.");
-  }
-
-  let offset = 12;
-  let format = null;
-  let data = null;
-  const chunks = [];
-  while (offset + 8 <= blob.size) {
-    const header = await readBytes(blob, offset, 8);
-    if (header.byteLength < 8) break;
-    const view = new DataView(header.buffer, header.byteOffset, header.byteLength);
-    const id = ascii(header, 0, 4);
-    const declaredSize = view.getUint32(4, true);
-    const payloadOffset = offset + 8;
-    const availableSize = Math.max(0, Math.min(declaredSize, blob.size - payloadOffset));
-    chunks.push({ id, offset: payloadOffset, declaredSize, availableSize });
-
-    if (id === "fmt ") {
-      const formatBytes = await readBytes(blob, payloadOffset, Math.min(declaredSize, 64));
-      format = parseFormat(formatBytes, declaredSize);
-    } else if (id === "data" && !data) {
-      data = { offset: payloadOffset, declaredSize, availableSize };
-    }
-
-    if (format && data) break;
-    const next = payloadOffset + declaredSize + (declaredSize & 1);
-    if (!Number.isSafeInteger(next) || next <= offset || next > blob.size + 1) break;
-    offset = next;
-  }
-
-  if (!format) throw new Error("WAVE-filen saknar fmt-block.");
-  if (!data) throw new Error("WAVE-filen saknar data-block.");
-  const completeBytes = data.availableSize - (data.availableSize % format.blockAlign);
-  if (completeBytes <= 0) throw new Error("WAVE-filens data-block innehåller inga hela ljudramar.");
-  const frameCount = completeBytes / format.blockAlign;
-  return {
-    container: "RIFF/WAVE",
-    ...format,
-    dataOffset: data.offset,
-    dataBytes: completeBytes,
-    declaredDataBytes: data.declaredSize,
-    truncated: data.availableSize < data.declaredSize || completeBytes !== data.availableSize,
-    frameCount,
-    durationSeconds: frameCount / format.sampleRate,
-    chunks,
-  };
+  return parseSharedWavHeader(blob);
 }
 
 class Biquad {
@@ -358,6 +231,7 @@ const createTruePeakPhases = (factor, taps) => {
 
 export class FirTruePeakEstimator {
   constructor(channels, sampleRate) {
+    this.sampleRate = sampleRate;
     this.factor = sampleRate >= 192000 ? 1 : sampleRate >= 96000 ? 2 : 4;
     this.tapCount = this.factor === 1 ? 1 : 49;
     const interpolation = createTruePeakPhases(this.factor, this.tapCount);
@@ -372,17 +246,24 @@ export class FirTruePeakEstimator {
       };
     });
     this.peaks = new Float64Array(channels);
+    this.peakFrames = new Float64Array(channels).fill(Number.NaN);
+    this.framesSeen = new Uint32Array(channels);
+    this.groupDelayFrames = this.factor === 1 ? 0 : (this.tapCount - 1) / (2 * this.factor);
   }
 
-  process(channel, sample, includeSamplePeak = true) {
+  process(channel, sample, includeSamplePeak = true, frame = this.framesSeen[channel]) {
     const state = this.states[channel];
     if (includeSamplePeak) {
       const absolute = Math.abs(sample);
-      if (absolute > this.peaks[channel]) this.peaks[channel] = absolute;
+      if (absolute > this.peaks[channel]) {
+        this.peaks[channel] = absolute;
+        this.peakFrames[channel] = frame;
+      }
     }
     if (this.factor === 1) return;
     state.buffer[state.writePosition] = sample;
-    for (const phase of this.phases) {
+    for (let phaseIndex = 0; phaseIndex < this.phases.length; phaseIndex += 1) {
+      const phase = this.phases[phaseIndex];
       let estimate = 0;
       for (let tap = 0; tap < phase.coefficients.length; tap += 1) {
         let position = state.writePosition - phase.indices[tap];
@@ -390,14 +271,19 @@ export class FirTruePeakEstimator {
         estimate += state.buffer[position] * phase.coefficients[tap];
       }
       const candidate = Math.abs(estimate);
-      if (candidate > this.peaks[channel]) this.peaks[channel] = candidate;
+      if (candidate > this.peaks[channel]) {
+        this.peaks[channel] = candidate;
+        this.peakFrames[channel] = frame - this.groupDelayFrames + phaseIndex / this.factor;
+      }
     }
     state.writePosition += 1;
     if (state.writePosition === this.delay) state.writePosition = 0;
   }
 
   push(channel, sample) {
-    this.process(channel, sample, true);
+    const frame = this.framesSeen[channel];
+    this.process(channel, sample, true, frame);
+    this.framesSeen[channel] += 1;
   }
 
   finish() {
@@ -405,24 +291,21 @@ export class FirTruePeakEstimator {
       const state = this.states[channel];
       if (state.finished) continue;
       for (let index = 0; index < this.delay; index += 1) {
-        this.process(channel, 0, false);
+        this.process(channel, 0, false, this.framesSeen[channel] + index);
       }
       state.finished = true;
     }
   }
+
+  peakTimeSeconds(channel, maximumFrames = Infinity) {
+    const frame = this.peakFrames[channel];
+    if (!Number.isFinite(frame)) return null;
+    return Math.min(maximumFrames, Math.max(0, frame)) / this.sampleRate;
+  }
 }
 
 function decodeSample(view, offset, format) {
-  if (format.formatTag === 3) return view.getFloat32(offset, true);
-  if (format.bitsPerSample === 16) return view.getInt16(offset, true) / 32768;
-  if (format.bitsPerSample === 24) {
-    let value = view.getUint8(offset)
-      | (view.getUint8(offset + 1) << 8)
-      | (view.getUint8(offset + 2) << 16);
-    if (value & 0x800000) value -= 0x1000000;
-    return value / 8388608;
-  }
-  return view.getInt32(offset, true) / 2147483648;
+  return decodeSampleAt(view, offset, format);
 }
 
 function createChannelStats() {
@@ -478,11 +361,30 @@ function regionCollector(minimumFrames, maximumStoredRegions = 1000) {
 }
 
 function frameRegionsToSeconds(regions, sampleRate, limit = 50) {
-  return regions.slice(0, limit).map(([start, end]) => ({
+  return regions.map(([start, end]) => ({
     startSeconds: start / sampleRate,
     endSeconds: end / sampleRate,
     durationSeconds: (end - start) / sampleRate,
-  }));
+  })).sort((left, right) => right.durationSeconds - left.durationSeconds)
+    .slice(0, limit)
+    .sort((left, right) => left.startSeconds - right.startSeconds);
+}
+
+function retainLargest(items, item, score, limit) {
+  if (items.length < limit) {
+    items.push(item);
+    return;
+  }
+  let smallestIndex = 0;
+  let smallestScore = score(items[0]);
+  for (let index = 1; index < items.length; index += 1) {
+    const candidate = score(items[index]);
+    if (candidate < smallestScore) {
+      smallestScore = candidate;
+      smallestIndex = index;
+    }
+  }
+  if (score(item) > smallestScore) items[smallestIndex] = item;
 }
 
 function rollingWindowEnergy(values, windowLength, output) {
@@ -525,7 +427,7 @@ function createObservation(id, severity, title, message, objective, regions = []
 function buildObservations(context) {
   const { format, channelResults, global, zeroRegions, overrangeRegions, discontinuities,
     zeroRegionCount, overrangeRegionCount, discontinuityCount, lowLevelRegions,
-    flatTopCount, integratedLufs, loudnessRangeLu } = context;
+    invalidRegions, flatTopCount, integratedLufs, loudnessRangeLu } = context;
   const observations = [];
   if (format.truncated) {
     observations.push(createObservation(
@@ -537,7 +439,8 @@ function buildObservations(context) {
   if (nonFinite) {
     observations.push(createObservation(
       "non-finite", "warning", "Icke ändliga flyttal",
-      `${nonFinite} sampel innehåller NaN eller oändlighet och har uteslutits ur numeriska mått.`, true,
+      `${nonFinite} sampel innehåller NaN eller oändlighet. De utesluts ur rå statistik och ersätts med digital noll i loudness- och toppfiltren.`, true,
+      invalidRegions,
     ));
   }
   const overrange = channelResults.reduce((sum, channel) => sum + channel.overrangeSamples, 0);
@@ -607,53 +510,115 @@ function buildObservations(context) {
   return observations;
 }
 
-function suggestedMarkers(discontinuities, flatTopEvents, zeroRegions, overrangeRegions, limit) {
+const markerBase = (id, severity, objective, heuristic, detail) => ({
+  id,
+  type: "technical",
+  severity,
+  objective,
+  heuristic,
+  detail,
+  origin: "analysis",
+  reviewStatus: "unreviewed",
+});
+
+function suggestedMarkers(discontinuities, flatTopEvents, zeroRegions, overrangeRegions, invalidRegions, limit) {
   const markers = [];
-  for (const item of discontinuities.slice(0, limit)) {
+  for (const item of [...discontinuities].sort((left, right) => right.delta - left.delta).slice(0, limit)) {
     markers.push({
+      ...markerBase(`discontinuity-${item.channel}-${item.frame}`, "review", false, true,
+        `Skillnad ${item.delta.toFixed(3)} i kanal ${item.channel + 1}.`),
       timeSeconds: item.timeSeconds,
-      type: "technical",
-      severity: "notice",
+      startSeconds: item.timeSeconds,
+      endSeconds: item.timeSeconds,
+      channel: item.channel + 1,
       label: "Snabbt nivåsprång",
-      detail: `Skillnad ${item.delta.toFixed(3)} i kanal ${item.channel + 1}.`,
     });
   }
-  for (const item of flatTopEvents.slice(0, limit)) {
+  for (const item of [...flatTopEvents].sort((left, right) => right.samples - left.samples).slice(0, limit)) {
     markers.push({
+      ...markerBase(`flat-top-${item.channel}-${item.frame}`, "review", false, true,
+        `Sekvens nära full skala i kanal ${item.channel + 1}.`),
       timeSeconds: item.timeSeconds,
-      type: "technical",
-      severity: "notice",
+      startSeconds: item.timeSeconds,
+      endSeconds: item.endSeconds ?? item.timeSeconds,
+      channel: item.channel + 1,
       label: "Möjlig platå",
-      detail: `Sekvens nära full skala i kanal ${item.channel + 1}.`,
     });
   }
-  for (const item of zeroRegions.slice(0, limit)) {
+  for (const [index, item] of [...zeroRegions].sort((left, right) => right.durationSeconds - left.durationSeconds).slice(0, limit).entries()) {
     markers.push({
+      ...markerBase(`digital-zero-${index}-${Math.round(item.startSeconds * 1000)}`, "info", true, false,
+        `${item.durationSeconds.toFixed(3)} sekunder.`),
       timeSeconds: item.startSeconds,
+      startSeconds: item.startSeconds,
       endSeconds: item.endSeconds,
-      type: "technical",
-      severity: "info",
+      channel: null,
       label: "Digital noll",
-      detail: `${item.durationSeconds.toFixed(3)} sekunder.`,
     });
   }
-  for (const item of overrangeRegions.slice(0, limit)) {
+  for (const [index, item] of [...overrangeRegions].sort((left, right) => right.durationSeconds - left.durationSeconds).slice(0, limit).entries()) {
     markers.push({
+      ...markerBase(`overrange-${index}-${Math.round(item.startSeconds * 1000)}`, "review", true, false,
+        `${item.durationSeconds.toFixed(3)} sekunder med minst ett floatvärde över 1,0.`),
       timeSeconds: item.startSeconds,
+      startSeconds: item.startSeconds,
       endSeconds: item.endSeconds,
-      type: "technical",
-      severity: "notice",
+      channel: null,
       label: "Över full skala",
-      detail: `${item.durationSeconds.toFixed(3)} sekunder med minst ett floatvärde över 1,0.`,
     });
   }
-  return markers.sort((left, right) => left.timeSeconds - right.timeSeconds).slice(0, limit * 2);
+  for (const [index, item] of [...invalidRegions]
+    .sort((left, right) => right.durationSeconds - left.durationSeconds)
+    .slice(0, limit).entries()) {
+    markers.push({
+      ...markerBase(`invalid-${item.channel}-${index}-${Math.round(item.startSeconds * 1000)}`, "critical", true, false,
+        `NaN eller Infinity i kanal ${item.channel}.`),
+      timeSeconds: item.startSeconds,
+      startSeconds: item.startSeconds,
+      endSeconds: item.endSeconds,
+      channel: item.channel,
+      label: "Ogiltigt floatvärde",
+    });
+  }
+  return markers.sort((left, right) => left.timeSeconds - right.timeSeconds);
 }
 
 export async function analyzeWav(blob, suppliedOptions = {}, onProgress = () => {}) {
   const options = { ...DEFAULTS, ...suppliedOptions };
   onProgress({ phase: "header", fraction: 0, message: "Läser filhuvud" });
-  const header = await parseWavHeader(blob);
+  const sourceHeader = await parseWavHeader(blob);
+  const sourceFrameCount = sourceHeader.frameCount;
+  const analysisStartFrame = Math.min(sourceFrameCount, Math.max(0, Math.round(Number(options.startFrame) || 0)));
+  const analysisEndFrame = Math.min(sourceFrameCount, Math.max(
+    analysisStartFrame,
+    Math.round(Number(options.endFrame ?? sourceFrameCount) || 0),
+  ));
+  if (analysisEndFrame <= analysisStartFrame) throw new Error("Analysregionen innehåller inga ljudbildrutor.");
+  const selectedFrames = analysisEndFrame - analysisStartFrame;
+  const fadeInFrames = Math.min(selectedFrames, Math.max(0, Math.round(Number(options.fadeInFrames) || 0)));
+  const fadeOutFrames = Math.min(selectedFrames, Math.max(0, Math.round(Number(options.fadeOutFrames) || 0)));
+  const globalGainDb = Number(options.globalGainDb ?? 0);
+  if (!Number.isFinite(globalGainDb) || globalGainDb < -60 || globalGainDb > 24) {
+    throw new Error("Global gain måste vara ett ändligt värde mellan -60 och +24 dB.");
+  }
+  const globalGain = 10 ** (globalGainDb / 20);
+  const regionFade = frame => {
+    let factor = 1;
+    if (fadeInFrames > 0 && frame < fadeInFrames) {
+      factor = Math.min(factor, fadeInFrames === 1 ? 0 : frame / (fadeInFrames - 1));
+    }
+    const fromEnd = selectedFrames - 1 - frame;
+    if (fadeOutFrames > 0 && fromEnd < fadeOutFrames) {
+      factor = Math.min(factor, fadeOutFrames === 1 ? 0 : fromEnd / (fadeOutFrames - 1));
+    }
+    return factor;
+  };
+  const header = {
+    ...sourceHeader,
+    frameCount: selectedFrames,
+    dataBytes: selectedFrames * sourceHeader.blockAlign,
+    durationSeconds: selectedFrames / sourceHeader.sampleRate,
+  };
   const { channels, sampleRate, blockAlign, bitsPerSample, frameCount } = header;
   const bytesPerSample = bitsPerSample / 8;
   const channelStats = Array.from({ length: channels }, createChannelStats);
@@ -707,6 +672,7 @@ export async function analyzeWav(blob, suppliedOptions = {}, onProgress = () => 
   };
   const zeroCollector = regionCollector(Math.round(sampleRate * options.zeroMinimumSeconds));
   const overrangeCollector = regionCollector(1);
+  const invalidCollectors = Array.from({ length: channels }, () => regionCollector(1));
   const discontinuities = [];
   const flatTopEvents = [];
   let discontinuityCount = 0;
@@ -766,7 +732,11 @@ export async function analyzeWav(blob, suppliedOptions = {}, onProgress = () => 
   while (consumedBytes < header.dataBytes) {
     if (options.shouldCancel?.()) throw new DOMException("Analysen avbröts.", "AbortError");
     const length = Math.min(alignedBlockBytes, header.dataBytes - consumedBytes);
-    const bytes = await readBytes(blob, header.dataOffset + consumedBytes, length);
+    const bytes = await readBytes(
+      blob,
+      sourceHeader.dataOffset + analysisStartFrame * blockAlign + consumedBytes,
+      length,
+    );
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     const blockFrames = Math.floor(bytes.byteLength / blockAlign);
     for (let localFrame = 0; localFrame < blockFrames; localFrame += 1) {
@@ -775,7 +745,9 @@ export async function analyzeWav(blob, suppliedOptions = {}, onProgress = () => 
       let anyOverrange = false;
       for (let channel = 0; channel < channels; channel += 1) {
         const byteOffset = localFrame * blockAlign + channel * bytesPerSample;
-        const sample = decodeSample(view, byteOffset, header);
+        const decoded = decodeSample(view, byteOffset, header);
+        const sample = Number.isFinite(decoded) ? decoded * globalGain * regionFade(frameIndex) : decoded;
+        invalidCollectors[channel].push(frameIndex, !Number.isFinite(sample));
         samples[channel] = sample;
         const stats = channelStats[channel];
         if (!Number.isFinite(sample)) {
@@ -808,9 +780,12 @@ export async function analyzeWav(blob, suppliedOptions = {}, onProgress = () => 
           if (delta > stats.maxDelta) stats.maxDelta = delta;
           if (delta >= options.discontinuityThreshold) {
             discontinuityCount += 1;
-            if (discontinuities.length < options.maxMarkersPerKind) {
-              discontinuities.push({ frame: frameIndex, timeSeconds: frameIndex / sampleRate, channel, delta });
-            }
+            retainLargest(
+              discontinuities,
+              { frame: frameIndex, timeSeconds: frameIndex / sampleRate, channel, delta },
+              item => item.delta,
+              options.maxMarkersPerKind,
+            );
           }
           if (absolute >= options.flatTopThreshold
             && Math.abs(sample - stats.previous) <= 1e-7) {
@@ -819,14 +794,13 @@ export async function analyzeWav(blob, suppliedOptions = {}, onProgress = () => 
             if (stats.repeatedAtRail + 1 >= options.flatTopMinimumSamples) {
               stats.flatRuns += 1;
               stats.flatSamples += stats.repeatedAtRail + 1;
-              if (flatTopEvents.length < options.maxMarkersPerKind) {
-                flatTopEvents.push({
-                  frame: Math.max(0, frameIndex - stats.repeatedAtRail),
-                  timeSeconds: Math.max(0, frameIndex - stats.repeatedAtRail) / sampleRate,
-                  channel,
-                  samples: stats.repeatedAtRail + 1,
-                });
-              }
+              retainLargest(flatTopEvents, {
+                frame: Math.max(0, frameIndex - stats.repeatedAtRail),
+                timeSeconds: Math.max(0, frameIndex - stats.repeatedAtRail) / sampleRate,
+                endSeconds: frameIndex / sampleRate,
+                channel,
+                samples: stats.repeatedAtRail + 1,
+              }, item => item.samples, options.maxMarkersPerKind);
             }
             stats.repeatedAtRail = 0;
           }
@@ -892,16 +866,27 @@ export async function analyzeWav(blob, suppliedOptions = {}, onProgress = () => 
   finishMaximumStep(false);
   truePeak.finish();
 
-  for (const stats of channelStats) {
+  for (const [channel, stats] of channelStats.entries()) {
     if (stats.repeatedAtRail + 1 >= options.flatTopMinimumSamples) {
       stats.flatRuns += 1;
       stats.flatSamples += stats.repeatedAtRail + 1;
+      retainLargest(flatTopEvents, {
+        frame: Math.max(0, frameCount - stats.repeatedAtRail - 1),
+        timeSeconds: Math.max(0, frameCount - stats.repeatedAtRail - 1) / sampleRate,
+        endSeconds: frameCount / sampleRate,
+        channel,
+        samples: stats.repeatedAtRail + 1,
+      }, item => item.samples, options.maxMarkersPerKind);
     }
   }
   const zeroRegionCollection = zeroCollector.finish(frameCount);
   const overrangeRegionCollection = overrangeCollector.finish(frameCount);
   const zeroRegions = frameRegionsToSeconds(zeroRegionCollection.regions, sampleRate);
   const overrangeRegions = frameRegionsToSeconds(overrangeRegionCollection.regions, sampleRate);
+  const invalidRegions = invalidCollectors.flatMap((collector, channel) => {
+    const collection = collector.finish(frameCount);
+    return frameRegionsToSeconds(collection.regions, sampleRate, 1000).map(region => ({ ...region, channel: channel + 1 }));
+  }).sort((left, right) => left.startSeconds - right.startSeconds);
 
   onProgress({ phase: "statistics", fraction: 0.96, message: "Beräknar loudness och observationer" });
   const momentaryEnergies = new Array(loudnessStepEnergies.length);
@@ -939,6 +924,10 @@ export async function analyzeWav(blob, suppliedOptions = {}, onProgress = () => 
       samplePeakTimeSeconds: stats.peakFrame / sampleRate,
       truePeakEstimate: truePeak.peaks[channel],
       truePeakEstimateDbtp: finiteDb(truePeak.peaks[channel]),
+      truePeakTimeSeconds: truePeak.peakTimeSeconds(channel, Math.max(0, frameCount - 1)),
+      truePeakSourceTimeSeconds: truePeak.peakTimeSeconds(channel, Math.max(0, frameCount - 1)) === null
+        ? null
+        : analysisStartFrame / sampleRate + truePeak.peakTimeSeconds(channel, Math.max(0, frameCount - 1)),
       rms,
       rmsDbfs: rms === null ? null : finiteDb(rms),
       crestFactorDb: rms > 0 ? 20 * Math.log10(stats.peak / rms) : null,
@@ -990,6 +979,9 @@ export async function analyzeWav(blob, suppliedOptions = {}, onProgress = () => 
 
   const highestSamplePeak = Math.max(...channelResults.map((channel) => channel.samplePeak));
   const highestTruePeak = Math.max(...channelResults.map((channel) => channel.truePeakEstimate));
+  const highestTruePeakChannel = channelResults.reduce((best, channel) => (
+    !best || channel.truePeakEstimate > best.truePeakEstimate ? channel : best
+  ), null);
   const combinedRms = Math.sqrt(channelResults.reduce(
     (sum, channel) => sum + (channel.rms ?? 0) ** 2,
     0,
@@ -1005,6 +997,7 @@ export async function analyzeWav(blob, suppliedOptions = {}, onProgress = () => 
     discontinuities,
     discontinuityCount,
     lowLevelRegions,
+    invalidRegions,
     flatTopCount: channelResults.reduce((sum, item) => sum + item.flatTopRuns, 0),
     integratedLufs,
     loudnessRangeLu,
@@ -1032,40 +1025,94 @@ export async function analyzeWav(blob, suppliedOptions = {}, onProgress = () => 
     flatTopEvents,
     zeroRegions,
     overrangeRegions,
+    invalidRegions,
     options.maxMarkersPerKind,
   );
   for (const channel of channelResults) {
     if (Number.isFinite(channel.samplePeakDbfs)) {
       importantMarkers.push({
+        ...markerBase(`sample-peak-${channel.channel}-${Math.round(channel.samplePeakTimeSeconds * sampleRate)}`,
+          "info", true, false, `${channel.samplePeakDbfs.toFixed(2)} dBFS.`),
         timeSeconds: channel.samplePeakTimeSeconds,
-        type: "technical",
-        severity: "info",
+        startSeconds: channel.samplePeakTimeSeconds,
+        endSeconds: channel.samplePeakTimeSeconds,
+        sourceTimeSeconds: analysisStartFrame / sampleRate + channel.samplePeakTimeSeconds,
+        channel: channel.channel,
         label: `Högsta sample peak, kanal ${channel.channel}`,
-        detail: `${channel.samplePeakDbfs.toFixed(2)} dBFS.`,
+      });
+    }
+  }
+  for (const channel of channelResults) {
+    if (Number.isFinite(channel.truePeakEstimateDbtp) && channel.truePeakTimeSeconds !== null) {
+      importantMarkers.push({
+        ...markerBase(`true-peak-${channel.channel}-${Math.round(channel.truePeakTimeSeconds * sampleRate)}`,
+          "info", true, false, `${channel.truePeakEstimateDbtp.toFixed(2)} dBTP i kanal ${channel.channel}.`),
+        timeSeconds: channel.truePeakTimeSeconds,
+        startSeconds: channel.truePeakTimeSeconds,
+        endSeconds: channel.truePeakTimeSeconds,
+        sourceTimeSeconds: channel.truePeakSourceTimeSeconds,
+        channel: channel.channel,
+        label: `Högsta True Peak, kanal ${channel.channel}`,
+        timePrecisionSeconds: 1 / (truePeak.factor * sampleRate),
       });
     }
   }
   if (momentaryMaximum.timeSeconds !== null) {
     importantMarkers.push({
+      ...markerBase(`momentary-max-${Math.round(momentaryMaximum.timeSeconds * sampleRate)}`,
+        "info", true, false, `${momentaryMaximum.value.toFixed(2)} LUFS, fönstret slutar vid denna tid.`),
       timeSeconds: momentaryMaximum.timeSeconds,
-      type: "technical",
-      severity: "info",
+      startSeconds: Math.max(0, momentaryMaximum.timeSeconds - 0.4),
+      endSeconds: momentaryMaximum.timeSeconds,
+      sourceTimeSeconds: analysisStartFrame / sampleRate + momentaryMaximum.timeSeconds,
+      channel: null,
       label: "Högsta Momentary loudness",
-      detail: `${momentaryMaximum.value.toFixed(2)} LUFS, fönstret slutar vid denna tid.`,
     });
   }
   if (shortTermMaximum.timeSeconds !== null) {
     importantMarkers.push({
+      ...markerBase(`short-term-max-${Math.round(shortTermMaximum.timeSeconds * sampleRate)}`,
+        "info", true, false, `${shortTermMaximum.value.toFixed(2)} LUFS, fönstret slutar vid denna tid.`),
       timeSeconds: shortTermMaximum.timeSeconds,
-      type: "technical",
-      severity: "info",
+      startSeconds: Math.max(0, shortTermMaximum.timeSeconds - 3),
+      endSeconds: shortTermMaximum.timeSeconds,
+      sourceTimeSeconds: analysisStartFrame / sampleRate + shortTermMaximum.timeSeconds,
+      channel: null,
       label: "Högsta Short-term loudness",
-      detail: `${shortTermMaximum.value.toFixed(2)} LUFS, fönstret slutar vid denna tid.`,
     });
+  }
+  for (const marker of importantMarkers) {
+    marker.startSeconds ??= marker.timeSeconds;
+    marker.endSeconds ??= marker.timeSeconds;
+    marker.sourceTimeSeconds ??= analysisStartFrame / sampleRate + marker.timeSeconds;
+    marker.origin ??= "analysis";
+    marker.reviewStatus ??= "unreviewed";
+    marker.objective ??= true;
+    marker.heuristic ??= false;
+    marker.channel ??= null;
   }
   importantMarkers.sort((left, right) => left.timeSeconds - right.timeSeconds);
 
+  let sourceIdentity = null;
+  if (options.includeSourceHash !== false) {
+    onProgress({ phase: "hash", fraction: 0, message: "Beräknar lokal SHA-256" });
+    sourceIdentity = await sha256Blob(blob, { shouldCancel: options.shouldCancel }, progress => {
+      onProgress({ phase: "hash", fraction: progress.fraction, message: `Beräknar lokal SHA-256 ${Math.round(progress.fraction * 100)} %` });
+    });
+  }
+
   const result = {
+    sourceIdentity,
+    region: {
+      range: "[startFrame,endFrame)",
+      startFrame: analysisStartFrame,
+      endFrame: analysisEndFrame,
+      selectedFrames,
+      fadeInFrames,
+      fadeOutFrames,
+      globalGainDb,
+      preQuantization: true,
+    },
     format: {
       fileName: blob.name || "Namnlös WAVE-fil",
       fileSizeBytes: blob.size,
@@ -1094,6 +1141,9 @@ export async function analyzeWav(blob, suppliedOptions = {}, onProgress = () => 
       samplePeakDbfs: finiteDb(highestSamplePeak),
       truePeakEstimate: highestTruePeak,
       truePeakEstimateDbtp: finiteDb(highestTruePeak),
+      truePeakTimeSeconds: highestTruePeakChannel?.truePeakTimeSeconds ?? null,
+      truePeakSourceTimeSeconds: highestTruePeakChannel?.truePeakSourceTimeSeconds ?? null,
+      truePeakChannel: highestTruePeakChannel?.channel ?? null,
       plrEstimateLu: integratedLufs === null || !Number.isFinite(highestTruePeak)
         ? null
         : finiteDb(highestTruePeak) - integratedLufs,
@@ -1154,4 +1204,129 @@ export async function analyzeWav(blob, suppliedOptions = {}, onProgress = () => 
   };
   onProgress({ phase: "complete", fraction: 1, message: "Analysen är klar" });
   return result;
+}
+
+export async function analyzeRegion(blob, suppliedOptions = {}, onProgress = () => {}) {
+  const inspected = await inspectWav(blob);
+  const startFrame = Math.min(inspected.frameCount, Math.max(0, Math.round(Number(suppliedOptions.startFrame) || 0)));
+  const endFrame = Math.min(inspected.frameCount, Math.max(
+    startFrame,
+    Math.round(Number(suppliedOptions.endFrame ?? inspected.frameCount) || 0),
+  ));
+  if (endFrame <= startFrame) throw new Error("Analysregionen innehåller inga ljudbildrutor.");
+  const common = {
+    ...suppliedOptions,
+    startFrame,
+    endFrame,
+    includeSourceHash: false,
+  };
+  const source = await analyzeWav(blob, {
+    ...common,
+    fadeInFrames: 0,
+    fadeOutFrames: 0,
+    globalGainDb: 0,
+  }, progress => onProgress({ ...progress, stage: "source", fraction: progress.fraction * 0.45 }));
+  const processed = await analyzeWav(blob, common, progress => onProgress({
+    ...progress,
+    stage: "processed",
+    fraction: 0.45 + progress.fraction * 0.55,
+  }));
+  return {
+    range: { range: "[startFrame,endFrame)", startFrame, endFrame, selectedFrames: endFrame - startFrame },
+    edit: {
+      fadeInFrames: processed.region.fadeInFrames,
+      fadeOutFrames: processed.region.fadeOutFrames,
+      globalGainDb: processed.region.globalGainDb,
+      dynamicProcessing: false,
+      preQuantization: true,
+    },
+    source,
+    processed,
+  };
+}
+
+export async function analyzeWaveformDetail(blob, suppliedOptions = {}, onProgress = () => {}) {
+  const inspected = await inspectWav(blob);
+  const { format } = inspected;
+  const startFrame = Math.min(inspected.frameCount, Math.max(0, Math.floor(Number(suppliedOptions.startFrame) || 0)));
+  const endFrame = Math.min(inspected.frameCount, Math.max(
+    startFrame,
+    Math.ceil(Number(suppliedOptions.endFrame ?? inspected.frameCount) || 0),
+  ));
+  const selectedFrames = endFrame - startFrame;
+  if (!selectedFrames) throw new Error("Detaljintervallet innehåller inga ljudbildrutor.");
+  const pixelWidth = Math.max(1, Math.round(Number(suppliedOptions.pixelWidth) || 1));
+  const maxBinDurationSeconds = Math.min(0.01, Math.max(
+    1 / format.sampleRate,
+    Number(suppliedOptions.maxBinDurationSeconds) || 0.01,
+  ));
+  const framesPerPixel = selectedFrames / pixelWidth;
+  const framesPerBin = Math.max(1, Math.floor(Math.min(
+    framesPerPixel,
+    maxBinDurationSeconds * format.sampleRate,
+  )));
+  const binCount = Math.ceil(selectedFrames / framesPerBin);
+  const includeSamples = suppliedOptions.includeSamples === true
+    && selectedFrames <= Math.max(pixelWidth * 8, 65536);
+  const channels = Array.from({ length: format.channels }, (_, channel) => ({
+    channel: channel + 1,
+    min: new Float32Array(binCount).fill(Infinity),
+    max: new Float32Array(binCount).fill(-Infinity),
+    sumSquares: new Float64Array(binCount),
+    count: new Uint32Array(binCount),
+    samples: includeSamples ? new Float64Array(selectedFrames) : null,
+  }));
+  const chunkFrames = Math.max(1, Math.floor((4 * 1024 * 1024) / format.blockAlign));
+  let processedFrames = 0;
+  while (processedFrames < selectedFrames) {
+    if (suppliedOptions.shouldCancel?.()) throw new DOMException("Detaljanalysen avbröts.", "AbortError");
+    const frames = Math.min(chunkFrames, selectedFrames - processedFrames);
+    const byteStart = inspected.data.dataOffset + (startFrame + processedFrames) * format.blockAlign;
+    const bytes = new Uint8Array(await blob.slice(byteStart, byteStart + frames * format.blockAlign).arrayBuffer());
+    const decoded = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const bytesPerSample = format.bitsPerSample / 8;
+    for (let frame = 0; frame < frames; frame += 1) {
+      const relativeFrame = processedFrames + frame;
+      const bin = Math.min(binCount - 1, Math.floor(relativeFrame / framesPerBin));
+      for (let channel = 0; channel < format.channels; channel += 1) {
+        const sample = decodeSampleAt(decoded, frame * format.blockAlign + channel * bytesPerSample, format);
+        if (!Number.isFinite(sample)) continue;
+        const target = channels[channel];
+        if (sample < target.min[bin]) target.min[bin] = sample;
+        if (sample > target.max[bin]) target.max[bin] = sample;
+        target.sumSquares[bin] += sample * sample;
+        target.count[bin] += 1;
+        if (target.samples) target.samples[relativeFrame] = sample;
+      }
+    }
+    processedFrames += frames;
+    onProgress({
+      phase: "waveform-detail",
+      fraction: processedFrames / selectedFrames,
+      processedFrames,
+      selectedFrames,
+      message: `Läser vågformsdetalj ${Math.round(100 * processedFrames / selectedFrames)} %`,
+    });
+    await new Promise(resolve => setTimeout(resolve, 0));
+  }
+  return {
+    range: "[startFrame,endFrame)",
+    startFrame,
+    endFrame,
+    selectedFrames,
+    sampleRate: format.sampleRate,
+    framesPerBin,
+    binDurationSeconds: framesPerBin / format.sampleRate,
+    binCount,
+    includesSamples: includeSamples,
+    channels: channels.map(target => ({
+      channel: target.channel,
+      min: Array.from(target.min, value => value === Infinity ? null : value),
+      max: Array.from(target.max, value => value === -Infinity ? null : value),
+      rms: Array.from(target.sumSquares, (value, index) => target.count[index]
+        ? Math.sqrt(value / target.count[index])
+        : null),
+      samples: target.samples ? Array.from(target.samples) : null,
+    })),
+  };
 }

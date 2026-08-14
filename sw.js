@@ -1,4 +1,4 @@
-const CACHE_NAME = "ljudr-shell-v0.12.1";
+const CACHE_NAME = "ljudr-shell-v1.0.0-rc.1";
 const SHELL = [
   "./",
   "./index.html",
@@ -11,12 +11,18 @@ const SHELL = [
   "./src/analysis-worker.js",
   "./src/wav.js",
   "./src/export-worker.js",
-  "./src/project.js"
+  "./src/project.js",
+  "./src/sha256.js",
+  "./src/release-meta.js",
+  "./validation-manifest.json"
 ];
 
 self.addEventListener("install", event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(SHELL)));
-  self.skipWaiting();
+});
+
+self.addEventListener("message", event => {
+  if (event.data?.type === "SKIP_WAITING") self.skipWaiting();
 });
 
 self.addEventListener("activate", event => {

@@ -27,18 +27,22 @@ test("regelbaserad bedömning har typ, användning och förklarad reflektion", a
   assert.match(app, /const assessmentProfiles =/);
   assert.match(app, /function levelClass\(/);
   assert.match(app, /Regelbaserad vägledning\. Ingen AI/);
-  assert.match(app, /settings: \{ monitoring: state\.monitoring, view: state\.view, assessment: state\.assessment \}/);
+  assert.match(app, /settings: projectSettings\(\)/);
+  assert.match(app, /function projectSettings\(\)/);
+  assert.doesNotMatch(app.match(/function projectSettings\(\)[\s\S]*?\n\}/)?.[0] || "", /detail:/, "detaljcache får inte sparas i projektet");
 });
 
 test("bearbetningar och exportval har rekommendationsinformation", async () => {
   const html = await read("index.html");
   const topics = [
-    "fades", "gain", "peak-handling", "monitoring", "export-profiles",
-    "preservation-export", "distribution-export", "listening-export",
+    "fades", "gain", "series-reference", "monitoring", "export-profiles",
+    "preservation-export", "distribution-export",
     "export-status", "export-safety",
   ];
   for (const topic of topics) {
     assert.match(html, new RegExp(`data-help-topic="${topic}"`), `${topic} saknas`);
   }
   assert.match(html, /id="exportRecommendationText"/);
+  assert.doesNotMatch(html, /Lyssningskopia|Kommer senare/);
+  assert.match(html, /AAC, MP3, FLAC och Spotify-publicering görs inte här/);
 });

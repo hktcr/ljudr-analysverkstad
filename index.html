@@ -63,6 +63,12 @@
         </button>
       </nav>
 
+      <section class="update-banner" id="updateBanner" hidden aria-live="polite">
+        <div><strong>En ny lokal version är klar</strong><span>Uppdateringen väntar tills pågående jobb och osparade val är säkra.</span></div>
+        <button class="button button-secondary button-small" id="applyUpdateButton" type="button">Uppdatera appen</button>
+        <button class="icon-button" id="dismissUpdateButton" type="button" aria-label="Dölj uppdateringen">×</button>
+      </section>
+
       <div class="file-strip" id="fileStrip" hidden>
         <div class="file-identity">
           <span class="file-icon" aria-hidden="true">
@@ -130,10 +136,13 @@
                   <h1 id="analyzeTitle">Analysera inspelningen</h1>
                   <p>Mätvärden beskriver signalen. De avgör inte hur ett ljudlandskap ska låta.</p>
                 </div>
-                <button class="button button-primary" type="button" id="analyzeButton">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18h2V9H4v9Zm4 0h2V5H8v13Zm4 0h2v-7h-2v7Zm4 0h2V3h-2v15Zm4 0h2v-4h-2v4Z"/></svg>
-                  Starta analys
-                </button>
+                <div class="heading-actions">
+                  <button class="button button-primary" type="button" id="analyzeButton">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18h2V9H4v9Zm4 0h2V5H8v13Zm4 0h2v-7h-2v7Zm4 0h2V3h-2v15Zm4 0h2v-4h-2v4Z"/></svg>
+                    Starta analys
+                  </button>
+                  <button class="button button-secondary" type="button" id="cancelAnalysisButton" hidden>Avbryt analys</button>
+                </div>
               </div>
 
               <div class="progress-card" id="analysisProgress" hidden aria-live="polite">
@@ -184,6 +193,12 @@
                 <div class="assessment-actions" id="assessmentActions"></div>
               </article>
 
+              <section class="measurement-chain" aria-label="Mätkedja">
+                <article class="chain-card is-ready"><span>1</span><div><strong>Källfil</strong><small id="sourceMeasureStatus">Väntar på analys</small></div></article>
+                <article class="chain-card"><span>2</span><div><strong>Beräknat exporturval</strong><small id="regionMeasureStatus">Inte beräknat</small><button class="text-button chain-cancel" id="cancelRegionButton" type="button" hidden>Avbryt beräkning</button></div></article>
+                <article class="chain-card"><span>3</span><div><strong>Verifierad exportfil</strong><small id="verifiedMeasureStatus">Skapas först efter WAV-export</small></div></article>
+              </section>
+
               <article class="timeline-card">
                 <div class="card-toolbar">
                   <div>
@@ -197,7 +212,9 @@
                   </div>
                 </div>
                 <div class="track-legend" aria-label="Spår i tidslinjen">
-                  <button class="legend-chip is-on" type="button" data-track="waveform"><i class="legend-wave"></i>Stereo</button>
+                  <button class="legend-chip is-on" type="button" data-track="waveform"><i class="legend-wave"></i>Vågform</button>
+                  <span class="channel-key channel-left"><i></i>Vänster</span>
+                  <span class="channel-key channel-right"><i></i>Höger</span>
                   <button class="legend-chip is-on" type="button" data-track="loudness"><i class="legend-loudness"></i>Loudness</button>
                   <button class="legend-chip is-on" type="button" data-track="peaks"><i class="legend-peaks"></i>Toppar</button>
                   <button class="legend-chip is-on" type="button" data-track="markers"><i class="legend-markers"></i>Markörer</button>
@@ -209,8 +226,14 @@
                     <span>Analysens tidslinje visas här</span>
                   </div>
                 </div>
+                <div class="detail-status" id="detailStatus" role="status"><span class="status-dot"></span><span>Översiktsdata</span><button class="text-button" id="cancelDetailButton" type="button" hidden>Avbryt detaljläsning</button></div>
                 <div class="time-axis" aria-hidden="true"><span>00:00</span><span>05:00</span><span>10:00</span><span>15:00</span><span>20:00</span></div>
               </article>
+
+              <details class="canvas-text-alternative" id="canvasTextAlternative">
+                <summary>Textmotsvarighet till tidslinjen</summary>
+                <div id="canvasTextContent"><p>Analysera filen för en navigerbar textöversikt.</p></div>
+              </details>
 
               <div class="metric-grid" aria-label="Sammanfattande mätvärden">
                 <article class="metric-card metric-violet">
@@ -309,6 +332,12 @@
 
               <section class="inspector-section">
                 <div class="inspector-heading"><h2>Markörer</h2><button class="text-button" type="button" id="addMarkerButton" disabled>+ Lägg till</button></div>
+                <div class="marker-filters" role="group" aria-label="Filtrera markörer">
+                  <button type="button" class="is-active" data-marker-filter="all" aria-pressed="true">Alla</button>
+                  <button type="button" data-marker-filter="critical" aria-pressed="false">Kritisk</button>
+                  <button type="button" data-marker-filter="review" aria-pressed="false">Granska</button>
+                  <button type="button" data-marker-filter="info" aria-pressed="false">Information</button>
+                </div>
                 <div class="marker-compose" id="markerCompose" hidden>
                   <label>Beskrivning<input type="text" id="markerText" maxlength="120" placeholder="Exempel: ko råmar nära mikrofonen"></label>
                   <label>Typ<select id="markerType"><option value="descriptive">Beskrivande</option><option value="technical">Teknisk</option><option value="user">Egen</option></select></label>
@@ -343,6 +372,11 @@
                   <div class="trim-handle-label trim-start-label" id="trimStartLabel">Start 00:00.000</div>
                   <div class="trim-handle-label trim-end-label" id="trimEndLabel">Slut 00:00.000</div>
                 </div>
+                <div class="audition-toolbar">
+                  <fieldset class="segmented-control" id="previewModeControl"><legend>Provlyssning</legend><label><input type="radio" name="previewMode" value="source" checked><span>Källkontext</span></label><label><input type="radio" name="previewMode" value="export"><span>Exportförhandsvisning</span></label></fieldset>
+                  <fieldset class="segmented-control" id="monitorModeControl"><legend>Monitor</legend><label><input type="radio" name="monitorMode" value="stereo" checked><span>Stereo</span></label><label><input type="radio" name="monitorMode" value="left"><span>Vänster</span></label><label><input type="radio" name="monitorMode" value="right"><span>Höger</span></label><label><input type="radio" name="monitorMode" value="mono"><span>Mono</span></label></fieldset>
+                </div>
+                <p class="audition-status" id="auditionStatus">Källkontext: inga fades eller nivåval hörs. Monitorval påverkar aldrig export.</p>
                 <div class="transport">
                   <div class="transport-buttons">
                     <button class="icon-button" type="button" id="jumpStartButton" aria-label="Gå till startgränsen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h2v14H5V5Zm4 7 10-7v14L9 12Z"/></svg></button>
@@ -431,30 +465,19 @@
                 <div class="neutral-notice" id="gainNotice" hidden></div>
               </section>
 
-              <section class="inspector-section peak-section">
+              <section class="inspector-section series-section">
                 <div class="inspector-heading">
-                  <div><div class="heading-with-help"><h2>Global toppmarginal</h2><button class="info-dot" type="button" data-help-topic="peak-handling" aria-label="Om global toppmarginal">i</button></div><span class="method-badge">Orienterande True Peak</span></div>
+                  <div><div class="heading-with-help"><h2>Twenty Minutes Here</h2><button class="info-dot" type="button" data-help-topic="series-reference" aria-label="Om seriens frivilliga nivåreferens">i</button></div><span class="method-badge">Frivillig seriereferens</span></div>
                 </div>
-                <p class="section-description">Om funktionen behövs sänks hela verket lika mycket. Enskilda toppar formas inte.</p>
-                <label class="switch-row peak-switch"><span><strong>Håll global toppmarginal</strong><small>Av som standard</small></span><input type="checkbox" id="peakHandlingToggle"><i aria-hidden="true"></i></label>
-                <fieldset class="peak-controls" id="peakHandlingControls" disabled>
-                  <legend>Önskad högsta orienterande True Peak</legend>
-                  <div class="value-unit-field peak-value"><input id="peakCeilingNumber" type="number" min="-12" max="-0.1" step="0.1" value="-2.0" inputmode="decimal" aria-label="Önskad toppmarginal i dBTP"><span>dBTP</span></div>
-                  <input id="peakCeilingRange" class="accent-range" type="range" min="-12" max="-0.1" step="0.1" value="-2" aria-label="Önskad toppmarginal i dBTP">
-                  <div class="preset-row peak-presets" aria-label="Förval för toppmarginal">
-                    <button type="button" data-peak-ceiling="-1">-1</button>
-                    <button type="button" data-peak-ceiling="-2" class="is-selected">-2</button>
-                    <button type="button" data-peak-ceiling="-3">-3</button>
-                    <button type="button" data-peak-ceiling="-6">-6</button>
-                  </div>
-                </fieldset>
-                <dl class="peak-readout" aria-live="polite">
-                  <div><dt>Källans estimat</dt><dd id="peakSourceValue">analysera först</dd></div>
-                  <div><dt>Global sänkning</dt><dd id="peakReductionValue">0,0 dB</dd></div>
-                  <div><dt>Beräknat efter nivåval</dt><dd id="peakResultValue">saknas</dd></div>
-                </dl>
-                <div class="neutral-notice peak-notice" id="peakHandlingStatus">Funktionen är av. True Peak-värdet är orienterande och är ingen leveransgaranti.</div>
-                <p class="fine-print peak-caveat"><strong>Detta är inte en limiter.</strong> Funktionen kan inte reparera ljud som redan är klippt eller distorderat.</p>
+                <p class="section-description">-19 LUFS-I, acceptans -20 till -18 LUFS-I och -2 dBTP är en redaktionell referens, inte standard eller kvalitetsbetyg.</p>
+                <dl class="series-readout"><div><dt>Förslag</dt><dd id="seriesGainValue">Inte beräknat</dd></div><div><dt>Status</dt><dd id="seriesStateValue">Bevara oförändrat</dd></div></dl>
+                <div class="series-actions">
+                  <button class="button button-secondary button-full" id="calculateSeriesButton" type="button">Beräkna nivåförslag</button>
+                  <button class="button button-secondary button-full" id="previewSeriesButton" type="button" disabled>Prova förslag</button>
+                  <button class="button button-primary button-full" id="applySeriesButton" type="button" disabled>Använd föreslagen global gain</button>
+                  <button class="button button-quiet button-full" id="preserveSeriesButton" type="button">Bevara oförändrat</button>
+                </div>
+                <p class="fine-print"><strong>Ingen dold toppsänkning.</strong> Om -19 LUFS-I inte ryms under -2 dBTP föreslås lägre gain. Redan klippt ljud repareras inte.</p>
               </section>
 
               <section class="inspector-section">
@@ -487,29 +510,31 @@
               <fieldset class="profile-fieldset">
                 <legend><span>Välj exportprofil</span><button class="info-dot" type="button" data-help-topic="export-profiles" aria-label="Om exportprofiler">i</button></legend>
                 <div class="profile-option-wrap"><label class="profile-option">
-                  <input type="radio" name="exportProfile" value="preservation" checked>
+                  <input type="radio" name="exportProfile" value="sample-payload-trim" checked>
                   <span class="radio-visual"></span>
                   <span class="profile-icon profile-blue"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4V5Zm3 3v8h2V8H7Zm4-2v12h2V6h-2Zm4 3v6h2V9h-2Z"/></svg></span>
-                  <span class="profile-copy"><span class="profile-title"><strong>Bevarande master</strong></span><small>WAV med källans samplingsfrekvens och format. För arkiv och fortsatt redigering.</small><span class="profile-tags"><i>WAV</i><i>Förlustfri</i><i>Rekommenderad</i></span></span>
-                </label><button class="info-dot profile-info" type="button" data-help-topic="preservation-export" aria-label="Om bevarande master">i</button></div>
+                  <span class="profile-copy"><span class="profile-title"><strong>Sample-payload-identiskt trimutdrag</strong></span><small>Ett sammanhängande utsnitt utan gain eller fades. Valda samplebyte bevaras exakt.</small><span class="profile-tags"><i>WAV</i><i>Endast trim</i><i>Sample-identiskt</i></span></span>
+                </label><button class="info-dot profile-info" type="button" data-help-topic="preservation-export" aria-label="Om sample-payload-identiskt trimutdrag">i</button></div>
                 <div class="profile-option-wrap"><label class="profile-option">
-                  <input type="radio" name="exportProfile" value="distribution">
+                  <input type="radio" name="exportProfile" value="edited-wav">
                   <span class="radio-visual"></span>
                   <span class="profile-icon profile-violet"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v10.3a4 4 0 1 0 2 3.46V8h5V3h-7Z"/></svg></span>
-                  <span class="profile-copy"><span class="profile-title"><strong>Redigerad distributionsmaster</strong></span><small>WAV för leverans. Vid formatändring visas exakt vad som sker före export.</small><span class="profile-tags"><i>WAV</i><i>Leverans</i></span></span>
-                </label><button class="info-dot profile-info" type="button" data-help-topic="distribution-export" aria-label="Om distributionsmaster">i</button></div>
-                <div class="profile-option-wrap" id="listeningProfile"><label class="profile-option">
-                  <input type="radio" name="exportProfile" value="listening" disabled>
-                  <span class="radio-visual"></span>
-                  <span class="profile-icon profile-gold"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10a5 5 0 0 1 10 0v7h-2v-7a3 3 0 0 0-6 0v7H7v-7Zm-3 2h2v7H4v-7Zm14 0h2v7h-2v-7Z"/></svg></span>
-                  <span class="profile-copy"><span class="profile-title"><strong>Lyssningskopia</strong></span><small>AAC eller MP3 aktiveras först när storfilsexporten är verifierad på iPad.</small><span class="profile-tags"><i>Kommer senare</i></span></span>
-                </label><button class="info-dot profile-info" type="button" data-help-topic="listening-export" aria-label="Om lyssningskopia">i</button></div>
+                  <span class="profile-copy"><span class="profile-title"><strong>Redigerad WAV-master</strong></span><small>Tillåter uttrycklig kantfade och en bekräftad global gain. Alla ingrepp redovisas.</small><span class="profile-tags"><i>WAV</i><i>Redigerad</i></span></span>
+                </label><button class="info-dot profile-info" type="button" data-help-topic="distribution-export" aria-label="Om redigerad WAV-master">i</button></div>
               </fieldset>
+
+              <p class="scope-note"><strong>Distributionsformat ligger utanför 1.0.</strong> AAC, MP3, FLAC och Spotify-publicering görs inte här. Ta WAV-mastern vidare till Ferrite.</p>
 
               <div class="export-progress" id="exportProgress" hidden aria-live="polite">
                 <div class="progress-copy"><strong id="exportProgressLabel">Förbereder export</strong><span id="exportProgressPercent">0 %</span></div>
                 <div class="progress-track"><i id="exportProgressFill"></i></div>
+                <button class="button button-secondary button-small" id="cancelExportButton" type="button">Avbryt export</button>
               </div>
+
+              <section class="stored-exports" aria-labelledby="storedExportsTitle">
+                <div class="stored-exports-heading"><div><h2 id="storedExportsTitle">Lokala arbetsfiler</h2><p>Färdiga filer behålls lokalt eftersom webbläsaren inte kan bekräfta att Filer tog emot dem.</p></div><button class="button button-quiet button-small" id="clearStoredExportsButton" type="button">Rensa alla</button></div>
+                <ul id="storedExportsList"><li class="list-placeholder">Inga lokala arbetsfiler</li></ul>
+              </section>
             </div>
 
             <aside class="inspector" aria-label="Metadata och exportåtgärder">

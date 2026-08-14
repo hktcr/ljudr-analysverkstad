@@ -1,0 +1,22 @@
+{
+  "schema": "se.gaia.ljudr.analysis-project/1",
+  "createdAt": "2026-08-14T10:00:00.000Z",
+  "app": { "name": "LjudR Analysverkstad", "version": "0.9.0" },
+  "source": {
+    "name": "legacy.wav",
+    "size": 4,
+    "lastModified": 1,
+    "fingerprint": {
+      "algorithm": "SHA-256",
+      "strategy": "descriptor+first+last",
+      "edgeBytes": 1048576,
+      "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  },
+  "analysis": null,
+  "edit": { "startFrame": 0, "endFrame": 4, "gainDb": 0, "fadeInFrames": 0, "fadeOutFrames": 0 },
+  "markers": [],
+  "metadata": { "title": "Äldre projekt" },
+  "settings": {},
+  "privacy": { "audioIncluded": false }
+}

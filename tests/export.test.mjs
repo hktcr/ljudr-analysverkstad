@@ -88,6 +88,32 @@ const float32Wave = (samples, channels = 2, sampleRate = 96000) => {
   return new File([bytes], "float96.wav", { type: "audio/wav", lastModified: 2 });
 };
 
+const extensiblePcm32Valid24Wave = (samples, sampleRate = 48000) => {
+  const dataBytes = samples.length * 4;
+  const bytes = new Uint8Array(68 + dataBytes);
+  const view = new DataView(bytes.buffer);
+  ascii(view, 0, "RIFF");
+  view.setUint32(4, bytes.length - 8, true);
+  ascii(view, 8, "WAVE");
+  ascii(view, 12, "fmt ");
+  view.setUint32(16, 40, true);
+  view.setUint16(20, 0xfffe, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 4, true);
+  view.setUint16(32, 4, true);
+  view.setUint16(34, 32, true);
+  view.setUint16(36, 22, true);
+  view.setUint16(38, 24, true);
+  view.setUint32(40, 4, true);
+  view.setUint32(44, 1, true);
+  bytes.set([0x00, 0x00, 0x10, 0x00, 0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71], 48);
+  ascii(view, 60, "data");
+  view.setUint32(64, dataBytes, true);
+  samples.forEach((sample, index) => view.setInt32(68 + index * 4, sample << 8, true));
+  return new File([bytes], "valid24-in-32.wav", { type: "audio/wav" });
+};
+
 const waveWithOddJunk = () => {
   const samples = [100, -100, 200, -200];
   const bytes = new Uint8Array(44 + 10 + samples.length * 2);
@@ -229,17 +255,14 @@ test("gain och linjära fades ger exakt förväntad float32-export", async () =>
   assert.equal(report.edit.bitExactSamplePayload, false);
 });
 
-test("Aktiverad toppanpassning som inte behöver ingripa bevarar ren trimning bitidentiskt", async () => {
+test("bekräftad toppkontroll som inte behöver stoppa bevarar ren trimning bitidentiskt", async () => {
   const file = pcm16Wave([1000, -1000, 2000, -2000, 3000, -3000]);
   const { output, report } = await exportWav(file, {
     startFrame: 0,
     endFrame: 3,
-    peakHandling: {
-      enabled: true,
-      mode: "global-attenuation",
-      ceilingDbtp: 0,
-      sourceTruePeakDbtp: -20
-    },
+    globalGainDb: 0,
+    enforceTruePeakCeiling: true,
+    truePeakCeilingDbtp: 0,
     preferOpfs: false
   });
   const sourceInfo = await inspectWav(file);
@@ -250,34 +273,40 @@ test("Aktiverad toppanpassning som inte behöver ingripa bevarar ren trimning bi
   assert.equal(report.edit.peakAdjustmentDb, 0);
   assert.equal(report.edit.effectiveGainDb, 0);
   assert.equal(report.edit.bitExactSamplePayload, true);
-  assert.equal(report.edit.peakHandling.sourceTruePeakDbtp, -20);
+  assert.equal(report.edit.peakHandling.mode, "verify-only-no-hidden-adjustment");
   assert.equal(report.output.ditherApplied, false);
+  assert.equal(report.verifiedOutput.samplePayloadIdentity.identical, true);
 });
 
-test("Global toppanpassning sänker hela urvalet utan dynamisk limitering", async () => {
+test("export gör ingen dold toppsänkning utan blockerar det bekräftade gainvärdet", async () => {
   const samples = [28000, -14000, 21000, -7000, 14000, -3500, 7000, -1750];
   const file = pcm16Wave(samples);
-  const { output, report } = await exportWav(file, {
-    gainDb: 3,
-    peakHandling: {
-      enabled: true,
-      mode: "global-attenuation",
-      ceilingDbtp: -6,
-      sourceTruePeakDbtp: -1
-    },
-    preferOpfs: false
+  await assert.rejects(
+    () => exportWav(file, {
+      globalGainDb: 3,
+      truePeakCeilingDbtp: -6,
+      preferOpfs: false,
+    }),
+    error => error.code === "TRUE_PEAK_CEILING_EXCEEDED",
+  );
+
+  const { output, report, verifiedOutput } = await exportWav(file, {
+    globalGainDb: -5.5,
+    truePeakCeilingDbtp: -6,
+    preferOpfs: false,
   });
-  assert.equal(report.edit.intendedGainDb, 3);
-  assert.ok(report.edit.peakAdjustmentDb < 0);
-  assert.ok(report.edit.predictedTruePeakDbtp <= -6 + 1e-9);
+  assert.equal(report.edit.globalGainDb, -5.5);
+  assert.equal(report.edit.effectiveGainDb, -5.5);
+  assert.equal(report.edit.peakAdjustmentDb, 0);
   assert.equal(report.edit.peakHandling.dynamicProcessing, false);
   assert.equal(report.edit.truePeakValidationStatus, "ebu-minimum-requirements-validated");
   assert.equal(report.output.pcmClampingRisk.detected, false);
   assert.equal(report.output.dither.applied, true);
+  assert.ok(verifiedOutput.summary.truePeakEstimateDbtp <= -6);
 
   const info = await inspectWav(output);
   const view = new DataView(await output.slice(info.data.dataOffset).arrayBuffer());
-  const multiplier = 10 ** (report.edit.effectiveGainDb / 20);
+  const multiplier = 10 ** (-5.5 / 20);
   for (let index = 0; index < samples.length; index += 1) {
     const actual = view.getInt16(index * 2, true);
     const expected = samples[index] * multiplier;
@@ -288,7 +317,7 @@ test("Global toppanpassning sänker hela urvalet utan dynamisk limitering", asyn
 test("Positiv gain som skulle klampa PCM blockeras före export", async () => {
   const file = pcm16Wave([30000, -30000, 28000, -28000]);
   await assert.rejects(
-    () => exportWav(file, { gainDb: 1, preferOpfs: false }),
+    () => exportWav(file, { globalGainDb: 1, enforceTruePeakCeiling: false, preferOpfs: false }),
     error => {
       assert.equal(error.name, "PcmClampingRiskError");
       assert.equal(error.code, "PCM_CLAMPING_RISK");
@@ -299,17 +328,22 @@ test("Positiv gain som skulle klampa PCM blockeras före export", async () => {
   );
 });
 
-test("PCM-rapporten skiljer rå klamprisk från TPDF-marginal vid omräkning", async () => {
+test("TPDF-marginalrisk blockeras även utan positiv gain", async () => {
   const file = pcm16Wave([32767, 0, 1000, 0]);
-  const { report } = await exportWav(file, {
-    fadeOutFrames: 1,
-    preferOpfs: false
-  });
-  assert.equal(report.output.dither.applied, true);
-  assert.equal(report.output.pcmClampingRisk.rawClampingRisk, false);
-  assert.equal(report.output.pcmClampingRisk.ditherClampingRisk, true);
-  assert.equal(report.output.pcmClampingRisk.detected, true);
-  assert.equal(report.output.pcmClampingRisk.blocked, false);
+  await assert.rejects(
+    () => exportWav(file, {
+      fadeOutFrames: 1,
+      enforceTruePeakCeiling: false,
+      preferOpfs: false,
+    }),
+    error => {
+      assert.equal(error.code, "PCM_CLAMPING_RISK");
+      assert.equal(error.details.rawClampingRisk, false);
+      assert.equal(error.details.ditherClampingRisk, true);
+      assert.equal(error.details.blocked, true);
+      return true;
+    },
+  );
 });
 
 test("Toppförkontrollen använder markerat intervall efter fades", async () => {
@@ -364,4 +398,37 @@ test("Parsern respekterar padding efter ett udda chunk", async () => {
   const info = await inspectWav(waveWithOddJunk());
   assert.equal(info.data.dataOffset, 54);
   assert.equal(info.frameCount, 2);
+});
+
+test("mono PCM24 med udda data får korrekt avslutande RIFF-padding", async () => {
+  const file = pcmWideWave([123456], 24, 1);
+  const { output, verifiedOutput } = await exportWav(file, { preferOpfs: false });
+  const bytes = new Uint8Array(await output.arrayBuffer());
+  const view = new DataView(bytes.buffer);
+  assert.equal(output.size % 2, 0);
+  assert.equal(view.getUint32(4, true), output.size - 8);
+  assert.equal(bytes.at(-1), 0);
+  assert.equal(verifiedOutput.format.riffPaddingBytes, 1);
+  assert.equal((await inspectWav(output)).data.declaredSize, 3);
+});
+
+test("invalid float blockerar bearbetad export men får sample-identiskt trimmas", async () => {
+  const file = float32Wave([0.1, Number.NaN, 0.2], 1, 96000);
+  await assert.rejects(
+    () => exportWav(file, { globalGainDb: -1, preferOpfs: false }),
+    error => error.code === "INVALID_FLOAT_TRANSFORM_BLOCKED",
+  );
+  const { verifiedOutput } = await exportWav(file, { preferOpfs: false });
+  assert.equal(verifiedOutput.samplePayloadIdentity.identical, true);
+  assert.equal(verifiedOutput.invalidFloatSamples, 1);
+});
+
+test("Extensible PCM med avvikande validBits får trimmas men inte räknas om", async () => {
+  const file = extensiblePcm32Valid24Wave([1000, -1000, 500]);
+  const clean = await exportWav(file, { startFrame: 0, endFrame: 2, preferOpfs: false });
+  assert.equal(clean.verifiedOutput.samplePayloadIdentity.identical, true);
+  await assert.rejects(
+    () => exportWav(file, { globalGainDb: -1, preferOpfs: false }),
+    error => error.code === "VALID_BITS_REENCODE_BLOCKED",
+  );
 });

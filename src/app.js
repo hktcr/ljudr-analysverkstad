@@ -1,3 +1,5 @@
+import { inspectWav } from "./wav.js";
+
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
 
@@ -10,6 +12,10 @@ const state = {
   analysisStatus: "idle",
   exportStatus: "idle",
   lastExportReport: null,
+  regionAnalysis: null,
+  verifiedExport: null,
+  exportProfile: "sample-payload-trim",
+  dirty: false,
   trim: {
     startSeconds: 0,
     endSeconds: 0,
@@ -19,15 +25,13 @@ const state = {
     fadeOutSeconds: 0,
     gainDb: 0,
   },
-  peakHandling: {
-    enabled: false,
-    mode: "global-attenuation",
-    ceilingDbtp: -2,
-    sourceTruePeakDbtp: null,
-  },
+  series: { status: "preserved", proposedGainDb: null, targetLufs: -19, rangeMinLufs: -20, rangeMaxLufs: -18, ceilingDbtp: -2 },
   monitoring: {
     volume: 0.8,
     levelMatched: false,
+    previewMode: "source",
+    channelMode: "stereo",
+    previewGainOverride: null,
   },
   assessment: {
     recordingType: "soundscape-quiet",
@@ -47,8 +51,13 @@ const state = {
       peaks: true,
       markers: true,
     },
+    detail: null,
+    detailStatus: "overview",
   },
+  markerFilter: "all",
   markers: [],
+  jobs: { analysis: null, region: null, detail: null, export: null, storage: null },
+  storedExports: [],
   metadata: {
     title: "",
     series: "Twenty Minutes Here",
@@ -89,7 +98,15 @@ let audioContext = null;
 let audioSourceNode = null;
 let previewGainNode = null;
 let monitorGainNode = null;
+let channelSplitterNode = null;
+let channelMergerNode = null;
+let channelGainNodes = [];
 let activeDownloadUrl = null;
+let jobSequence = 0;
+const timelinePointers = new Map();
+let timelineGesture = null;
+let detailTimer = 0;
+let regionTimer = 0;
 
 const elements = {
   audioInput: $("#audioFileInput"),
@@ -102,6 +119,7 @@ const elements = {
   openProject: $("#openProjectButton"),
   projectInput: $("#projectFileInput"),
   analyzeButton: $("#analyzeButton"),
+  cancelAnalysis: $("#cancelAnalysisButton"),
   analysisProgress: $("#analysisProgress"),
   progressLabel: $("#progressLabel"),
   progressPercent: $("#progressPercent"),
@@ -110,6 +128,10 @@ const elements = {
   analysisCanvasEmpty: $("#analysisCanvasEmpty"),
   trimCanvas: $("#trimCanvas"),
   timelineRange: $("#timelineRange"),
+  detailStatus: $("#detailStatus"),
+  cancelRegion: $("#cancelRegionButton"),
+  cancelDetail: $("#cancelDetailButton"),
+  canvasTextContent: $("#canvasTextContent"),
   observationList: $("#observationList"),
   observationCount: $("#observationCount"),
   markerList: $("#markerList"),
@@ -141,14 +163,15 @@ const elements = {
   projectedLufs: $("#projectedLufs"),
   projectedPeak: $("#projectedPeak"),
   gainNotice: $("#gainNotice"),
-  peakHandlingToggle: $("#peakHandlingToggle"),
-  peakHandlingControls: $("#peakHandlingControls"),
-  peakCeilingNumber: $("#peakCeilingNumber"),
-  peakCeilingRange: $("#peakCeilingRange"),
-  peakSourceValue: $("#peakSourceValue"),
-  peakReductionValue: $("#peakReductionValue"),
-  peakResultValue: $("#peakResultValue"),
-  peakHandlingStatus: $("#peakHandlingStatus"),
+  sourceMeasureStatus: $("#sourceMeasureStatus"),
+  regionMeasureStatus: $("#regionMeasureStatus"),
+  verifiedMeasureStatus: $("#verifiedMeasureStatus"),
+  seriesGainValue: $("#seriesGainValue"),
+  seriesStateValue: $("#seriesStateValue"),
+  calculateSeries: $("#calculateSeriesButton"),
+  previewSeries: $("#previewSeriesButton"),
+  applySeries: $("#applySeriesButton"),
+  preserveSeries: $("#preserveSeriesButton"),
   levelMatch: $("#levelMatchToggle"),
   metadataForm: $("#metadataForm"),
   exportAudio: $("#exportAudioButton"),
@@ -158,6 +181,9 @@ const elements = {
   exportProgressLabel: $("#exportProgressLabel"),
   exportProgressPercent: $("#exportProgressPercent"),
   exportProgressFill: $("#exportProgressFill"),
+  cancelExport: $("#cancelExportButton"),
+  storedExportsList: $("#storedExportsList"),
+  clearStoredExports: $("#clearStoredExportsButton"),
   capabilityStatus: $("#capabilityStatus"),
   capabilityList: $("#capabilityList"),
   recordingType: $("#recordingType"),
@@ -170,6 +196,10 @@ const elements = {
   helpDialog: $("#helpDialog"),
   helpCopy: $("#helpCopy"),
   toastRegion: $("#toastRegion"),
+  auditionStatus: $("#auditionStatus"),
+  updateBanner: $("#updateBanner"),
+  applyUpdate: $("#applyUpdateButton"),
+  dismissUpdate: $("#dismissUpdateButton"),
 };
 
 const helpContent = {
@@ -182,7 +212,7 @@ const helpContent = {
         <li>Ingen kompression, brusreducering eller automatisk normalisering används.</li>
         <li>Trimning sker bara i början och slutet.</li>
         <li>Gain, om du väljer den, gäller hela verket lika.</li>
-        <li>Global toppmarginal sänker vid behov hela verket. Den formar inte enskilda toppar och är inte en limiter.</li>
+        <li>Twenty Minutes Here-referensen kan föreslå en lägre synlig global gain, men ändrar aldrig ljudet automatiskt.</li>
       </ul>
       <p>Observationerna är underlag för ditt beslut. De är inte kvalitetsbetyg.</p>`,
   },
@@ -212,16 +242,16 @@ const helpContent = {
         <li>Trimning tar bort material före startgränsen och efter slutgränsen.</li>
         <li>Linjära toningar påverkar endast ytterkanterna på det valda utsnittet.</li>
         <li>Gain ändrar samtliga samplingar lika mycket.</li>
-        <li>Global toppmarginal kan endast sänka hela verket. Den är inte en limiter.</li>
+        <li>Serieförslaget kan endast bli en synlig global gain efter ett separat beslut.</li>
         <li>Utjämnad medhörning påverkar bara det du hör under jämförelsen.</li>
       </ul>`,
   },
   export: {
     title: "Export, format och säkerhetskontroller",
     body: `
-      <p class="help-lead">Exportmotorn läser och skriver långa filer blockvis. Före omräkning kontrolleras det valda utsnittet efter toningar och före gain.</p>
+      <p class="help-lead">Exportmotorn läser och skriver långa filer blockvis. Före kvantisering kontrollmäts det valda utsnittet efter toningar och den enda synliga globala gainen.</p>
       <ul>
-        <li>Ren trimning utan gain eller toningar bevarar ljuddatat bitidentiskt.</li>
+        <li>Ren trimning utan gain eller toningar bevarar vald sample-payload byte för byte.</li>
         <li>Gain och toningar beräknas med 64 bit float innan den slutliga kodningen.</li>
         <li>PCM får TPDF dither när samplingarna måste räknas om.</li>
         <li>IEEE float behöver inte kvantiseringsdither.</li>
@@ -379,12 +409,12 @@ const helpTopics = {
     caution: "Gain förbättrar inte signalens brusförhållande och reparerar inte distorsion.",
     recommendation: "Välj nivån med både mätning och lyssning. Använd toppförkontrollen före positiv gain till PCM.",
   },
-  "peak-handling": {
-    title: "Global toppmarginal",
-    meaning: "Sänker vid behov hela det valda utsnittet så att det orienterande True Peak-estimatet når valt tak.",
-    relation: "Beräkningen använder valt utsnitt efter toningar och före gain. Ingen enskild topp förändras separat.",
-    caution: "Det är inte limitering och estimatet är inte en formell dBTP garanti.",
-    recommendation: "Låt funktionen vara av om ingen sänkning behövs. Minus två dBTP ger försiktigare marginal än minus ett med nuvarande estimator.",
+  "series-reference": {
+    title: "Frivillig Twenty Minutes Here-referens",
+    meaning: "En redaktionell orientering på minus 19 LUFS-I, acceptansintervallet minus 20 till minus 18 och toppreferensen minus 2 dBTP.",
+    relation: "Förslaget använder exporturvalets mätning och begränsar positiv global gain om toppreferensen annars överskrids.",
+    caution: "Detta är ingen plattformsstandard, inget kvalitetsbetyg och ingen automatisk normalisering.",
+    recommendation: "Beräkna, provlyssna och applicera i tre skilda steg. Bevara oförändrat är alltid ett likvärdigt val.",
   },
   monitoring: {
     title: "Utjämnad medhörning",
@@ -397,12 +427,12 @@ const helpTopics = {
     title: "Exportprofiler",
     meaning: "Profilerna beskriver avsikten med filen. I denna version bevarar båda aktiva profilerna källans WAV format.",
     relation: "Profilen redovisas i exportrapporten tillsammans med trimning, gain, toningar och toppkontroll.",
-    caution: "En profil ändrar inte ljudet i smyg. Lyssningskopia är avstängd tills kodning av stora filer är verifierad på iPad.",
-    recommendation: "Spara alltid en bevarande master innan en komprimerad lyssningskopia skapas i ett senare steg.",
+    caution: "Sample-payload-identiskt trimutdrag blockerar gain och fades. Redigerad WAV-master redovisar varje ingrepp.",
+    recommendation: "Skapa distributionsformat i Ferrite från den verifierade WAV-mastern.",
   },
   "preservation-export": {
-    title: "Bevarande master",
-    meaning: "En förlustfri WAV som behåller källans samplingsfrekvens och kodningsformat.",
+    title: "Sample-payload-identiskt trimutdrag",
+    meaning: "Ett sammanhängande WAV-utdrag som behåller de valda samplebyten exakt och inte tillåter gain eller fades.",
     relation: "Ren trimning kan vara bitidentisk i ljuddatat. Gain eller toningar kräver omräkning.",
     caution: "Metadata från okända WAV block kan inte alltid bevaras och redovisas därför i exportrapporten.",
     recommendation: "Använd denna som ny arbetsmaster och behåll alltid originalinspelningen separat.",
@@ -414,13 +444,6 @@ const helpTopics = {
     caution: "Den aktiva versionen skapar inte AAC eller MP3 och gör ingen automatisk loudnessnormalisering.",
     recommendation: "Kontrollera rapporten och provlyssna på den sparade filen innan den kodas för en plattform.",
   },
-  "listening-export": {
-    title: "Lyssningskopia",
-    meaning: "En framtida mindre fil i ett komprimerat format för enkel distribution.",
-    relation: "Den ska härledas från distributionsmastern, inte ersätta originalet eller bevarandemastern.",
-    caution: "Funktionen är medvetet avstängd tills stora filer har verifierats på fysisk iPad.",
-    recommendation: "Använd tills vidare den exporterade WAV filen i en betrodd kodare.",
-  },
   "export-status": {
     title: "Teknisk status",
     meaning: "Visar om webbläsaren har de funktioner som analys, blockvis export och lokal storfilslagring behöver.",
@@ -431,7 +454,7 @@ const helpTopics = {
   "export-safety": {
     title: "Exportkontroll och rekommendation",
     meaning: "Sammanfattar vad exporten kommer att ändra och om aktuella mätvärden visar en tydlig teknisk risk.",
-    relation: "Kontrollen väger ihop utsnitt, toningar, gain, toppmarginal, källformat och aktuell analys.",
+    relation: "Kontrollen väger ihop utsnitt, toningar, synlig global gain, källformat och aktuell analys.",
     caution: "True Peak delen är orienterande. Den slutliga filen bör alltid provlyssnas efter sparande.",
     recommendation: "Exportera först när sammanfattningen stämmer med din avsikt och inga olösta varningar återstår.",
   },
@@ -529,6 +552,35 @@ function showToast(message, type = "info", timeout = 4500) {
   window.setTimeout(() => toast.remove(), timeout);
 }
 
+function nextJobId(operation) {
+  jobSequence += 1;
+  return `${operation}-${Date.now()}-${jobSequence}`;
+}
+
+function isCurrentJob(operation, data = {}) {
+  return !data.jobId || state.jobs[operation] === data.jobId;
+}
+
+function markEditChanged(reason = "edit") {
+  state.dirty = true;
+  state.regionAnalysis = null;
+  state.verifiedExport = null;
+  state.lastExportReport = null;
+  if (state.exportStatus === "complete") state.exportStatus = "idle";
+  if (elements.regionMeasureStatus) elements.regionMeasureStatus.textContent = "Behöver beräknas på nytt";
+  if (elements.verifiedMeasureStatus) elements.verifiedMeasureStatus.textContent = "Ogiltig efter ändring";
+  window.clearTimeout(regionTimer);
+  regionTimer = window.setTimeout(requestRegionAnalysis, 450);
+  emitState(reason);
+}
+
+function invalidateSeriesProposal() {
+  state.series.status = "preserved";
+  state.series.proposedGainDb = null;
+  state.monitoring.previewGainOverride = null;
+  syncSeriesUi();
+}
+
 function emitState(reason) {
   window.dispatchEvent(new CustomEvent("ljudr:statechange", {
     detail: {
@@ -538,7 +590,9 @@ function emitState(reason) {
       analysisStatus: state.analysisStatus,
       exportStatus: state.exportStatus,
       trim: { ...state.trim },
-      peakHandling: { ...state.peakHandling },
+      series: { ...state.series },
+      regionAnalysis: state.regionAnalysis,
+      verifiedExport: state.verifiedExport,
       markers: state.markers.map((marker) => ({ ...marker })),
       metadata: { ...state.metadata },
       assessment: { ...state.assessment },
@@ -580,51 +634,14 @@ function enableWorkflow(enabled) {
 }
 
 async function inspectWaveHeader(file) {
-  const bytes = new Uint8Array(await file.slice(0, Math.min(file.size, 1024 * 1024)).arrayBuffer());
-  if (bytes.byteLength < 44) throw new Error("Filen är för kort för att vara en WAV-fil.");
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  const text = (offset, length) => String.fromCharCode(...bytes.subarray(offset, offset + length));
-  const container = text(0, 4);
-  if (!["RIFF", "RF64", "BW64"].includes(container) || text(8, 4) !== "WAVE") {
-    throw new Error("Filen har ingen igenkänd WAVE-rubrik.");
-  }
-  let offset = 12;
-  let format = null;
-  let dataBytes = null;
-  while (offset + 8 <= bytes.byteLength) {
-    const id = text(offset, 4);
-    const size = view.getUint32(offset + 4, true);
-    const start = offset + 8;
-    if (id === "fmt " && size >= 16 && start + 16 <= bytes.byteLength) {
-      const tag = view.getUint16(start, true);
-      const channels = view.getUint16(start + 2, true);
-      const rate = view.getUint32(start + 4, true);
-      const blockAlign = view.getUint16(start + 12, true);
-      const bits = view.getUint16(start + 14, true);
-      let resolvedTag = tag;
-      if (tag === 0xfffe && size >= 40 && start + 26 <= bytes.byteLength) resolvedTag = view.getUint16(start + 24, true);
-      format = {
-        container,
-        channels,
-        sampleRate: rate,
-        blockAlign,
-        bitsPerSample: bits,
-        encoding: resolvedTag === 3 ? "IEEE_FLOAT" : resolvedTag === 1 ? "PCM" : `format ${resolvedTag}`,
-      };
-    }
-    if (id === "data") {
-      dataBytes = size === 0xffffffff ? null : size;
-      break;
-    }
-    const next = start + size + (size % 2);
-    if (next <= offset || next > bytes.byteLength) break;
-    offset = next;
-  }
-  if (!format) throw new Error("WAV-filens formatblock kunde inte läsas.");
-  const duration = dataBytes !== null && format.blockAlign && format.sampleRate
-    ? dataBytes / format.blockAlign / format.sampleRate
-    : null;
-  return { ...format, dataBytes, durationSeconds: duration };
+  const inspected = await inspectWav(file);
+  return {
+    ...inspected.format,
+    container: inspected.container,
+    dataBytes: inspected.data?.completeDataBytes ?? null,
+    durationSeconds: inspected.durationSeconds,
+    frameCount: inspected.frameCount,
+  };
 }
 
 function technicalDescription() {
@@ -633,8 +650,14 @@ function technicalDescription() {
   const encoding = info.encoding === "IEEE_FLOAT" ? "float" : String(info.encoding || "").toLowerCase();
   const channelText = info.channels === 1 ? "mono" : info.channels === 2 ? "stereo" : `${info.channels} kanaler`;
   const bits = info.bitsPerSample ? `${info.bitsPerSample}-bit ${encoding}` : encoding;
+  const validBits = finite(info.validBitsPerSample) !== null && info.validBitsPerSample !== info.bitsPerSample ? ` · ${info.validBitsPerSample} giltiga bitar` : "";
   const duration = finite(info.durationSeconds) !== null ? formatTime(info.durationSeconds, false) : "okänd längd";
-  return `${bits} · ${formatRate(info.sampleRate)} · ${channelText} · ${duration} · ${formatBytes(state.file?.size)}`;
+  return `${bits}${validBits} · ${formatRate(info.sampleRate)} · ${channelText} · ${duration} · ${formatBytes(state.file?.size)}`;
+}
+
+function validBitsTransformBlocked() {
+  const info = state.analysis?.format || state.fileInfo || {};
+  return finite(info.validBitsPerSample) !== null && finite(info.bitsPerSample) !== null && info.validBitsPerSample !== info.bitsPerSample;
 }
 
 async function openAudioFile(file) {
@@ -646,12 +669,18 @@ async function openAudioFile(file) {
   stopPlayback();
   analysisWorker?.terminate();
   analysisWorker = null;
+  exportWorker?.terminate();
+  exportWorker = null;
+  state.jobs = { analysis: null, region: null, detail: null, export: null, storage: null };
   if (state.fileUrl) URL.revokeObjectURL(state.fileUrl);
   state.file = file;
   state.fileUrl = URL.createObjectURL(file);
   state.fileInfo = null;
   state.analysis = null;
+  state.regionAnalysis = null;
+  state.verifiedExport = null;
   state.analysisStatus = "idle";
+  state.exportStatus = "idle";
   state.lastExportReport = null;
   state.markers = [];
   state.trim.startSeconds = 0;
@@ -659,13 +688,7 @@ async function openAudioFile(file) {
   state.trim.gainDb = 0;
   state.trim.fadeInSeconds = 0;
   state.trim.fadeOutSeconds = 0;
-  state.peakHandling = {
-    enabled: false,
-    mode: "global-attenuation",
-    ceilingDbtp: -2,
-    sourceTruePeakDbtp: null,
-  };
-  elements.audio.src = state.fileUrl;
+  state.series = { status: "preserved", proposedGainDb: null, targetLufs: -19, rangeMinLufs: -20, rangeMaxLufs: -18, ceilingDbtp: -2 };
   elements.fileName.textContent = file.name;
   elements.fileTechnical.textContent = `${formatBytes(file.size)} · läser WAVE-rubrik`;
   elements.fileStrip.hidden = false;
@@ -675,9 +698,19 @@ async function openAudioFile(file) {
 
   try {
     state.fileInfo = await inspectWaveHeader(file);
+    if (["RF64", "BW64"].includes(state.fileInfo.container)) throw new Error(`${state.fileInfo.container} ligger utanför version 1.0. Välj en RIFF/WAVE-fil.`);
+    if (![44100, 48000, 88200, 96000, 176400, 192000].includes(state.fileInfo.sampleRate)) throw new Error("Samplingsfrekvensen stöds inte. Tillåtna värden är 44,1, 48, 88,2, 96, 176,4 och 192 kHz.");
   } catch (error) {
-    showToast(`${error.message} Analysmotorn gör en fullständig kontroll.`, "error", 7000);
+    showToast(error.message, "error", 9000);
+    if (state.fileUrl) URL.revokeObjectURL(state.fileUrl);
+    state.fileUrl = null;
+    state.file = null;
+    elements.fileStrip.hidden = true;
+    elements.audioInput.value = "";
+    enableWorkflow(false);
+    return;
   }
+  elements.audio.src = state.fileUrl;
   const duration = durationSeconds();
   state.trim.endSeconds = duration;
   state.trim.endFrame = toFrame(duration);
@@ -709,16 +742,44 @@ function updateExportProgress(fraction, message, hidden = false) {
   elements.exportProgressLabel.textContent = message || "Exporterar ljud";
 }
 
+function setDetailStatus(message, busy = false) {
+  const indicator = $(".status-dot", elements.detailStatus);
+  const copy = $("span:nth-of-type(2)", elements.detailStatus);
+  indicator?.classList.toggle("is-busy", busy);
+  if (copy) copy.textContent = message;
+  elements.cancelDetail.hidden = !busy;
+}
+
 function handleAnalysisMessage(data = {}) {
+  const operation = data.operation === "analyze-region" ? "region" : data.operation === "waveform-detail" ? "detail" : "analysis";
+  if (!isCurrentJob(operation, data)) return;
   if (data.type === "progress") {
-    updateAnalysisProgress(data.fraction, data.message || data.phase);
+    if (operation === "analysis") updateAnalysisProgress(data.fraction, data.message || data.phase);
+    else if (operation === "detail" && elements.detailStatus) setDetailStatus(data.message || "Läser detaljdata", true);
+    else if (operation === "region" && elements.regionMeasureStatus) elements.regionMeasureStatus.textContent = data.message || "Beräknar exporturval";
+    return;
+  }
+  if (data.type === "cancelled") {
+    state.jobs[operation] = null;
+    if (operation === "analysis") finishAnalysisJob("Analysen avbröts");
+    if (operation === "region") { elements.regionMeasureStatus.textContent = "Beräkningen avbröts"; elements.cancelRegion.hidden = true; }
+    if (operation === "detail") setDetailStatus("Detaljläsningen avbröts", false);
     return;
   }
   if (data.type === "result" || data.result) {
-    applyAnalysisResult(data.result ?? data);
+    const result = data.result ?? data;
+    if (operation === "region") applyRegionResult(result);
+    else if (operation === "detail") applyDetailResult(result);
+    else applyAnalysisResult(result);
     return;
   }
   if (data.type === "error" || data.error) {
+    state.jobs[operation] = null;
+    if (operation !== "analysis") {
+      if (operation === "detail" && elements.detailStatus) setDetailStatus("Detaljdata kunde inte läsas", false);
+      if (operation === "region" && elements.regionMeasureStatus) { elements.regionMeasureStatus.textContent = "Beräkningen misslyckades"; elements.cancelRegion.hidden = true; }
+      return;
+    }
     state.analysisStatus = "error";
     elements.analyzeButton.disabled = false;
     elements.analyzeButton.textContent = "Försök analysera igen";
@@ -729,6 +790,23 @@ function handleAnalysisMessage(data = {}) {
   }
 }
 
+function finishAnalysisJob(message) {
+  state.analysisStatus = state.analysis ? "complete" : "idle";
+  elements.analyzeButton.disabled = false;
+  elements.analyzeButton.textContent = state.analysis ? "Analysera igen" : "Starta analys";
+  elements.cancelAnalysis.hidden = true;
+  elements.cancelAnalysis.disabled = false;
+  updateAnalysisProgress(0, message);
+}
+
+function ensureAnalysisWorker() {
+  if (analysisWorker) return analysisWorker;
+  analysisWorker = new Worker("./src/analysis-worker.js", { type: "module" });
+  analysisWorker.onmessage = (event) => handleAnalysisMessage(event.data);
+  analysisWorker.onerror = (event) => showToast(event.message || "Analysmotorn rapporterade ett workerfel.", "error", 8000);
+  return analysisWorker;
+}
+
 function startAnalysis() {
   if (!state.file || state.analysisStatus === "running") return;
   if (!state.capabilities.workers) {
@@ -737,15 +815,20 @@ function startAnalysis() {
   }
   try {
     analysisWorker?.terminate();
-    analysisWorker = new Worker("./src/analysis-worker.js", { type: "module" });
-    analysisWorker.onmessage = (event) => handleAnalysisMessage(event.data);
-    analysisWorker.onerror = (event) => handleAnalysisMessage({ type: "error", message: event.message || "Analysmotorn kunde inte starta." });
+    analysisWorker = null;
+    analysisWorker = ensureAnalysisWorker();
+    const jobId = nextJobId("analysis");
+    state.jobs.analysis = jobId;
+    analysisWorker.onerror = (event) => handleAnalysisMessage({ type: "error", jobId, operation: "analyze", message: event.message || "Analysmotorn kunde inte starta." });
     state.analysisStatus = "running";
     elements.analyzeButton.disabled = true;
     elements.analyzeButton.textContent = "Analys pågår";
+    elements.cancelAnalysis.hidden = false;
+    elements.cancelAnalysis.disabled = false;
     updateAnalysisProgress(0, "Förbereder blockvis analys");
     analysisWorker.postMessage({
       type: "analyze",
+      jobId,
       file: state.file,
       options: { lowLevelThresholdDb: -60, lowLevelThresholdDbfs: -60 },
     });
@@ -762,6 +845,9 @@ function applyAnalysisResult(result) {
   }
   state.analysis = result;
   state.analysisStatus = "complete";
+  elements.cancelAnalysis.hidden = true;
+  elements.cancelAnalysis.disabled = false;
+  if (elements.sourceMeasureStatus) elements.sourceMeasureStatus.textContent = "Objektiv källanalys klar";
   const duration = durationSeconds();
   if (!state.trim.endFrame || state.trim.endSeconds <= 0) {
     state.trim.endSeconds = duration;
@@ -787,7 +873,14 @@ function applyAnalysisResult(result) {
       state.markers.push({
         id,
         seconds,
-        type: "technical",
+        endSeconds: finite(suggestion.endSeconds) ?? seconds,
+        type: suggestion.type || "technical",
+        severity: suggestion.severity || "info",
+        channel: suggestion.channel ?? null,
+        detail: suggestion.detail || suggestion.message || "",
+        objective: suggestion.objective !== false,
+        origin: suggestion.origin || "analysis",
+        reviewStatus: "unreviewed",
         text: suggestion.label || suggestion.title || suggestion.message || "Teknisk observation",
         suggested: true,
       });
@@ -799,8 +892,101 @@ function applyAnalysisResult(result) {
   renderMarkers();
   scheduleCanvasRender();
   updateCapabilities(true, state.capabilities.export);
+  requestRegionAnalysis();
+  requestWaveformDetail();
+  state.jobs.analysis = null;
+  state.dirty = true;
   showToast("Analysen är klar. Inga ändringar har gjorts i ljudet.");
   emitState("analysis-complete");
+}
+
+function regionOptions(globalGainDb = state.trim.gainDb) {
+  return {
+    startFrame: state.trim.startFrame,
+    endFrame: state.trim.endFrame,
+    fadeInFrames: Math.round(state.trim.fadeInSeconds * sampleRate()),
+    fadeOutFrames: Math.round(state.trim.fadeOutSeconds * sampleRate()),
+    globalGainDb,
+  };
+}
+
+function requestRegionAnalysis() {
+  if (!state.file || !state.analysis || !state.capabilities.workers) return;
+  ensureAnalysisWorker();
+  const previous = state.jobs.region;
+  if (previous) analysisWorker.postMessage({ type: "cancel", jobId: previous, operation: "analyze-region" });
+  const jobId = nextJobId("region");
+  state.jobs.region = jobId;
+  if (elements.regionMeasureStatus) elements.regionMeasureStatus.textContent = "Beräknar exakt urval";
+  elements.cancelRegion.hidden = false;
+  analysisWorker.postMessage({ type: "analyze-region", jobId, file: state.file, options: regionOptions() });
+}
+
+function applyRegionResult(result) {
+  state.regionAnalysis = result;
+  state.jobs.region = null;
+  elements.cancelRegion.hidden = true;
+  const summary = result?.processed?.summary || result?.summary || {};
+  const lufs = finite(summary.integratedLufs ?? summary.lufsI);
+  const peak = finite(summary.truePeakEstimateDbtp ?? summary.truePeakDbtp ?? summary.truePeak);
+  if (elements.regionMeasureStatus) elements.regionMeasureStatus.textContent = `${lufs === null ? "LUFS saknas" : `${formatDecimal(lufs, 1)} LUFS-I`} · ${peak === null ? "TP saknas" : `${formatDecimal(peak, 1)} dBTP`}`;
+  renderCanvasTextAlternative();
+  updateExportSummary();
+  emitState("region-analysis-complete");
+}
+
+function requestWaveformDetail() {
+  if (!state.file || !state.analysis || !state.capabilities.workers || !elements.analysisCanvas) return;
+  ensureAnalysisWorker();
+  const width = Math.max(320, Math.round(elements.analysisCanvas.clientWidth || 800));
+  const startFrame = toFrame(state.view.startSeconds);
+  const endFrame = toFrame(state.view.endSeconds || durationSeconds());
+  const framesPerPixel = Math.max(1, (endFrame - startFrame) / width);
+  const includeSamples = framesPerPixel <= 8;
+  const previous = state.jobs.detail;
+  if (previous) analysisWorker.postMessage({ type: "cancel", jobId: previous, operation: "waveform-detail" });
+  const jobId = nextJobId("detail");
+  state.jobs.detail = jobId;
+  state.view.detailStatus = "loading";
+  if (elements.detailStatus) setDetailStatus("Läser verklig detaljdata lokalt", true);
+  analysisWorker.postMessage({
+    type: "waveform-detail",
+    jobId,
+    file: state.file,
+    options: { startFrame, endFrame, pixelWidth: width, maxBinDurationSeconds: (state.view.endSeconds - state.view.startSeconds) / width, includeSamples },
+  });
+}
+
+function applyDetailResult(result) {
+  state.view.detail = result;
+  state.jobs.detail = null;
+  state.view.detailStatus = result?.channels?.some((channel) => Array.isArray(channel.samples) && channel.samples.length) ? "samples" : "detail";
+  const framesPerBin = finite(result?.framesPerBin) ?? 0;
+  if (elements.detailStatus) setDetailStatus(state.view.detailStatus === "samples" ? "Exakta sampel" : `Detaljdata, ${framesPerBin} bildrutor per bin`, false);
+  scheduleCanvasRender();
+  renderCanvasTextAlternative();
+}
+
+function scheduleDetailRequest() {
+  window.clearTimeout(detailTimer);
+  detailTimer = window.setTimeout(requestWaveformDetail, 160);
+}
+
+function renderCanvasTextAlternative() {
+  if (!elements.canvasTextContent) return;
+  const summary = state.analysis?.summary;
+  if (!summary) {
+    elements.canvasTextContent.innerHTML = "<p>Analysera filen för en navigerbar textöversikt.</p>";
+    return;
+  }
+  const channels = Array.isArray(summary.channels) ? summary.channels : [];
+  const markerRows = [...state.markers].sort((a, b) => a.seconds - b.seconds).map((marker) => `<li><button type="button" data-text-marker="${escapeHtml(marker.id)}">${formatTime(marker.seconds, false)}: ${escapeHtml(marker.text)}</button><span>${escapeHtml(marker.detail || "")}</span></li>`).join("") || "<li>Inga markörer</li>";
+  const accessibleValue = (value, unit) => {
+    const number = finite(value);
+    return number === null ? "saknas" : `${formatDecimal(number, 2)} ${unit}`;
+  };
+  const channelRows = channels.map((channel, index) => `<tr><th>${index === 0 ? "Vänster" : index === 1 ? "Höger" : `Kanal ${index + 1}`}</th><td>${accessibleValue(channel.samplePeakDbfs, "dBFS")}</td><td>${accessibleValue(channel.truePeakEstimateDbtp ?? channel.truePeakDbtp, "dBTP")}</td><td>${accessibleValue(channel.rmsDbfs, "dBFS")}</td></tr>`).join("");
+  elements.canvasTextContent.innerHTML = `<p>Synlig vy: ${formatTime(state.view.startSeconds)} till ${formatTime(state.view.endSeconds)}.</p><table><thead><tr><th>Kanal</th><th>Sample peak</th><th>True Peak</th><th>RMS</th></tr></thead><tbody>${channelRows}</tbody></table><h3>Markörer</h3><ol>${markerRows}</ol>`;
 }
 
 function renderAnalysisSummary() {
@@ -941,13 +1127,12 @@ function updateExportRecommendation() {
   if (trimmed) changes.push("trimning");
   if (state.trim.fadeInSeconds > 0 || state.trim.fadeOutSeconds > 0) changes.push("toningar");
   if (Math.abs(state.trim.gainDb) > 1e-9) changes.push("global gain");
-  if (state.peakHandling.enabled) changes.push("global toppmarginal");
   const peak = analysisTruePeakDbtp();
-  const predicted = peak === null ? null : peak + state.trim.gainDb + peakAdjustmentDb();
+  const predicted = peak === null ? null : peak + state.trim.gainDb;
   if (!changes.length) {
     elements.exportRecommendationText.textContent = "Inga bearbetningar är valda. Hela filen kan bevaras utan omräkning av ljudsamplingarna.";
   } else if (predicted !== null && predicted > 0) {
-    elements.exportRecommendationText.textContent = `Valt: ${changes.join(", ")}. Det orienterande toppestimatet ligger över 0 dBTP. Sänk gain eller aktivera en försiktigare global toppmarginal före PCM export.`;
+    elements.exportRecommendationText.textContent = `Valt: ${changes.join(", ")}. Det orienterande toppestimatet ligger över 0 dBTP. Sänk den synliga globala gainen före export. Ingen dold toppsänkning görs.`;
   } else {
     const ditherText = state.fileInfo?.encoding === "PCM" && changes.some(item => item !== "trimning")
       ? "PCM samplingarna räknas om med TPDF dither."
@@ -1028,22 +1213,32 @@ function renderMarkers() {
     return {
       id: String(marker?.id || `imported-marker-${index}`),
       seconds: Math.max(0, seconds),
+      endSeconds: Math.max(0, finite(marker?.endSeconds) ?? seconds),
       type: markerTypes.has(marker?.type) ? marker.type : "user",
       text: String(marker?.text ?? marker?.label ?? "Markör"),
+      detail: String(marker?.detail ?? ""),
+      severity: ["critical", "review", "info"].includes(marker?.severity) ? marker.severity : /warning|error|critical/i.test(marker?.severity || "") ? "critical" : /notice|technical/i.test(marker?.severity || "") ? "review" : "info",
+      channel: marker?.channel ?? null,
+      objective: marker?.objective !== false,
+      origin: String(marker?.origin || (marker?.suggested ? "analysis" : "user")),
+      reviewStatus: ["unreviewed", "accepted", "false-positive"].includes(marker?.reviewStatus) ? marker.reviewStatus : "unreviewed",
       suggested: Boolean(marker?.suggested),
     };
   }).filter(Boolean);
-  const sorted = [...state.markers].sort((a, b) => a.seconds - b.seconds);
+  const sorted = [...state.markers]
+    .filter((marker) => state.markerFilter === "all" || marker.severity === state.markerFilter)
+    .sort((a, b) => a.seconds - b.seconds);
   if (!sorted.length) {
     elements.markerList.innerHTML = '<li class="list-placeholder">Inga markörer ännu</li>';
   } else {
     elements.markerList.innerHTML = sorted.map((marker) => `
-      <li class="marker-item" data-marker-id="${escapeHtml(marker.id)}">
-        <time datetime="PT${Math.max(0, marker.seconds)}S">${formatTime(marker.seconds, false)}</time>
-        <button class="marker-jump" type="button" data-marker-jump="${String(marker.seconds)}">${escapeHtml(marker.text)}</button>
-        <button class="marker-remove" type="button" data-marker-remove="${escapeHtml(marker.id)}" aria-label="Ta bort markör">×</button>
+      <li class="marker-item severity-${marker.severity}" data-marker-id="${escapeHtml(marker.id)}">
+        <div class="marker-item-head"><span class="severity-label">${marker.severity === "critical" ? "Kritisk" : marker.severity === "review" ? "Granska" : "Information"}</span><time datetime="PT${Math.max(0, marker.seconds)}S">${formatTime(marker.seconds, false)}${marker.endSeconds > marker.seconds ? ` till ${formatTime(marker.endSeconds, false)}` : ""}</time></div>
+        <button class="marker-jump" type="button" data-marker-jump="${String(marker.seconds)}" data-marker-id="${escapeHtml(marker.id)}"><strong>${escapeHtml(marker.text)}</strong><small>${escapeHtml(marker.detail || `${marker.objective ? "Objektiv" : "Heuristisk"} · ${marker.channel === null ? "Alla kanaler" : `Kanal ${marker.channel}`}`)}</small></button>
+        <div class="marker-review"><label><span class="visually-hidden">Granskningsstatus</span><select data-marker-review="${escapeHtml(marker.id)}"><option value="unreviewed"${marker.reviewStatus === "unreviewed" ? " selected" : ""}>Ej granskad</option><option value="accepted"${marker.reviewStatus === "accepted" ? " selected" : ""}>Bekräftad</option><option value="false-positive"${marker.reviewStatus === "false-positive" ? " selected" : ""}>Falsk positiv</option></select></label>${marker.origin === "user" ? `<button class="marker-remove" type="button" data-marker-remove="${escapeHtml(marker.id)}" aria-label="Ta bort egen markör">×</button>` : ""}</div>
       </li>`).join("");
   }
+  renderCanvasTextAlternative();
   scheduleCanvasRender();
 }
 
@@ -1061,7 +1256,7 @@ function syncTrimUi() {
   elements.transportDuration.textContent = formatTime(duration);
   elements.currentTime.textContent = formatTime(state.playback.currentSeconds);
   syncFadeUi();
-  syncPeakHandlingUi();
+  syncSeriesUi();
   updateExportSummary();
   scheduleCanvasRender();
   emitState("trim");
@@ -1075,6 +1270,8 @@ function setBoundary(boundary, seconds) {
     state.trim.endSeconds = clamp(seconds, Math.min(duration, state.trim.startSeconds + 1 / sampleRate()), duration);
   }
   syncTrimUi();
+  invalidateSeriesProposal();
+  markEditChanged("trim-boundary");
 }
 
 function selectionDurationSeconds() {
@@ -1144,7 +1341,8 @@ function updateFade(kind, value, enabled = true) {
   updateExportSummary();
   updateMonitoringGraph();
   scheduleCanvasRender();
-  emitState("fade");
+  invalidateSeriesProposal();
+  markEditChanged("fade");
 }
 
 function analysisTruePeakDbtp() {
@@ -1152,88 +1350,55 @@ function analysisTruePeakDbtp() {
   return finite(summary.truePeakEstimateDbtp ?? summary.truePeakDbtp ?? summary.truePeak);
 }
 
-function normalizedPeakHandling(input = state.peakHandling) {
-  const measuredSource = analysisTruePeakDbtp();
-  const savedSource = finite(input?.sourceTruePeakDbtp);
-  return {
-    enabled: Boolean(input?.enabled),
-    mode: "global-attenuation",
-    ceilingDbtp: clamp(finite(input?.ceilingDbtp) ?? -2, -12, -0.1),
-    sourceTruePeakDbtp: measuredSource ?? savedSource,
-  };
-}
-
-function peakAdjustmentDb(config = normalizedPeakHandling()) {
-  if (!config.enabled || config.sourceTruePeakDbtp === null) return 0;
-  return Math.min(0, config.ceilingDbtp - (config.sourceTruePeakDbtp + state.trim.gainDb));
-}
-
-function effectiveGlobalGainDb() {
-  return state.trim.gainDb + peakAdjustmentDb();
-}
-
-function syncPeakHandlingUi() {
-  state.peakHandling = normalizedPeakHandling();
-  const config = state.peakHandling;
-  const adjustment = peakAdjustmentDb(config);
-  const predicted = config.sourceTruePeakDbtp === null
-    ? null
-    : config.sourceTruePeakDbtp + state.trim.gainDb + adjustment;
-  elements.peakHandlingToggle.checked = config.enabled;
-  elements.peakHandlingControls.disabled = !config.enabled;
-  elements.peakCeilingNumber.value = config.ceilingDbtp.toFixed(1);
-  elements.peakCeilingRange.value = String(config.ceilingDbtp);
-  elements.peakSourceValue.textContent = config.sourceTruePeakDbtp === null
-    ? "förhandsvärde saknas"
-    : `${formatDecimal(config.sourceTruePeakDbtp, 1)} dBTP`;
-  elements.peakReductionValue.textContent = `${formatDecimal(adjustment, 1)} dB`;
-  elements.peakResultValue.textContent = predicted === null ? "saknas" : `${formatDecimal(predicted, 1)} dBTP`;
-  $$('[data-peak-ceiling]').forEach((button) => {
-    button.classList.toggle("is-selected", Math.abs(Number(button.dataset.peakCeiling) - config.ceilingDbtp) < 0.05);
-  });
-
-  if (!config.enabled) {
-    elements.peakHandlingStatus.textContent = "Funktionen är av. True Peak-värdet är orienterande och är ingen leveransgaranti.";
-    elements.peakHandlingStatus.classList.remove("is-active");
-  } else if (config.sourceTruePeakDbtp === null) {
-    elements.peakHandlingStatus.textContent = "Medhörningen saknar förhandsvärde. Exporten gör ändå en egen blockvis toppförkontroll av det valda utsnittet.";
-    elements.peakHandlingStatus.classList.remove("is-active");
-  } else if (adjustment < -0.05) {
-    elements.peakHandlingStatus.textContent = `Hela verket sänks orienterande ${formatDecimal(Math.abs(adjustment), 1)} dB. Exporten kontrollmäter det valda utsnittet blockvis.`;
-    elements.peakHandlingStatus.classList.add("is-active");
-  } else {
-    elements.peakHandlingStatus.textContent = "Ingen extra sänkning beräknas behövas. Exporten kontrollmäter det valda utsnittet blockvis.";
-    elements.peakHandlingStatus.classList.add("is-active");
+function calculateSeriesProposal() {
+  const summary = state.regionAnalysis?.processed?.summary || state.regionAnalysis?.summary || null;
+  if (!summary) {
+    requestRegionAnalysis();
+    showToast("Exporturvalet beräknas först. Tryck igen när Beräknat exporturval är klart.");
+    return;
   }
+  const integrated = finite(summary.integratedLufs ?? summary.lufsI);
+  const peak = finite(summary.truePeakEstimateDbtp ?? summary.truePeakDbtp ?? summary.truePeak);
+  if (integrated === null || peak === null) {
+    showToast("Analysera källan och exporturvalet innan ett nivåförslag beräknas.", "error");
+    return;
+  }
+  const targetDelta = state.series.targetLufs - integrated;
+  const peakDelta = state.series.ceilingDbtp - peak;
+  state.series.proposedGainDb = Math.round((state.trim.gainDb + Math.min(targetDelta, peakDelta)) * 10) / 10;
+  state.series.status = "calculated";
+  syncSeriesUi();
+  emitState("series-calculated");
 }
 
-function updatePeakCeiling(value) {
-  state.peakHandling.ceilingDbtp = clamp(finite(value) ?? -2, -12, -0.1);
-  syncPeakHandlingUi();
-  updateProjectedMetrics();
-  updateExportSummary();
-  updateMonitoringGraph();
-  emitState("peak-ceiling");
+function syncSeriesUi() {
+  const proposal = finite(state.series.proposedGainDb);
+  if (elements.seriesGainValue) elements.seriesGainValue.textContent = proposal === null ? "Inte beräknat" : `${proposal >= 0 ? "+" : ""}${formatDecimal(proposal, 1)} dB globalt`;
+  const labels = { preserved: "Bevara oförändrat", calculated: "Beräknat, inte applicerat", previewing: "Provlyssnar, inte applicerat", applied: "Applicerat som synlig global gain" };
+  if (elements.seriesStateValue) elements.seriesStateValue.textContent = labels[state.series.status] || labels.preserved;
+  if (elements.previewSeries) elements.previewSeries.disabled = proposal === null;
+  if (elements.applySeries) elements.applySeries.disabled = proposal === null;
 }
 
-function setPeakHandlingEnabled(enabled) {
-  state.peakHandling.enabled = Boolean(enabled);
-  syncPeakHandlingUi();
-  updateProjectedMetrics();
-  updateExportSummary();
-  updateMonitoringGraph();
-  emitState("peak-handling");
+function preserveSeries() {
+  state.series.status = "preserved";
+  state.series.proposedGainDb = null;
+  state.monitoring.previewGainOverride = null;
+  syncSeriesUi();
+  emitState("series-preserved");
 }
 
-function updateGain(value) {
+function updateGain(value, options = {}) {
   const gain = clamp(value, -24, 24);
   state.trim.gainDb = Math.round(gain * 10) / 10;
+  if (!options.seriesApply) invalidateSeriesProposal();
   elements.gainNumber.value = state.trim.gainDb.toFixed(1);
   elements.gainRange.value = String(state.trim.gainDb);
   updateProjectedMetrics();
   updateExportSummary();
   updateMonitoringGraph();
-  emitState("gain");
+  syncSeriesUi();
+  markEditChanged("gain");
 }
 
 function updateProjectedMetrics() {
@@ -1241,20 +1406,17 @@ function updateProjectedMetrics() {
   const lufs = finite(summary.integratedLufs ?? summary.lufsI);
   const peak = analysisTruePeakDbtp();
   const gain = state.trim.gainDb;
-  state.peakHandling = normalizedPeakHandling();
-  const adjustment = peakAdjustmentDb();
-  const effectiveGain = gain + adjustment;
-  elements.projectedLufs.textContent = lufs === null ? "saknas" : `${formatDecimal(lufs + effectiveGain, 1)} LUFS`;
-  elements.projectedPeak.textContent = peak === null ? "saknas" : `${formatDecimal(peak + effectiveGain, 1)} dBTP`;
-  const projectedPeak = peak === null ? null : peak + effectiveGain;
+  elements.projectedLufs.textContent = lufs === null ? "saknas" : `${formatDecimal(lufs + gain, 1)} LUFS`;
+  elements.projectedPeak.textContent = peak === null ? "saknas" : `${formatDecimal(peak + gain, 1)} dBTP`;
+  const projectedPeak = peak === null ? null : peak + gain;
   if (projectedPeak !== null && projectedPeak > 0) {
     elements.gainNotice.hidden = false;
-    elements.gainNotice.textContent = "Nivåvalet ger ett orienterande True Peak-estimat över 0 dBTP. Sänk gain eller aktivera global toppmarginal.";
+    elements.gainNotice.textContent = "Nivåvalet ger ett orienterande True Peak-estimat över 0 dBTP. Sänk den synliga globala gainen. Ingen dold toppsänkning görs.";
   } else {
     elements.gainNotice.hidden = true;
     elements.gainNotice.textContent = "";
   }
-  syncPeakHandlingUi();
+  syncSeriesUi();
 }
 
 function updateExportSummary() {
@@ -1269,15 +1431,7 @@ function updateExportSummary() {
   $("#exportFadeSummary").textContent = fadeIn || fadeOut
     ? `In ${formatDecimal(fadeIn, fadeIn < 1 ? 2 : 1)} s, ut ${formatDecimal(fadeOut, fadeOut < 1 ? 2 : 1)} s`
     : "Av";
-  const config = normalizedPeakHandling();
-  const adjustment = peakAdjustmentDb(config);
-  $("#exportPeakSummary").textContent = !config.enabled
-    ? "Av"
-    : config.sourceTruePeakDbtp === null
-      ? `På, tak ${formatDecimal(config.ceilingDbtp, 1)} dBTP, förkontroll vid export`
-      : adjustment < -0.05
-        ? `${formatDecimal(adjustment, 1)} dB globalt, tak ${formatDecimal(config.ceilingDbtp, 1)} dBTP`
-        : `På, tak ${formatDecimal(config.ceilingDbtp, 1)} dBTP`;
+  $("#exportPeakSummary").textContent = "Ingen dold toppsänkning";
   updateExportRecommendation();
 }
 
@@ -1289,12 +1443,47 @@ async function ensureAudioGraph() {
     audioSourceNode = audioContext.createMediaElementSource(elements.audio);
     previewGainNode = audioContext.createGain();
     monitorGainNode = audioContext.createGain();
-    audioSourceNode.connect(previewGainNode).connect(monitorGainNode).connect(audioContext.destination);
+    channelSplitterNode = audioContext.createChannelSplitter(2);
+    channelMergerNode = audioContext.createChannelMerger(2);
+    channelGainNodes = [audioContext.createGain(), audioContext.createGain()];
+    audioSourceNode.connect(previewGainNode).connect(channelSplitterNode);
+    channelMergerNode.connect(monitorGainNode).connect(audioContext.destination);
+    configureMonitorRouting();
     elements.audio.volume = 1;
     updateMonitoringGraph();
   }
   if (audioContext.state === "suspended") await audioContext.resume();
   return true;
+}
+
+function configureMonitorRouting() {
+  if (!channelSplitterNode || !channelMergerNode) return;
+  channelGainNodes.forEach((node) => { try { node.disconnect(); } catch {} });
+  try { channelSplitterNode.disconnect(); } catch {}
+  const leftGain = channelGainNodes[0];
+  const rightGain = channelGainNodes[1];
+  const mode = state.monitoring.channelMode;
+  if ((state.analysis?.format?.channels ?? state.fileInfo?.channels) === 1) {
+    leftGain.gain.value = 1;
+    channelSplitterNode.connect(leftGain, 0);
+    leftGain.connect(channelMergerNode, 0, 0);
+    leftGain.connect(channelMergerNode, 0, 1);
+    return;
+  }
+  leftGain.gain.value = mode === "mono" ? 0.5 : 1;
+  rightGain.gain.value = mode === "mono" ? 0.5 : 1;
+  if (mode === "stereo") {
+    channelSplitterNode.connect(leftGain, 0); leftGain.connect(channelMergerNode, 0, 0);
+    channelSplitterNode.connect(rightGain, 1); rightGain.connect(channelMergerNode, 0, 1);
+  } else if (mode === "left") {
+    channelSplitterNode.connect(leftGain, 0); leftGain.connect(channelMergerNode, 0, 0); leftGain.connect(channelMergerNode, 0, 1);
+  } else if (mode === "right") {
+    channelSplitterNode.connect(rightGain, 1); rightGain.connect(channelMergerNode, 0, 0); rightGain.connect(channelMergerNode, 0, 1);
+  } else {
+    channelSplitterNode.connect(leftGain, 0); channelSplitterNode.connect(rightGain, 1);
+    leftGain.connect(channelMergerNode, 0, 0); leftGain.connect(channelMergerNode, 0, 1);
+    rightGain.connect(channelMergerNode, 0, 0); rightGain.connect(channelMergerNode, 0, 1);
+  }
 }
 
 function fadeGeometry() {
@@ -1346,11 +1535,16 @@ function schedulePreviewEnvelope(mediaSeconds = finite(elements.audio.currentTim
   if (!previewGainNode || !audioContext) return;
   const now = audioContext.currentTime;
   const geometry = fadeGeometry();
-  const previewDb = state.monitoring.levelMatched ? 0 : effectiveGlobalGainDb();
+  const sourceMode = state.monitoring.previewMode === "source";
+  const previewDb = sourceMode || state.monitoring.levelMatched ? 0 : (finite(state.monitoring.previewGainOverride) ?? state.trim.gainDb);
   const baseGain = 10 ** (previewDb / 20);
   const playbackRate = Math.max(0.01, finite(elements.audio.playbackRate) ?? 1);
   const parameter = previewGainNode.gain;
   parameter.cancelScheduledValues(now);
+  if (sourceMode) {
+    parameter.setValueAtTime(1, now);
+    return;
+  }
   parameter.setValueAtTime(baseGain * fadeEnvelopeAt(mediaSeconds, geometry), now);
   previewEnvelopeBreakpoints(geometry)
     .filter((point) => point > mediaSeconds)
@@ -1368,6 +1562,7 @@ function updateMonitoringGraph() {
   const now = audioContext?.currentTime ?? 0;
   schedulePreviewEnvelope();
   monitorGainNode?.gain.setTargetAtTime(state.monitoring.volume, now, 0.015);
+  configureMonitorRouting();
   if (!audioContext) elements.audio.volume = state.monitoring.volume;
 }
 
@@ -1391,7 +1586,7 @@ async function togglePlayback() {
   if (elements.audio.paused) {
     await ensureAudioGraph();
     const current = finite(elements.audio.currentTime) ?? 0;
-    if (current < state.trim.startSeconds || current >= state.trim.endSeconds) elements.audio.currentTime = state.trim.startSeconds;
+    if (state.monitoring.previewMode === "export" && (current < state.trim.startSeconds || current >= state.trim.endSeconds)) elements.audio.currentTime = state.trim.startSeconds;
     schedulePreviewEnvelope(elements.audio.currentTime);
     elements.audio.play().catch((error) => showToast(`Uppspelningen kunde inte starta: ${error.message}`, "error"));
   } else {
@@ -1500,13 +1695,17 @@ function drawTimeline(canvas, trimMode = false) {
     }
     context.fillStyle = "rgba(255,255,255,.53)";
     context.font = "600 9px ui-sans-serif, system-ui";
-    const label = { waveform: "STEREO", loudness: "LUFS", peaks: "TOPP", markers: "MÄRKE" }[name];
+    const label = { waveform: "L / R", loudness: "LUFS", peaks: "TOPP", markers: "MÄRKE" }[name];
     context.fillText(label, 7, track.top + 15);
   });
 
   if (analysis && tracks.waveform) {
-    const channels = analysis.waveform?.channels || [];
-    const bins = finite(analysis.waveform?.bins) ?? channels[0]?.min?.length ?? 0;
+    const detail = state.view.detail;
+    const detailMatches = detail && toSeconds(detail.startFrame) <= viewStart + 0.001 && toSeconds(detail.endFrame) >= viewEnd - 0.001;
+    const channels = detailMatches ? (detail.channels || []) : (analysis.waveform?.channels || []);
+    const bins = channels[0]?.min?.length ?? finite(analysis.waveform?.bins) ?? 0;
+    const dataStart = detailMatches ? toSeconds(detail.startFrame) : 0;
+    const dataEnd = detailMatches ? toSeconds(detail.endFrame) : fullDuration;
     const track = tracks.waveform;
     const channelCount = Math.max(1, channels.length);
     channels.slice(0, 2).forEach((channel, channelIndex) => {
@@ -1518,11 +1717,11 @@ function drawTimeline(canvas, trimMode = false) {
       context.strokeStyle = color;
       context.lineWidth = Math.max(0.7, plotWidth / Math.max(1, bins));
       context.beginPath();
-      const startBin = Math.max(0, Math.floor(viewStart / fullDuration * bins));
-      const endBin = Math.min(bins, Math.ceil(viewEnd / fullDuration * bins));
+      const startBin = Math.max(0, Math.floor((viewStart - dataStart) / Math.max(0.001, dataEnd - dataStart) * bins));
+      const endBin = Math.min(bins, Math.ceil((viewEnd - dataStart) / Math.max(0.001, dataEnd - dataStart) * bins));
       const step = Math.max(1, Math.floor((endBin - startBin) / Math.max(plotWidth, 1)));
       for (let index = startBin; index < endBin; index += step) {
-        const seconds = index / Math.max(1, bins - 1) * fullDuration;
+        const seconds = dataStart + index / Math.max(1, bins - 1) * (dataEnd - dataStart);
         const x = xAtTime(seconds);
         const minimum = clamp(finite(minSeries[index]) ?? 0, -1.35, 1.35);
         const maximum = clamp(finite(maxSeries[index]) ?? 0, -1.35, 1.35);
@@ -1530,6 +1729,18 @@ function drawTimeline(canvas, trimMode = false) {
         context.lineTo(x, center - minimum * half);
       }
       context.stroke();
+      const sampleChannel = detailMatches ? channel : null;
+      if (sampleChannel?.samples?.length && sampleChannel.samples.length <= plotWidth * 12) {
+        context.beginPath();
+        Array.from(sampleChannel.samples).forEach((value, sampleIndex) => {
+          const x = plotLeft + sampleIndex / Math.max(1, sampleChannel.samples.length - 1) * plotWidth;
+          const y = center - clamp(value, -1.35, 1.35) * half;
+          if (sampleIndex) context.lineTo(x, y); else context.moveTo(x, y);
+        });
+        context.strokeStyle = color;
+        context.lineWidth = 1.25;
+        context.stroke();
+      }
       context.strokeStyle = "rgba(255,255,255,.12)";
       context.beginPath();
       context.moveTo(plotLeft, center);
@@ -1588,9 +1799,15 @@ function drawTimeline(canvas, trimMode = false) {
 
   if (tracks.markers) {
     state.markers.forEach((marker) => {
-      if (marker.seconds < viewStart || marker.seconds > viewEnd) return;
+      if (state.markerFilter !== "all" && marker.severity !== state.markerFilter) return;
+      if ((marker.endSeconds ?? marker.seconds) < viewStart || marker.seconds > viewEnd) return;
       const x = xAtTime(marker.seconds);
-      context.strokeStyle = marker.type === "technical" ? "rgba(222,116,87,.9)" : "rgba(226,171,71,.9)";
+      const endX = xAtTime(marker.endSeconds ?? marker.seconds);
+      context.strokeStyle = marker.severity === "critical" ? "rgba(238,91,77,.95)" : marker.severity === "review" ? "rgba(226,171,71,.95)" : "rgba(92,181,190,.9)";
+      if (endX - x > 2) {
+        context.fillStyle = marker.severity === "critical" ? "rgba(238,91,77,.18)" : marker.severity === "review" ? "rgba(226,171,71,.14)" : "rgba(92,181,190,.12)";
+        context.fillRect(x, 0, Math.max(2, endX - x), height);
+      }
       context.lineWidth = 1;
       context.beginPath();
       context.moveTo(x, 0);
@@ -1732,15 +1949,38 @@ function projectEdit() {
   return {
     startFrame: state.trim.startFrame,
     endFrame: state.trim.endFrame,
+    globalGainDb: state.trim.gainDb,
     gainDb: state.trim.gainDb,
     fadeInFrames: Math.round(state.trim.fadeInSeconds * sampleRate()),
     fadeOutFrames: Math.round(state.trim.fadeOutSeconds * sampleRate()),
-    peakHandling: normalizedPeakHandling(),
+    profile: state.exportProfile,
+  };
+}
+
+function projectSettings() {
+  return {
+    monitoring: {
+      volume: state.monitoring.volume,
+      levelMatched: state.monitoring.levelMatched,
+      previewMode: state.monitoring.previewMode,
+      channelMode: state.monitoring.channelMode,
+    },
+    view: {
+      startSeconds: state.view.startSeconds,
+      endSeconds: state.view.endSeconds,
+      tracks: { ...state.view.tracks },
+    },
+    assessment: { ...state.assessment },
+    series: { ...state.series },
   };
 }
 
 async function saveProjectFile() {
   if (!state.file) return;
+  if (!state.analysis?.sourceIdentity) {
+    showToast("Kör källanalysen först så att projektet kan bindas till filens fulla lokala SHA-256.", "error", 8000);
+    return;
+  }
   try {
     const input = {
       file: state.file,
@@ -1748,7 +1988,7 @@ async function saveProjectFile() {
       edit: projectEdit(),
       markers: state.markers,
       metadata: collectMetadata(),
-      settings: { monitoring: state.monitoring, view: state.view, assessment: state.assessment },
+      settings: projectSettings(),
     };
     const project = projectTools?.buildProject
       ? await projectTools.buildProject(input)
@@ -1760,12 +2000,13 @@ async function saveProjectFile() {
           edit: projectEdit(),
           markers: state.markers,
           metadata: collectMetadata(),
-          settings: { monitoring: state.monitoring, view: state.view, assessment: state.assessment },
+          settings: projectSettings(),
           privacy: { audioIncluded: false },
         };
     const fileName = `${baseName(state.file.name)}.ljudr.json`;
     if (projectTools?.downloadProject) projectTools.downloadProject(project, fileName);
     else downloadBlob(new Blob([JSON.stringify(project, null, 2)], { type: "application/json" }), fileName);
+    state.dirty = false;
     showToast("Projektfilen sparades utan ljudsamplingar.");
   } catch (error) {
     showToast(`Projektet kunde inte sparas: ${error.message}`, "error");
@@ -1779,7 +2020,7 @@ async function readProject(file) {
       : JSON.parse(await file.text());
     if (project?.privacy?.audioIncluded !== false) throw new Error("Projektets integritetsmarkering saknas.");
     state.pendingProject = project;
-    state.analysis = project.analysis || null;
+    state.analysis = null;
     state.markers = Array.isArray(project.markers) ? project.markers : [];
     applyMetadata(project.metadata);
     if (state.file) await applyPendingProjectToFile();
@@ -1798,39 +2039,67 @@ async function readProject(file) {
 async function applyPendingProjectToFile() {
   const project = state.pendingProject;
   if (!project || !state.file) return;
-  let matches = project.source?.size === state.file.size && (!project.source?.name || project.source.name === state.file.name);
+  const descriptorMatches = project.source?.size === state.file.size && (!project.source?.name || project.source.name === state.file.name);
+  let matches = descriptorMatches;
   let reason = matches ? "Filnamn och storlek stämmer." : "Filnamn eller storlek skiljer sig.";
-  if (projectTools?.sourceMatchesProject && project.source?.fingerprint) {
+  let requiresReanalysis = false;
+  if (projectTools?.sourceMatchesProject && project.source) {
     const check = await projectTools.sourceMatchesProject(state.file, project);
     matches = check.matches;
     reason = check.reason;
+    requiresReanalysis = Boolean(check.requiresReanalysis);
   }
-  if (!matches) {
+  if (!matches && !(requiresReanalysis && descriptorMatches)) {
     showToast(`Källfilen matchar inte projektet. ${reason}`, "error", 8000);
     return;
   }
-  state.analysis = project.analysis || state.analysis;
+  state.analysis = requiresReanalysis ? null : (project.analysis || state.analysis);
   state.markers = Array.isArray(project.markers) ? project.markers : state.markers;
   const edit = project.edit || {};
   if (finite(edit.startFrame) !== null) state.trim.startSeconds = toSeconds(edit.startFrame);
   if (finite(edit.endFrame) !== null) state.trim.endSeconds = toSeconds(edit.endFrame);
-  state.trim.gainDb = finite(edit.gainDb) ?? 0;
+  state.trim.gainDb = finite(edit.globalGainDb ?? edit.gainDb) ?? 0;
   state.trim.fadeInSeconds = toSeconds(edit.fadeInFrames || 0);
   state.trim.fadeOutSeconds = toSeconds(edit.fadeOutFrames || 0);
-  state.peakHandling = normalizedPeakHandling(edit.peakHandling || {
-    enabled: false,
-    mode: "global-attenuation",
-    ceilingDbtp: -2,
-    sourceTruePeakDbtp: analysisTruePeakDbtp(),
-  });
+  state.exportProfile = edit.profile || (Math.abs(state.trim.gainDb) > 1e-9 || state.trim.fadeInSeconds > 0 || state.trim.fadeOutSeconds > 0 ? "edited-wav" : "sample-payload-trim");
+  const profileRadio = $(`input[name='exportProfile'][value='${state.exportProfile}']`);
+  if (profileRadio) profileRadio.checked = true;
+  state.series = { ...state.series, ...(project.settings?.series || {}) };
+  const savedMonitoring = project.settings?.monitoring || {};
+  state.monitoring = {
+    ...state.monitoring,
+    volume: clamp(finite(savedMonitoring.volume) ?? state.monitoring.volume, 0, 1),
+    levelMatched: Boolean(savedMonitoring.levelMatched),
+    previewMode: ["source", "export"].includes(savedMonitoring.previewMode) ? savedMonitoring.previewMode : state.monitoring.previewMode,
+    channelMode: ["stereo", "left", "right", "mono"].includes(savedMonitoring.channelMode) ? savedMonitoring.channelMode : state.monitoring.channelMode,
+    previewGainOverride: null,
+  };
+  const savedView = project.settings?.view || {};
+  const savedViewStart = clamp(finite(savedView.startSeconds) ?? state.view.startSeconds, 0, durationSeconds());
+  const savedViewEnd = clamp(finite(savedView.endSeconds) ?? state.view.endSeconds, 0, durationSeconds());
+  state.view = {
+    ...state.view,
+    startSeconds: savedViewEnd > savedViewStart ? savedViewStart : 0,
+    endSeconds: savedViewEnd > savedViewStart ? savedViewEnd : durationSeconds(),
+    tracks: { ...state.view.tracks, ...(savedView.tracks || {}) },
+    detail: null,
+    detailStatus: "overview",
+  };
   state.assessment = {
     ...state.assessment,
     ...(project.settings?.assessment || {}),
   };
   if (assessmentProfiles[state.assessment.recordingType]) elements.recordingType.value = state.assessment.recordingType;
   if (["distribution", "preservation"].includes(state.assessment.purpose)) elements.assessmentPurpose.value = state.assessment.purpose;
+  elements.monitorVolume.value = String(state.monitoring.volume);
+  elements.levelMatch.checked = state.monitoring.levelMatched;
+  const previewRadio = $(`input[name='previewMode'][value='${state.monitoring.previewMode}']`);
+  if (previewRadio) previewRadio.checked = true;
+  const monitorRadio = $(`input[name='monitorMode'][value='${state.monitoring.channelMode}']`);
+  if (monitorRadio) monitorRadio.checked = true;
   syncFadeUi();
-  syncPeakHandlingUi();
+  syncSeriesUi();
+  setExportProfile(state.exportProfile, { dirty: false, force: true });
   updateGain(state.trim.gainDb);
   applyMetadata(project.metadata);
   state.pendingProject = null;
@@ -1840,18 +2109,29 @@ async function applyPendingProjectToFile() {
   renderObservations();
   renderMarkers();
   syncTrimUi();
-  showToast("Projektet och källfilen matchar. Arbetet har återställts.");
+  syncAuditionUi();
+  updateMonitoringGraph();
+  if (requiresReanalysis) {
+    showToast("Det äldre projektet saknar full säker hash. Metadata och redigering har återställts, men mätningen körs om lokalt.", "info", 9000);
+    startAnalysis();
+  } else showToast("Projektet och källfilen matchar. Arbetet har återställts.");
   emitState("project-opened");
 }
 
 function reportInput() {
+  const hasCurrentVerifiedExport = state.exportStatus === "complete" && Boolean(state.verifiedExport);
   return {
     file: state.file,
     analysis: state.analysis,
     edit: projectEdit(),
     markers: state.markers,
     metadata: collectMetadata(),
-    exportReport: state.lastExportReport,
+    exportReport: {
+      ...(hasCurrentVerifiedExport ? state.lastExportReport || {} : {}),
+      regionAnalysis: state.regionAnalysis,
+      verifiedExport: hasCurrentVerifiedExport ? state.verifiedExport : null,
+      series: state.series,
+    },
   };
 }
 
@@ -1891,8 +2171,9 @@ function exportReport(format) {
 function startExport() {
   if (!state.file || state.exportStatus === "running") return;
   const selectedProfile = $("input[name='exportProfile']:checked")?.value;
-  if (selectedProfile === "listening") {
-    showToast("Lyssningskopian är ännu inte aktiverad för stora iPad-filer.", "error");
+  const edited = Math.abs(state.trim.gainDb) > 1e-9 || state.trim.fadeInSeconds > 0 || state.trim.fadeOutSeconds > 0;
+  if (selectedProfile === "sample-payload-trim" && edited) {
+    showToast("Sample-payload-identiskt trimutdrag tillåter inte gain eller fades. Välj Redigerad WAV-master eller återställ ingreppen.", "error", 9000);
     return;
   }
   if (!state.capabilities.workers) {
@@ -1900,24 +2181,31 @@ function startExport() {
     return;
   }
   try {
+    state.lastExportReport = null;
+    state.verifiedExport = null;
+    if (elements.verifiedMeasureStatus) elements.verifiedMeasureStatus.textContent = "Ny export verifieras efter skrivning";
     exportWorker?.terminate();
     exportWorker = new Worker("./src/export-worker.js", { type: "module" });
     exportWorker.onmessage = (event) => handleExportMessage(event.data);
-    exportWorker.onerror = (event) => handleExportMessage({ type: "error", message: event.message || "Exportmotorn kunde inte starta." });
+    const jobId = nextJobId("export");
+    state.jobs.export = jobId;
+    exportWorker.onerror = (event) => handleExportMessage({ type: "error", jobId, operation: "export", message: event.message || "Exportmotorn kunde inte starta." });
     state.exportStatus = "running";
     elements.exportAudio.disabled = true;
     elements.exportAudio.textContent = "Export pågår";
     updateExportProgress(0, "Förbereder blockvis WAV-export");
     exportWorker.postMessage({
       type: "export",
+      jobId,
       file: state.file,
       options: {
         startFrame: state.trim.startFrame,
         endFrame: state.trim.endFrame,
-        gainDb: state.trim.gainDb,
+        globalGainDb: state.trim.gainDb,
+        enforceTruePeakCeiling: state.series.status === "applied",
+        truePeakCeilingDbtp: state.series.ceilingDbtp,
         fadeInFrames: Math.round(state.trim.fadeInSeconds * sampleRate()),
         fadeOutFrames: Math.round(state.trim.fadeOutSeconds * sampleRate()),
-        peakHandling: normalizedPeakHandling(),
         fileName: state.metadata.title || state.file.name,
         preferOpfs: true,
         profile: selectedProfile,
@@ -1930,8 +2218,37 @@ function startExport() {
 }
 
 function handleExportMessage(data = {}) {
+  const operation = data.operation || "export";
+  if (["storage-list", "storage-remove", "storage-clear", "storage-get"].includes(operation)) {
+    if (!isCurrentJob("storage", data)) return;
+    if (["storage-list", "result", "error", "cancelled"].includes(data.type)) state.jobs.storage = null;
+    if (Array.isArray(data.items)) {
+      state.storedExports = data.items.map((item) => ({ ...item, name: item.fileName || item.name, status: item.status || "complete" }));
+      renderStoredExports();
+    }
+    if (data.type === "result") {
+      const output = data.output || data.blob || data.file || data.result?.output || data.result?.file;
+      if (output instanceof Blob) downloadBlob(output, data.fileName || data.result?.fileName || "ljudr-export.wav");
+      if (data.items || data.result?.items) state.storedExports = data.items || data.result.items;
+      renderStoredExports();
+      if (["storage-remove", "storage-clear"].includes(operation)) requestStoredExports();
+    }
+    if (data.type === "error") showToast(data.message || "Den lokala arbetsfilen kunde inte hanteras.", "error");
+    return;
+  }
+  if (!isCurrentJob("export", data)) return;
   if (data.type === "progress") {
     updateExportProgress(data.fraction, data.message || "Exporterar ljud");
+    return;
+  }
+  if (data.type === "cancelled") {
+    state.jobs.export = null;
+    state.exportStatus = "idle";
+    elements.exportAudio.disabled = false;
+    elements.exportAudio.textContent = "Exportera ljudfil";
+    updateExportProgress(0, "Exporten avbröts och partiell arbetsfil rensades");
+    showToast("Exporten avbröts. Ingen ofullständig WAV behölls.");
+    requestStoredExports();
     return;
   }
   if (data.type === "result" || data.blob || data.output) {
@@ -1942,34 +2259,181 @@ function handleExportMessage(data = {}) {
       return;
     }
     state.lastExportReport = data.report || data.result?.report || null;
+    state.jobs.export = null;
+    state.regionAnalysis = data.preflight || data.result?.preflight || state.regionAnalysis;
+    state.verifiedExport = data.verifiedOutput || data.result?.verifiedOutput || null;
     state.exportStatus = "complete";
     elements.exportAudio.disabled = false;
     elements.exportAudio.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 3h2v10.2l3.6-3.6L18 11l-6 6-6-6 1.4-1.4 3.6 3.6V3ZM5 19h14v2H5v-2Z"/></svg>Exportera ljudfil';
     updateExportProgress(1, "Exporten är klar");
+    if (elements.regionMeasureStatus) elements.regionMeasureStatus.textContent = "Förkontroll sparad i exportprotokollet";
+    if (elements.verifiedMeasureStatus) {
+      const verifiedSummary = state.verifiedExport?.summary || {};
+      const lufs = finite(verifiedSummary.integratedLufs ?? verifiedSummary.lufsI);
+      const peak = finite(verifiedSummary.truePeakEstimateDbtp ?? verifiedSummary.truePeakDbtp);
+      elements.verifiedMeasureStatus.textContent = state.verifiedExport ? `${lufs === null ? "LUFS saknas" : `${formatDecimal(lufs, 1)} LUFS-I`} · ${peak === null ? "TP saknas" : `${formatDecimal(peak, 1)} dBTP`}` : "Exportmotorn returnerade ingen verifiering";
+    }
     downloadBlob(blob, fileName);
+    if (data.storage || data.result?.storage) requestStoredExports();
+    else {
+      state.storedExports = [{ id: `memory-${Date.now()}`, name: fileName, size: blob.size, createdAt: new Date().toISOString(), status: "complete", blob }, ...state.storedExports];
+      renderStoredExports();
+    }
     showToast("Ljudfilen skapades lokalt och är redo att sparas.", "info", 7000);
     emitState("export-complete");
     return;
   }
   if (data.type === "error" || data.error) {
+    state.jobs.export = null;
     state.exportStatus = "error";
     elements.exportAudio.disabled = false;
     elements.exportAudio.textContent = "Försök exportera igen";
     const clippingRisk = data.code === "PCM_CLAMPING_RISK";
     const message = clippingRisk
-      ? "Exporten stoppades före omkodning eftersom positiv gain riskerar att klampa PCM-sampel. Sänk gain eller välj en lägre global toppmarginal."
+      ? "Exporten stoppades före omkodning eftersom synlig positiv gain riskerar att klampa PCM-sampel. Sänk global gain. Ingen dold toppsänkning görs."
       : data.message || data.error || "Exporten misslyckades.";
     updateExportProgress(0, message);
     showToast(message, "error", clippingRisk ? 12000 : 9000);
     if (clippingRisk) {
       elements.gainNotice.hidden = false;
-      elements.gainNotice.textContent = "PCM-förkontrollen stoppade exporten innan ljudfilen ändrades. Sänk gain eller aktivera global toppmarginal.";
+      elements.gainNotice.textContent = "PCM-förkontrollen stoppade exporten innan ljudfilen ändrades. Sänk den synliga globala gainen.";
       updateCapabilities(state.capabilities.analysis, true);
     } else {
       updateCapabilities(state.capabilities.analysis, false);
     }
     emitState("export-error");
   }
+}
+
+function cancelExportJob() {
+  if (!state.jobs.export || state.exportStatus !== "running") return;
+  exportWorker?.postMessage({ type: "cancel", jobId: state.jobs.export, operation: "export" });
+  state.exportStatus = "cancelling";
+  updateExportProgress(0, "Avbryter och rensar partiell arbetsfil");
+}
+
+function requestStoredExports() {
+  if (!exportWorker) return;
+  const jobId = nextJobId("storage");
+  state.jobs.storage = jobId;
+  exportWorker.postMessage({ type: "storage-list", jobId });
+}
+
+function renderStoredExports() {
+  if (!elements.storedExportsList) return;
+  if (!state.storedExports.length) {
+    elements.storedExportsList.innerHTML = '<li class="list-placeholder">Inga lokala arbetsfiler</li>';
+    return;
+  }
+  elements.storedExportsList.innerHTML = state.storedExports.map((item) => {
+    const complete = item.status === "complete";
+    const status = complete ? "Komplett" : item.status === "partial" ? "Ofullständig kraschrest" : escapeHtml(item.status || "Okänd");
+    const download = complete ? `<button class="button button-secondary button-small" type="button" data-storage-download="${escapeHtml(item.id || item.name)}">Hämta igen</button>` : "";
+    return `<li class="stored-export-item" data-storage-id="${escapeHtml(item.id || item.name)}"><div><strong>${escapeHtml(item.name || "WAV-export")}</strong><small>${formatBytes(item.size || 0)} · ${status} · ${item.createdAt ? new Date(item.createdAt).toLocaleString("sv-SE") : "tid saknas"}</small></div><div>${download}<button class="button button-quiet button-small" type="button" data-storage-remove="${escapeHtml(item.id || item.name)}">Radera</button></div></li>`;
+  }).join("");
+}
+
+function ensureStorageWorker() {
+  if (exportWorker) return exportWorker;
+  exportWorker = new Worker("./src/export-worker.js", { type: "module" });
+  exportWorker.onmessage = (event) => handleExportMessage(event.data);
+  return exportWorker;
+}
+
+function sendStorageCommand(type, id = null) {
+  if (!state.capabilities.workers) return;
+  const jobId = nextJobId("storage");
+  state.jobs.storage = jobId;
+  ensureStorageWorker().postMessage({ type, operation: type, jobId, id });
+}
+
+function handleStoredExportAction(event) {
+  const download = event.target.closest("[data-storage-download]");
+  const remove = event.target.closest("[data-storage-remove]");
+  if (download) {
+    const item = state.storedExports.find((candidate) => String(candidate.id || candidate.name) === download.dataset.storageDownload);
+    if (item?.blob instanceof Blob) downloadBlob(item.blob, item.name || "ljudr-export.wav");
+    else sendStorageCommand("storage-get", download.dataset.storageDownload);
+  }
+  if (remove) {
+    const item = state.storedExports.find((candidate) => String(candidate.id || candidate.name) === remove.dataset.storageRemove);
+    if (item?.blob) {
+      state.storedExports = state.storedExports.filter((candidate) => candidate !== item);
+      renderStoredExports();
+    } else sendStorageCommand("storage-remove", remove.dataset.storageRemove);
+  }
+}
+
+function clearStoredExports() {
+  state.storedExports = state.storedExports.filter((item) => !item.blob);
+  renderStoredExports();
+  if (state.capabilities.opfs) sendStorageCommand("storage-clear");
+  else { state.storedExports = []; renderStoredExports(); }
+}
+
+function setExportProfile(profile, options = {}) {
+  const hasEdits = state.trim.fadeInSeconds > 0 || state.trim.fadeOutSeconds > 0 || Math.abs(state.trim.gainDb) > 1e-9;
+  if (profile === "edited-wav" && validBitsTransformBlocked()) {
+    const trimRadio = $("input[name='exportProfile'][value='sample-payload-trim']");
+    if (trimRadio) trimRadio.checked = true;
+    state.exportProfile = "sample-payload-trim";
+    showToast("Källans validBits avviker från containerstorleken. Analys och sample-payload-identisk trim är tillåtna, men omräkning blockeras.", "error", 9000);
+    return;
+  }
+  if (profile === "sample-payload-trim" && hasEdits && !options.force) {
+    const editedRadio = $("input[name='exportProfile'][value='edited-wav']");
+    if (editedRadio) editedRadio.checked = true;
+    showToast("Återställ gain och fades innan du väljer ett sample-payload-identiskt trimutdrag.", "error", 8000);
+    return;
+  }
+  state.exportProfile = profile;
+  const edited = profile === "edited-wav";
+  [elements.fadeInToggle, elements.fadeOutToggle, elements.gainNumber, elements.gainRange].forEach((control) => { if (control) control.disabled = !edited; });
+  $$("[data-fade-preset]").forEach((button) => { button.disabled = !edited || button.closest("[aria-disabled='true']"); });
+  $(".fade-section")?.classList.toggle("is-profile-disabled", !edited);
+  $(".gain-section")?.classList.toggle("is-profile-disabled", !edited);
+  if (!edited && (state.trim.fadeInSeconds > 0 || state.trim.fadeOutSeconds > 0 || Math.abs(state.trim.gainDb) > 1e-9)) {
+    elements.exportAudio.disabled = true;
+    showToast("Återställ gain och fades för ett sample-payload-identiskt trimutdrag, eller välj Redigerad WAV-master.", "error", 8000);
+  } else if (state.exportStatus !== "running") elements.exportAudio.disabled = false;
+  updateExportSummary();
+  if (options.dirty !== false) state.dirty = true;
+  emitState("export-profile");
+}
+
+function syncAuditionUi() {
+  if (!elements.auditionStatus) return;
+  const preview = state.monitoring.previewMode === "source" ? "Källkontext: inga fades eller nivåval hörs." : "Exportförhandsvisning: exakt trim, fades och synlig global gain hörs.";
+  const monoSource = (state.analysis?.format?.channels ?? state.fileInfo?.channels) === 1;
+  const mode = monoSource ? "Monokällan till båda öron" : { stereo: "Stereo", left: "Vänster till båda öron", right: "Höger till båda öron", mono: "Mono som 0,5 × (L + R)" }[state.monitoring.channelMode];
+  elements.auditionStatus.textContent = `${preview} Monitor: ${mode}. Monitorval påverkar aldrig export.`;
+}
+
+let waitingServiceWorker = null;
+
+function hasUnsafeUpdateState() {
+  return state.dirty || Object.values(state.jobs).some(Boolean);
+}
+
+function applyWaitingUpdate() {
+  if (hasUnsafeUpdateState()) {
+    showToast("Spara projektet och avsluta pågående jobb innan appen uppdateras.", "error", 7000);
+    return;
+  }
+  waitingServiceWorker?.postMessage({ type: "SKIP_WAITING" });
+}
+
+function watchServiceWorkerRegistration(registration) {
+  const showWaiting = (worker) => {
+    if (!worker) return;
+    waitingServiceWorker = worker;
+    elements.updateBanner.hidden = false;
+  };
+  showWaiting(registration.waiting);
+  registration.addEventListener("updatefound", () => {
+    const worker = registration.installing;
+    worker?.addEventListener("statechange", () => { if (worker.state === "installed" && navigator.serviceWorker.controller) showWaiting(worker); });
+  });
 }
 
 function updateCapabilities(analysisAvailable = state.capabilities.analysis, exportAvailable = state.capabilities.export) {
@@ -1993,7 +2457,7 @@ function zoomTimeline(direction) {
   const center = state.playback.currentSeconds >= currentStart && state.playback.currentSeconds <= currentEnd
     ? state.playback.currentSeconds
     : currentStart + currentLength / 2;
-  const newLength = clamp(currentLength * (direction === "in" ? 0.5 : 2), Math.min(5, duration), duration);
+  const newLength = clamp(currentLength * (direction === "in" ? 0.5 : 2), Math.min(0.01, duration), duration);
   let start = center - newLength / 2;
   let end = center + newLength / 2;
   if (start < 0) { end -= start; start = 0; }
@@ -2001,12 +2465,98 @@ function zoomTimeline(direction) {
   state.view.startSeconds = Math.max(0, start);
   state.view.endSeconds = Math.min(duration, end);
   scheduleCanvasRender();
+  scheduleDetailRequest();
+  renderCanvasTextAlternative();
 }
 
 function fitTimeline() {
   state.view.startSeconds = 0;
   state.view.endSeconds = durationSeconds();
+  state.view.detail = null;
   scheduleCanvasRender();
+  scheduleDetailRequest();
+  renderCanvasTextAlternative();
+}
+
+function panTimeline(deltaSeconds) {
+  const duration = durationSeconds();
+  const length = state.view.endSeconds - state.view.startSeconds;
+  let start = clamp(state.view.startSeconds + deltaSeconds, 0, Math.max(0, duration - length));
+  state.view.startSeconds = start;
+  state.view.endSeconds = Math.min(duration, start + length);
+  scheduleCanvasRender();
+  scheduleDetailRequest();
+}
+
+function setZoomAround(centerSeconds, newLength) {
+  const duration = durationSeconds();
+  const length = clamp(newLength, Math.min(0.01, duration), duration);
+  let start = centerSeconds - length / 2;
+  start = clamp(start, 0, Math.max(0, duration - length));
+  state.view.startSeconds = start;
+  state.view.endSeconds = Math.min(duration, start + length);
+  scheduleCanvasRender();
+  scheduleDetailRequest();
+}
+
+function bindTimelineGestures(canvas) {
+  canvas.tabIndex = 0;
+  canvas.addEventListener("pointerdown", (event) => {
+    if (!state.file) return;
+    canvas.setPointerCapture(event.pointerId);
+    timelinePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (timelinePointers.size === 1) timelineGesture = { startX: event.clientX, startView: { start: state.view.startSeconds, end: state.view.endSeconds }, moved: false };
+    if (timelinePointers.size === 2) {
+      const points = [...timelinePointers.values()];
+      timelineGesture = { distance: Math.abs(points[1].x - points[0].x) || 1, startView: { start: state.view.startSeconds, end: state.view.endSeconds } };
+    }
+  });
+  canvas.addEventListener("pointermove", (event) => {
+    if (!timelinePointers.has(event.pointerId)) return;
+    timelinePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    const viewLength = timelineGesture.startView.end - timelineGesture.startView.start;
+    if (timelinePointers.size === 2) {
+      const points = [...timelinePointers.values()];
+      const distance = Math.abs(points[1].x - points[0].x) || 1;
+      const rect = canvas.getBoundingClientRect();
+      const centerX = (points[0].x + points[1].x) / 2;
+      const ratio = clamp((centerX - rect.left - 58) / Math.max(1, rect.width - 68), 0, 1);
+      const center = timelineGesture.startView.start + ratio * viewLength;
+      setZoomAround(center, viewLength * timelineGesture.distance / distance);
+      return;
+    }
+    if (timelinePointers.size === 1 && timelineGesture?.startX !== undefined) {
+      const deltaPixels = event.clientX - timelineGesture.startX;
+      if (Math.abs(deltaPixels) > 5) timelineGesture.moved = true;
+      const secondsPerPixel = viewLength / Math.max(1, canvas.clientWidth - 68);
+      const start = timelineGesture.startView.start - deltaPixels * secondsPerPixel;
+      const duration = durationSeconds();
+      state.view.startSeconds = clamp(start, 0, Math.max(0, duration - viewLength));
+      state.view.endSeconds = state.view.startSeconds + viewLength;
+      scheduleCanvasRender();
+      scheduleDetailRequest();
+    }
+  });
+  const release = (event) => {
+    if (timelinePointers.size === 1 && !timelineGesture?.moved) {
+      state.playback.currentSeconds = canvasTimeFromPointer(canvas, event);
+      elements.audio.currentTime = state.playback.currentSeconds;
+      syncTrimUi();
+    }
+    timelinePointers.delete(event.pointerId);
+    if (!timelinePointers.size) timelineGesture = null;
+  };
+  canvas.addEventListener("pointerup", release);
+  canvas.addEventListener("pointercancel", release);
+  canvas.addEventListener("keydown", (event) => {
+    const length = state.view.endSeconds - state.view.startSeconds;
+    if (["ArrowLeft", "ArrowRight", "+", "=", "-", "0", "Home"].includes(event.key)) event.preventDefault();
+    if (event.key === "ArrowLeft") panTimeline(-length * (event.shiftKey ? 0.5 : 0.1));
+    if (event.key === "ArrowRight") panTimeline(length * (event.shiftKey ? 0.5 : 0.1));
+    if (event.key === "+" || event.key === "=") zoomTimeline("in");
+    if (event.key === "-") zoomTimeline("out");
+    if (event.key === "0" || event.key === "Home") fitTimeline();
+  });
 }
 
 function helpTopicLive(topic) {
@@ -2038,12 +2588,11 @@ function helpTopicLive(topic) {
     assessment: [assessmentProfiles[state.assessment.recordingType]?.label || "Annan inspelning", state.assessment.purpose === "distribution" ? "Bedöms för publicering" : "Bedöms som original eller arkivmaster"],
     fades: [`In ${formatDecimal(state.trim.fadeInSeconds, 2)} s, ut ${formatDecimal(state.trim.fadeOutSeconds, 2)} s`, `Valt utsnitt är ${formatTime(Math.max(0, state.trim.endSeconds - state.trim.startSeconds))}`],
     gain: [`${state.trim.gainDb >= 0 ? "+" : ""}${formatDecimal(state.trim.gainDb, 1)} dB`, truePeak === null ? "Toppjämförelse saknas" : `Beräknat True Peak före exportkontroll: ${formatDecimal(truePeak + state.trim.gainDb, 2)} dBTP`],
-    "peak-handling": [state.peakHandling.enabled ? `På, ${formatDecimal(state.peakHandling.ceilingDbtp, 1)} dBTP` : "Av", `Beräknad global sänkning ${formatDecimal(peakAdjustmentDb(), 2)} dB`],
+    "series-reference": [elements.seriesStateValue?.textContent || "Bevara oförändrat", elements.seriesGainValue?.textContent || "Inte beräknat"],
     monitoring: [state.monitoring.levelMatched ? "Utjämnad" : "Faktisk nivåskillnad", `Medhörningsvolym ${formatDecimal(state.monitoring.volume * 100, 0)} procent`],
     "export-profiles": [$(`input[name='exportProfile']:checked`)?.value || "Ingen", "Se exportsammanfattningen för alla val"],
     "preservation-export": ["WAV med källformat", technicalDescription()],
     "distribution-export": ["WAV distributionsmaster", technicalDescription()],
-    "listening-export": ["Avstängd", "Inväntar fysisk storfilsvalidering på iPad"],
     "export-status": [elements.capabilityStatus?.textContent || "Kontrollerar", state.capabilities.opfs ? "OPFS är tillgängligt" : "Minnesreserv används"],
     "export-safety": [state.analysis ? "Analys finns" : "Analys saknas", elements.exportRecommendationText?.textContent || "Ingen rekommendation ännu"],
   };
@@ -2094,14 +2643,28 @@ function bindEvents() {
   elements.dropZone.addEventListener("drop", (event) => openAudioFile(event.dataTransfer?.files?.[0]));
 
   elements.analyzeButton.addEventListener("click", startAnalysis);
+  elements.cancelAnalysis.addEventListener("click", () => {
+    if (!state.jobs.analysis) return;
+    analysisWorker?.postMessage({ type: "cancel", jobId: state.jobs.analysis, operation: "analyze" });
+    elements.cancelAnalysis.disabled = true;
+    updateAnalysisProgress(0, "Avbryter efter aktuellt block");
+  });
+  elements.cancelRegion.addEventListener("click", () => {
+    if (state.jobs.region) analysisWorker?.postMessage({ type: "cancel", jobId: state.jobs.region, operation: "analyze-region" });
+  });
+  elements.cancelDetail.addEventListener("click", () => {
+    if (state.jobs.detail) analysisWorker?.postMessage({ type: "cancel", jobId: state.jobs.detail, operation: "waveform-detail" });
+  });
   elements.recordingType.addEventListener("change", () => {
     state.assessment.recordingType = elements.recordingType.value;
+    state.dirty = true;
     renderAssessmentReflection();
     updateExportRecommendation();
     emitState("assessment-context");
   });
   elements.assessmentPurpose.addEventListener("change", () => {
     state.assessment.purpose = elements.assessmentPurpose.value;
+    state.dirty = true;
     renderAssessmentReflection();
     updateExportRecommendation();
     emitState("assessment-purpose");
@@ -2121,12 +2684,7 @@ function bindEvents() {
     scheduleCanvasRender();
   }));
 
-  elements.analysisCanvas.addEventListener("pointerdown", (event) => {
-    if (!state.file) return;
-    state.playback.currentSeconds = canvasTimeFromPointer(elements.analysisCanvas, event);
-    elements.audio.currentTime = state.playback.currentSeconds;
-    syncTrimUi();
-  });
+  bindTimelineGestures(elements.analysisCanvas);
   elements.trimCanvas.addEventListener("pointerdown", (event) => {
     activeTrimHandle = findTrimHandle(elements.trimCanvas, event);
     if (activeTrimHandle) {
@@ -2156,13 +2714,20 @@ function bindEvents() {
     state.markers.push({
       id: `marker-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       seconds: state.playback.currentSeconds,
+      endSeconds: state.playback.currentSeconds,
       type: elements.markerType.value,
       text,
+      severity: "info",
+      detail: "Egen markör",
+      objective: false,
+      origin: "user",
+      reviewStatus: "accepted",
       suggested: false,
     });
     elements.markerText.value = "";
     elements.markerCompose.hidden = true;
     renderMarkers();
+    state.dirty = true;
     emitState("marker-added");
   });
   elements.markerList.addEventListener("click", (event) => {
@@ -2170,6 +2735,12 @@ function bindEvents() {
     if (jump) {
       state.playback.currentSeconds = clamp(jump.dataset.markerJump, 0, durationSeconds());
       elements.audio.currentTime = state.playback.currentSeconds;
+      const marker = state.markers.find((item) => item.id === jump.dataset.markerId);
+      if (marker) setZoomAround(marker.seconds, Math.max(0.25, Math.min(10, (marker.endSeconds - marker.seconds || 0) * 4 || 3)));
+      state.monitoring.previewMode = "source";
+      const sourceRadio = $("input[name='previewMode'][value='source']");
+      if (sourceRadio) sourceRadio.checked = true;
+      syncAuditionUi();
       setMode("trim");
       syncTrimUi();
       return;
@@ -2178,8 +2749,27 @@ function bindEvents() {
     if (remove) {
       state.markers = state.markers.filter((marker) => marker.id !== remove.dataset.markerRemove);
       renderMarkers();
+      state.dirty = true;
       emitState("marker-removed");
     }
+  });
+  elements.markerList.addEventListener("change", (event) => {
+    const select = event.target.closest("[data-marker-review]");
+    if (!select) return;
+    const marker = state.markers.find((item) => item.id === select.dataset.markerReview);
+    if (marker) marker.reviewStatus = select.value;
+    state.dirty = true;
+    emitState("marker-reviewed");
+  });
+  $$("[data-marker-filter]").forEach((button) => button.addEventListener("click", () => {
+    state.markerFilter = button.dataset.markerFilter;
+    $$("[data-marker-filter]").forEach((item) => { const active = item === button; item.classList.toggle("is-active", active); item.setAttribute("aria-pressed", String(active)); });
+    renderMarkers();
+  }));
+  elements.canvasTextContent?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-text-marker]");
+    const marker = state.markers.find((item) => item.id === button?.dataset.textMarker);
+    if (marker) { state.playback.currentSeconds = marker.seconds; setZoomAround(marker.seconds, Math.max(1, (marker.endSeconds - marker.seconds) * 4)); }
   });
 
   elements.playButton.addEventListener("click", togglePlayback);
@@ -2201,7 +2791,7 @@ function bindEvents() {
   elements.audio.addEventListener("timeupdate", () => {
     state.playback.currentSeconds = finite(elements.audio.currentTime) ?? 0;
     if (state.playback.previewStopAt !== null && state.playback.currentSeconds >= state.playback.previewStopAt) stopPlayback();
-    else if (state.playback.previewStopAt === null && state.playback.currentSeconds >= state.trim.endSeconds) stopPlayback();
+    else if (state.monitoring.previewMode === "export" && state.playback.previewStopAt === null && state.playback.currentSeconds >= state.trim.endSeconds) stopPlayback();
     elements.currentTime.textContent = formatTime(state.playback.currentSeconds);
     scheduleCanvasRender();
   });
@@ -2216,15 +2806,31 @@ function bindEvents() {
   elements.audio.addEventListener("ratechange", () => schedulePreviewEnvelope(elements.audio.currentTime));
   elements.monitorVolume.addEventListener("input", () => {
     state.monitoring.volume = clamp(elements.monitorVolume.value, 0, 1);
+    state.dirty = true;
     updateMonitoringGraph();
     emitState("monitor-volume");
   });
   elements.levelMatch.addEventListener("change", () => {
     state.monitoring.levelMatched = elements.levelMatch.checked;
+    state.dirty = true;
     updateMonitoringGraph();
     showToast(elements.levelMatch.checked ? "Utjämnad medhörning är på. Exporten påverkas inte." : "Medhörningen visar nu den faktiska nivåskillnaden.");
     emitState("monitoring-mode");
   });
+  $$('input[name="previewMode"]').forEach((input) => input.addEventListener("change", () => {
+    state.monitoring.previewMode = input.value;
+    state.dirty = true;
+    syncAuditionUi();
+    updateMonitoringGraph();
+    emitState("preview-mode");
+  }));
+  $$('input[name="monitorMode"]').forEach((input) => input.addEventListener("change", () => {
+    state.monitoring.channelMode = input.value;
+    state.dirty = true;
+    syncAuditionUi();
+    updateMonitoringGraph();
+    emitState("monitor-mode");
+  }));
 
   elements.trimStartInput.addEventListener("change", () => {
     const value = parseTime(elements.trimStartInput.value);
@@ -2248,6 +2854,8 @@ function bindEvents() {
     state.trim.startSeconds = 0;
     state.trim.endSeconds = durationSeconds();
     syncTrimUi();
+    invalidateSeriesProposal();
+    markEditChanged("trim-reset");
   });
   elements.fadeInToggle.addEventListener("change", () => updateFade("in", elements.fadeInNumber.value, elements.fadeInToggle.checked));
   elements.fadeOutToggle.addEventListener("change", () => updateFade("out", elements.fadeOutNumber.value, elements.fadeOutToggle.checked));
@@ -2262,13 +2870,32 @@ function bindEvents() {
   elements.gainNumber.addEventListener("change", () => updateGain(elements.gainNumber.value));
   elements.gainRange.addEventListener("input", () => updateGain(elements.gainRange.value));
   $("#resetGainButton").addEventListener("click", () => updateGain(0));
-  elements.peakHandlingToggle.addEventListener("change", () => setPeakHandlingEnabled(elements.peakHandlingToggle.checked));
-  elements.peakCeilingNumber.addEventListener("change", () => updatePeakCeiling(elements.peakCeilingNumber.value));
-  elements.peakCeilingRange.addEventListener("input", () => updatePeakCeiling(elements.peakCeilingRange.value));
-  $$('[data-peak-ceiling]').forEach((button) => button.addEventListener("click", () => updatePeakCeiling(button.dataset.peakCeiling)));
+  elements.calculateSeries.addEventListener("click", calculateSeriesProposal);
+  elements.previewSeries.addEventListener("click", () => {
+    if (finite(state.series.proposedGainDb) === null) return;
+    state.series.status = "previewing";
+    state.monitoring.previewMode = "export";
+    state.monitoring.previewGainOverride = state.series.proposedGainDb;
+    $("input[name='previewMode'][value='export']").checked = true;
+    syncSeriesUi(); syncAuditionUi();
+    playFrom(state.trim.startSeconds);
+  });
+  elements.applySeries.addEventListener("click", () => {
+    if (finite(state.series.proposedGainDb) === null) return;
+    state.series.status = "applied";
+    state.monitoring.previewGainOverride = null;
+    updateGain(state.series.proposedGainDb, { seriesApply: true });
+    state.series.status = "applied";
+    const editedRadio = $("input[name='exportProfile'][value='edited-wav']");
+    if (editedRadio) editedRadio.checked = true;
+    setExportProfile("edited-wav");
+    syncSeriesUi();
+  });
+  elements.preserveSeries.addEventListener("click", preserveSeries);
 
   elements.metadataForm.addEventListener("input", () => {
     collectMetadata();
+    state.dirty = true;
     emitState("metadata");
   });
   $("#toggleMetadataButton").addEventListener("click", (event) => {
@@ -2278,8 +2905,12 @@ function bindEvents() {
     event.target.setAttribute("aria-expanded", String(!collapsed));
   });
   elements.exportAudio.addEventListener("click", startExport);
+  elements.cancelExport.addEventListener("click", cancelExportJob);
   elements.exportReport.addEventListener("click", () => exportReport("html"));
   elements.exportJson.addEventListener("click", () => exportReport("json"));
+  $$("input[name='exportProfile']").forEach((input) => input.addEventListener("change", () => setExportProfile(input.value)));
+  elements.storedExportsList.addEventListener("click", handleStoredExportAction);
+  elements.clearStoredExports.addEventListener("click", clearStoredExports);
 
   $("#helpButton").addEventListener("click", () => openHelp());
   $("#closeHelpButton").addEventListener("click", () => elements.helpDialog.close());
@@ -2302,6 +2933,8 @@ function bindEvents() {
   window.addEventListener("ljudr:analysis", (event) => handleAnalysisMessage(event.detail));
   window.addEventListener("ljudr:analysis-result", (event) => applyAnalysisResult(event.detail?.result ?? event.detail));
   window.addEventListener("ljudr:export", (event) => handleExportMessage(event.detail));
+  elements.applyUpdate.addEventListener("click", applyWaitingUpdate);
+  elements.dismissUpdate.addEventListener("click", () => { elements.updateBanner.hidden = true; });
 }
 
 async function initialize() {
@@ -2321,9 +2954,15 @@ async function initialize() {
   renderObservations();
   renderMarkers();
   syncTrimUi();
+  syncSeriesUi();
+  syncAuditionUi();
+  setExportProfile(state.exportProfile, { dirty: false, force: true });
+  renderStoredExports();
   await loadProjectTools();
+  if (state.capabilities.opfs && state.capabilities.workers) sendStorageCommand("storage-list");
   if ("serviceWorker" in navigator && location.protocol !== "file:") {
-    navigator.serviceWorker.register(new URL("../sw.js", import.meta.url), { scope: "./" }).catch(() => {});
+    navigator.serviceWorker.register(new URL("../sw.js", import.meta.url), { scope: "./" }).then(watchServiceWorkerRegistration).catch(() => {});
+    navigator.serviceWorker.addEventListener("controllerchange", () => { if (!hasUnsafeUpdateState()) location.reload(); });
   }
   document.documentElement.classList.add("is-ready");
   emitState("ready");

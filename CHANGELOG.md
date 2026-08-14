@@ -1,5 +1,41 @@
 # Ändringslogg
 
+## 1.0.0-rc.1, 2026-08-15
+
+Offentlig valideringskandidat. Versionsnumret 1.0.0 är blockerat tills den fysiska iPad-matrisen och hela releaseporten är godkända.
+
+### Arkitektur och analys
+
+- sluten mono/stereo WAV-matris med sex diskreta samplingsfrekvenser
+- gemensam strikt parser och direkt avslag för RF64/BW64
+- adaptiv workerbaserad vågform med detalj- och samplezoom
+- separat Källfil, Beräknat exporturval och Verifierad exportfil
+- jobId, cancel och stale-resultatfilter för långvariga jobb
+
+### Varsam redigering
+
+- separat Beräkna, Prova och Använd för frivillig serieorientering
+- Bevara oförändrat som likvärdigt huvudval
+- ingen dold extra toppsänkning
+- profilerna Sample-payload-identiskt trimutdrag och Redigerad WAV-master
+
+### Projekt, rapport och integritet
+
+- projektschema 2 med strikt validering och explicit migrering från schema 1
+- full lokal inkrementell SHA-256 som säker källidentitet
+- edge-hash nedgraderad till snabb förkontroll
+- svensk semantisk HTML/JSON-rapport utan förlust av nästlade objekt
+- fulla filhashar, sample-payload-hash, metod, releasecommit och valideringsproveniens
+- aktiv koordinatpolicy Dold, Avrundad eller Exakt
+- OPFS-status, quota, cancel, partial-cleanup samt lista och uttrycklig rensning av complete
+
+### Release
+
+- maskinläsbart validation-manifest och hashbundet buildmanifest
+- fixerad regressionstestinventering
+- Actions pinnade till fulla commit-SHA och checkout utan kvarlämnade credentials
+- PWA-updateflöde och obligatorisk fysisk iPad/VoiceOver-matris
+
 ## 0.12.1, 2026-08-14
 
 ### Korrigerat
@@ -12,7 +48,7 @@
 - 68 av 68 krav godkända för 62 relevanta mono/stereo-filer i EBU Loudness Test Set v5.0
 - 19 av 19 relevanta mono/stereo-filer godkända i ITU-R BS.2217-2 med toleransen ±0,1 LKFS
 - EBU:s flerkanalsfall och uttryckliga live-mätarfall redovisas som utanför verktygets filbaserade mono/stereo-omfattning
-- 48 automatiska regressionstester godkända
+- 49 automatiska regressionstester godkända
 
 ## 0.12.0, 2026-08-14
 

@@ -6,13 +6,15 @@ import {
   calculateIntegratedLufs,
   calculateLoudnessRange,
   FirTruePeakEstimator,
+  analyzeRegion,
+  analyzeWaveformDetail,
 } from "../src/dsp-core.js";
 
 function fourCc(value) {
   return [...value].map((character) => character.charCodeAt(0));
 }
 
-function makeWav({ sampleRate = 48000, channels = 2, bits = 16, format = 1, frames, junk = false, extensible = false }) {
+function makeWav({ sampleRate = 48000, channels = 2, bits = 16, validBits = bits, format = 1, frames, junk = false, extensible = false }) {
   const bytesPerSample = bits / 8;
   const blockAlign = channels * bytesPerSample;
   const dataSize = frames.length * blockAlign;
@@ -37,7 +39,7 @@ function makeWav({ sampleRate = 48000, channels = 2, bits = 16, format = 1, fram
   view.setUint16(offset + 22, bits, true);
   if (extensible) {
     view.setUint16(offset + 24, 22, true);
-    view.setUint16(offset + 26, bits, true);
+    view.setUint16(offset + 26, validBits, true);
     view.setUint32(offset + 28, channels === 1 ? 4 : 3, true);
     view.setUint32(offset + 32, format, true);
     bytes.set([0x00, 0x00, 0x10, 0x00, 0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71], offset + 36);
@@ -165,6 +167,11 @@ test("redovisar float-overrange och icke ändliga värden utan att kalla dem kli
   assert.equal(result.summary.nonFiniteSamples, 2);
   assert.ok(result.observations.some((item) => item.id === "overrange"));
   assert.ok(result.observations.some((item) => item.id === "non-finite"));
+  const invalidMarkers = result.markersSuggested.filter(item => item.label === "Ogiltigt floatvärde");
+  assert.equal(invalidMarkers.length, 1);
+  assert.equal(invalidMarkers[0].severity, "critical");
+  assert.equal(invalidMarkers[0].channel, 1);
+  assert.ok(invalidMarkers[0].endSeconds > invalidMarkers[0].startSeconds);
   assert.match(result.validation.truePeakStatus, /klarar EBU Tech 3341/);
 });
 
@@ -220,4 +227,83 @@ test("gatingfunktionerna ger null för tystnad och positiv LRA för varierande e
   const energies = [0.0001, 0.0001, 0.001, 0.001, 0.01, 0.01];
   assert.ok(Number.isFinite(calculateIntegratedLufs(energies)));
   assert.ok(calculateLoudnessRange(energies) > 0);
+});
+
+test("den gemensamma parsern avvisar RF64 och frekvenser utanför den diskreta matrisen", async () => {
+  const ordinary = makeWav({ frames: [[0, 0], [0, 0]] });
+  const rf64Bytes = new Uint8Array(await ordinary.arrayBuffer());
+  rf64Bytes.set(fourCc("RF64"), 0);
+  await assert.rejects(() => parseWavHeader(new Blob([rf64Bytes])), /RF64 och BW64/);
+  await assert.rejects(
+    () => parseWavHeader(makeWav({ sampleRate: 32000, frames: [[0, 0], [0, 0]] })),
+    /32000 Hz stöds inte/,
+  );
+});
+
+test("hela den diskreta samplingsfrekvensmatrisen accepteras", async () => {
+  for (const sampleRate of [44100, 48000, 88200, 96000, 176400, 192000]) {
+    const header = await parseWavHeader(makeWav({ sampleRate, frames: [[0, 0], [0, 0]] }));
+    assert.equal(header.sampleRate, sampleRate);
+  }
+});
+
+test("Extensible PCM med 24 giltiga vänsterjusterade bitar avkodas korrekt", async () => {
+  const result = await analyzeWav(makeWav({
+    channels: 1,
+    bits: 32,
+    validBits: 24,
+    format: 1,
+    extensible: true,
+    frames: [[-0.5], [0.25], [0]],
+  }), { waveformBins: 64 });
+  assert.equal(result.format.validBitsPerSample, 24);
+  assert.ok(Math.abs(result.summary.channels[0].minimum + 0.5) < 1e-7);
+  assert.ok(Math.abs(result.summary.channels[0].maximum - 0.25) < 1e-7);
+});
+
+test("regionskedjan mäter exakt urval efter fades och enda globala gain", async () => {
+  const sampleRate = 48000;
+  const frames = Array.from({ length: sampleRate * 4 }, (_, index) => {
+    const value = 0.1 * Math.sin(2 * Math.PI * 997 * index / sampleRate);
+    return [value, value];
+  });
+  const result = await analyzeRegion(makeWav({ sampleRate, frames }), {
+    startFrame: sampleRate / 2,
+    endFrame: sampleRate * 3.5,
+    fadeInFrames: 480,
+    fadeOutFrames: 480,
+    globalGainDb: 6,
+  });
+  assert.equal(result.range.selectedFrames, sampleRate * 3);
+  assert.equal(result.edit.globalGainDb, 6);
+  assert.equal(result.edit.dynamicProcessing, false);
+  assert.ok(result.processed.summary.integratedLufs - result.source.summary.integratedLufs > 5.8);
+  assert.ok(result.processed.summary.truePeakEstimateDbtp - result.source.summary.truePeakEstimateDbtp > 5.8);
+});
+
+test("adaptiv vågformsdetalj ger L och R min max RMS samt sampel vid djup zoom", async () => {
+  const frames = Array.from({ length: 100 }, (_, index) => [index / 100, -index / 200]);
+  const result = await analyzeWaveformDetail(makeWav({ frames }), {
+    startFrame: 10,
+    endFrame: 30,
+    pixelWidth: 100,
+    includeSamples: true,
+  });
+  assert.equal(result.framesPerBin, 1);
+  assert.equal(result.channels.length, 2);
+  assert.equal(result.channels[0].samples.length, 20);
+  assert.ok(result.channels[0].max[0] > 0);
+  assert.ok(result.channels[1].min[0] < 0);
+});
+
+test("True Peak får kanal och gruppfördröjningskorrigerad tid", async () => {
+  const frames = Array.from({ length: 1000 }, () => [0, 0]);
+  frames[400] = [0.9, 0.1];
+  const result = await analyzeWav(makeWav({ frames }), { waveformBins: 64 });
+  assert.ok(Math.abs(result.summary.channels[0].truePeakTimeSeconds - 400 / 48000) <= 1 / 48000);
+  const marker = result.markersSuggested.find(item => item.label === "Högsta True Peak, kanal 1");
+  assert.equal(marker.channel, 1);
+  assert.equal(marker.objective, true);
+  assert.equal(marker.heuristic, false);
+  assert.ok(marker.timePrecisionSeconds <= 1 / 48000);
 });

@@ -1,7 +1,7 @@
 import { File } from "node:buffer";
 import { readFile, readdir } from "node:fs/promises";
 import { basename, resolve } from "node:path";
-import { analyzeWav } from "../src/dsp-core.js";
+import { ENGINE_VERSION, analyzeWav } from "../src/dsp-core.js";
 
 const directory = resolve(process.argv[2] || "validation-fixtures/itu-bs2217");
 const entries = await readdir(directory, { recursive: true, withFileTypes: true });
@@ -24,6 +24,7 @@ const cases = [
 ];
 
 const results = [];
+const fixtures = [];
 for (const item of cases) {
   const path = files.find(candidate => basename(candidate).toLowerCase() === item.name.toLowerCase());
   if (!path) {
@@ -33,6 +34,7 @@ for (const item of cases) {
   const bytes = await readFile(path);
   const file = new File([bytes], basename(path), { type: "audio/wav" });
   const analysis = await analyzeWav(file, { waveformBins: 64 });
+  fixtures.push({ file: basename(path), bytes: analysis.sourceIdentity?.bytes ?? null, sha256: analysis.sourceIdentity?.value ?? null });
   const actual = analysis.summary.integratedLufs;
   const difference = actual - item.expected;
   const passed = difference >= -0.1 && difference <= 0.1;
@@ -50,5 +52,6 @@ const counts = results.reduce((summary, result) => {
   summary[result.status] = (summary[result.status] || 0) + 1;
   return summary;
 }, {});
-console.log(JSON.stringify({ engine: "LjudR", standard: "ITU-R BS.2217-2", results, counts }, null, 2));
+fixtures.sort((left, right) => left.file.localeCompare(right.file));
+console.log(JSON.stringify({ engine: "LjudR", engineVersion: ENGINE_VERSION, standard: "ITU-R BS.2217-2", fixtures, results, counts }, null, 2));
 if (counts.failed || counts.missing) process.exitCode = 1;

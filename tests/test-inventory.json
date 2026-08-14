@@ -1,0 +1,103 @@
+{
+  "schema": "se.gaia.ljudr.test-inventory/1",
+  "release": "1.0.0-rc.1",
+  "files": {
+    "dsp.test.mjs": [
+      "tolkar PCM16 och hoppar över ett udda okänt chunk",
+      "analyserar en sammanhängande stereosinus med rimliga råmått",
+      "läser PCM24 med korrekt tecken och nivå",
+      "analyserar 96 kHz float32 med tvåfaldig intersample-estimering",
+      "stöder WAVE_FORMAT_EXTENSIBLE float32 vid 96 kHz",
+      "läser PCM32 utan att förlora tecken",
+      "redovisar float-overrange och icke ändliga värden utan att kalla dem klippning",
+      "filbaserade M- och S-maxima är oberoende av signalens startläge",
+      "49 taps FIR fångar ett kraftigt intersample-mönster omkring plus 3 dBTP",
+      "FIR True Peak återger den analytiska toppen för en högfrekvent sinus",
+      "gatingfunktionerna ger null för tystnad och positiv LRA för varierande energi",
+      "den gemensamma parsern avvisar RF64 och frekvenser utanför den diskreta matrisen",
+      "hela den diskreta samplingsfrekvensmatrisen accepteras",
+      "Extensible PCM med 24 giltiga vänsterjusterade bitar avkodas korrekt",
+      "regionskedjan mäter exakt urval efter fades och enda globala gain",
+      "adaptiv vågformsdetalj ger L och R min max RMS samt sampel vid djup zoom",
+      "True Peak får kanal och gruppfördröjningskorrigerad tid"
+    ],
+    "export.test.mjs": [
+      "WAV-parsern läser ett vanligt stereo PCM-huvud",
+      "bearbetningsavkodningen använder 64 bit float och bevarar PCM32:s lägsta bitar",
+      "Ren trimning bevarar valda PCM-byte exakt",
+      "Gain gör exporten explicit icke bitidentisk",
+      "gain och linjära fades ger exakt förväntad float32-export",
+      "bekräftad toppkontroll som inte behöver stoppa bevarar ren trimning bitidentiskt",
+      "export gör ingen dold toppsänkning utan blockerar det bekräftade gainvärdet",
+      "Positiv gain som skulle klampa PCM blockeras före export",
+      "TPDF-marginalrisk blockeras även utan positiv gain",
+      "Toppförkontrollen använder markerat intervall efter fades",
+      "Överlappande fades använder den lägsta linjära enveloppen",
+      "Avklippt WAV upptäcks",
+      "32 bit float vid 96 kHz behåller overrange vid ren trimning",
+      "Parsern respekterar padding efter ett udda chunk",
+      "mono PCM24 med udda data får korrekt avslutande RIFF-padding",
+      "invalid float blockerar bearbetad export men får sample-identiskt trimmas",
+      "Extensible PCM med avvikande validBits får trimmas men inte räknas om"
+    ],
+    "opfs.test.mjs": [
+      "OPFS registrerar bara complete-exporter och stöder hämta och radera",
+      "OPFS cleanup tar bort partial och clear tar bara registrerade LjudR-exporter"
+    ],
+    "project.test.mjs": [
+      "SHA-256 klarar NIST-vektorer och blockvis Blob",
+      "projekt använder full filhash och innehåller inga ljudsamplingar",
+      "schema 1 migreras explicit men kräver säker källvalidering",
+      "strikt projektvalidering stoppar storlek, intervall och fel typer",
+      "full källmatchning upptäcker ändring i filens mitt",
+      "rapporten har tre semantiska sektioner och renderar nästlade objekt",
+      "koordinatpolicy är dold, avrundad eller exakt genom aktivt val"
+    ],
+    "release.test.mjs": [
+      "releaseversionen är konsekvent i motorer, projekt och PWA-cache",
+      "Pages använder separata jobb och actions pinnade till full SHA",
+      "webbpaketet innehåller exakt den uttryckliga tillåtelselistan",
+      "buildmanifestet binder varje publik fil till releasecommit och SHA-256",
+      "ignore-reglerna skyddar ljud och lokala rapporter oavsett normalt skiftläge",
+      "PWA-uppdatering väntar på uttryckligt användarval",
+      "den fixerade testinventeringen matchar exakt releasekällan"
+    ],
+    "sha256.test.mjs": [
+      "inkrementell SHA-256 klarar etablerade testvektorer",
+      "Blob-hashning är lokal, blockvis och redovisar hela filens scope"
+    ],
+    "ui-editing.test.mjs": [
+      "toningar är valfria, flexibla och har stora iPad-reglage",
+      "medhörningen schemalägger samma linjära fadefunktion med AudioParam",
+      "seriereferensen har tre uttryckliga steg och ingen dold toppsänkning",
+      "exporten använder endast synlig global gain och sparar serieflödet",
+      "redigering ogiltigförklarar hela tidigare exportverifieringen",
+      "adaptiv detalj, previewkanaler och workerjobb är operabla",
+      "importerade markörtider normaliseras numeriskt före DOM-rendering",
+      "mätkedja, canvastext och lokala arbetsfiler är synliga"
+    ],
+    "ui-guidance.test.mjs": [
+      "varje fördjupat mätvärde har en klickbar informationsruta",
+      "regelbaserad bedömning har typ, användning och förklarad reflektion",
+      "bearbetningar och exportval har rekommendationsinformation"
+    ],
+    "ui.test.mjs": [
+      "alla HTML-id är unika och statiska appselektorer finns",
+      "integritetsbudskap och nätspärr finns",
+      "alla knappar har uttrycklig typ",
+      "appskalet innehåller inga en dash",
+      "alla service-workerresurser finns i den lokala MASTER"
+    ],
+    "worker-protocol.test.mjs": [
+      "analysworkern har jobId cancel stale-filter och tre deterministiska operationer",
+      "exportworkern har samma jobbkontrakt och full OPFS-livscykel"
+    ]
+  },
+  "generated": {
+    "export.test.mjs": [
+      "Ren trimning bevarar PCM24 exakt",
+      "Ren trimning bevarar PCM32 exakt"
+    ]
+  },
+  "total": 72
+}
