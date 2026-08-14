@@ -114,6 +114,16 @@ Förväntad Pages-adress, som inte får redovisas som färdig innan den har öpp
 
 ## Slutligt deploykvitto
 
+Standardvaliderad kvalitetsrelease 0.12.1 publicerades den 14 augusti 2026:
+
+- Releasecommit: `164f46c264250453c955eab26b4f6302811e9ee6`
+- Git tree: `b624ab9f329947ec5648a84e0ca9e4aaf5326385`
+- GitHub Actions: `31843694559`, slutförd med resultatet success
+- Liveadress: `https://hktcr.github.io/ljudr-analysverkstad/`
+- Livekontroll: appversion 0.12.1, DSP-version 0.12.1, EBU-valideringsstatus, 10 ms maxfönstersökning och cacheversion 0.12.1
+- Lokal kontroll: 49 av 49 regressionstester, 68 av 68 EBU-krav och 19 av 19 ITU-filer godkända
+- Kvarstående produktionsprov: fysisk 15 till 20 minuters 32 bit float, 96 kHz-fil på Håkans iPad Pro
+
 Kvalitetsrelease 0.12.0 publicerades den 14 augusti 2026:
 
 - Releasecommit: `077d058cbd6693d059cd1c9f9bf4a7df8b2dbfc1`
