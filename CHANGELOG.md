@@ -1,5 +1,18 @@
 # Ändringslogg
 
+## 1.0.0-rc.4, 2026-08-15
+
+- exporterar ljudfritt analysunderlag enligt `se.gaia.ljudr.analysis-exchange/1`
+- erbjuder Minimal utan tidsserie och frivillig Temporal diagnostik med högst 720 grova programsegment
+- redovisar temporal sample peak utan att kalla den segmentbaserad True Peak
+- håller full källhash lokalt och binder underlaget med slumpmässigt bundleId och analysisDigest
+- erbjuder privacyprofilerna Minimal, Redigerad och Exakt med full förhandsgranskning
+- importerar strikt validerad guidance enligt `se.gaia.ljudr.guidance/1`
+- redovisar gAIa/VEP-, metod-, modell- och promptprovenance när underlaget innehåller den
+- märker osignerad guidance som inte kryptografiskt avsändarverifierad
+- kräver separat användarbeslut och tillämpar aldrig råd automatiskt
+- behåller all apptrafik lokal med `connect-src 'none'`
+
 ## 1.0.0-rc.3, 2026-08-15
 
 - samlar analysens regelbaserade förslag i panelen Föreslagna nästa steg

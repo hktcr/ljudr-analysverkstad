@@ -3008,3 +3008,377 @@ svg {
     border-width: 2px;
   }
 }
+
+/* Lokalt analysutbyte */
+.analysis-exchange {
+  margin-top: 22px;
+  padding: clamp(18px, 3vw, 26px);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: linear-gradient(145deg, var(--surface), #f0f7f5);
+}
+
+.analysis-exchange-heading,
+.external-guidance-heading,
+.analysis-exchange-actions,
+.exchange-artifact > div,
+.exchange-artifact {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.analysis-exchange-heading {
+  align-items: flex-start;
+}
+
+.analysis-exchange-heading h2,
+.external-guidance-heading h3 {
+  margin: 3px 0 5px;
+}
+
+.analysis-exchange-heading p,
+.external-guidance-heading p {
+  max-width: 68ch;
+  margin: 0;
+  color: var(--ink-muted);
+}
+
+.analysis-exchange-actions {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  margin-top: 18px;
+}
+
+.analysis-exchange-actions .button {
+  min-height: 48px;
+}
+
+.exchange-status-line {
+  min-height: 24px;
+  margin: 12px 0 0;
+  color: var(--ink-muted);
+}
+
+.exchange-artifact {
+  margin-top: 16px;
+  padding: 13px 15px;
+  border: 1px solid #9bc7b9;
+  border-radius: 14px;
+  background: #eaf6f1;
+}
+
+.exchange-artifact > div > div {
+  display: grid;
+  gap: 3px;
+}
+
+.exchange-artifact small,
+.exchange-artifact code {
+  overflow-wrap: anywhere;
+  color: var(--ink-muted);
+}
+
+.completion-mark {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  border-radius: 50%;
+  background: #23765f;
+  color: #fff;
+  font-weight: 900;
+}
+
+.external-guidance {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+
+.guidance-origin {
+  flex: 0 0 auto;
+  padding: 6px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink-muted);
+  font-size: .76rem;
+  font-weight: 800;
+}
+
+.guidance-origin.is-matched {
+  border-color: #82baa9;
+  background: #e3f4ee;
+  color: #235f50;
+}
+
+.guidance-origin.is-unverified {
+  border-color: #d5b86a;
+  background: #fff7dc;
+  color: #654f16;
+}
+
+.guidance-verification {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface-muted);
+  color: var(--ink-muted);
+  font-size: .85rem;
+}
+
+.guidance-list {
+  display: grid;
+  gap: 10px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.guidance-card {
+  display: grid;
+  gap: 10px;
+  padding: 15px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.guidance-card-head,
+.guidance-card-actions,
+.guidance-evidence {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.guidance-card-head {
+  justify-content: space-between;
+}
+
+.guidance-card h4,
+.guidance-card p {
+  margin: 0;
+}
+
+.guidance-evidence {
+  padding: 9px 11px;
+  border-radius: 10px;
+  background: var(--surface-muted);
+  color: var(--ink-muted);
+  font-size: .82rem;
+}
+
+.guidance-card-actions .button {
+  min-height: 44px;
+}
+
+.guidance-decision {
+  color: var(--ink-muted);
+  font-size: .78rem;
+  font-weight: 800;
+}
+
+.exchange-dialog {
+  width: min(920px, calc(100vw - 28px));
+  max-height: calc(100dvh - 28px);
+  padding: 0;
+  border: 0;
+  border-radius: 20px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 28px 80px rgba(9, 20, 34, .35);
+}
+
+.exchange-dialog::backdrop,
+.suggestion-transfer-dialog::backdrop {
+  background: rgba(5, 13, 24, .64);
+  backdrop-filter: blur(4px);
+}
+
+.exchange-dialog-shell {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  max-height: calc(100dvh - 28px);
+}
+
+.exchange-dialog-content {
+  display: grid;
+  grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr);
+  gap: 16px;
+  padding: 18px 22px;
+  overflow: auto;
+}
+
+.exchange-profile-picker,
+.exchange-privacy-picker {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+
+.exchange-profile-picker legend,
+.exchange-privacy-picker legend {
+  padding: 0 5px;
+  font-weight: 850;
+}
+
+.exchange-profile-picker label,
+.exchange-privacy-picker label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-height: 48px;
+  padding: 10px;
+  border-radius: 10px;
+  background: var(--surface-muted);
+}
+
+.exchange-profile-picker label > span,
+.exchange-privacy-picker label > span {
+  display: grid;
+  gap: 3px;
+}
+
+.exchange-profile-picker small,
+.exchange-privacy-picker p {
+  color: var(--ink-muted);
+}
+
+.exchange-profile-picker input,
+.exchange-privacy-picker input {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+}
+
+.exchange-manifest,
+.exchange-json-preview {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+
+.exchange-manifest h3 {
+  margin: 0 0 8px;
+}
+
+.exchange-manifest ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.exchange-json-preview summary {
+  min-height: 44px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.exchange-json-preview pre {
+  max-height: 330px;
+  margin: 8px 0 0;
+  padding: 12px;
+  overflow: auto;
+  border-radius: 10px;
+  background: #101b2a;
+  color: #d8e8e3;
+  font: .76rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.exchange-dialog-status {
+  grid-column: 1 / -1;
+  min-height: 22px;
+  margin: 0;
+  color: var(--ink-muted);
+}
+
+.exchange-dialog-actions {
+  position: sticky;
+  bottom: 0;
+  background: var(--surface);
+}
+
+.suggestion-transfer-dialog {
+  width: min(560px, calc(100vw - 28px));
+  padding: 0;
+  border: 0;
+  border-radius: 18px;
+  color: var(--ink);
+}
+
+.suggestion-change {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.suggestion-change div {
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--surface-muted);
+}
+
+.suggestion-change dt {
+  color: var(--ink-muted);
+  font-size: .76rem;
+}
+
+.suggestion-change dd {
+  margin: 4px 0 0;
+  font-weight: 850;
+}
+
+@media (max-width: 760px), (orientation: portrait) and (max-width: 1100px) {
+  .exchange-dialog {
+    width: 100vw;
+    max-width: none;
+    max-height: calc(100dvh - env(safe-area-inset-top));
+    margin: auto 0 0;
+    border-radius: 20px 20px 0 0;
+  }
+
+  .exchange-dialog-shell {
+    max-height: calc(100dvh - env(safe-area-inset-top));
+  }
+
+  .exchange-dialog-content {
+    grid-template-columns: 1fr;
+    padding: 16px;
+  }
+
+  .analysis-exchange-heading,
+  .external-guidance-heading,
+  .exchange-artifact {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .analysis-exchange-actions .button,
+  .exchange-artifact .button {
+    width: 100%;
+  }
+
+  .exchange-dialog-status {
+    grid-column: auto;
+  }
+}
+
+@media (pointer: coarse) {
+  .guidance-card-actions .button,
+  .exchange-dialog-actions .button,
+  .suggestion-transfer-dialog .button {
+    min-height: 48px;
+  }
+}

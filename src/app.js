@@ -33,6 +33,7 @@ const state = {
     previewMode: "source",
     channelMode: "stereo",
     previewGainOverride: null,
+    previewEditOverride: null,
   },
   assessment: {
     recordingType: "soundscape-quiet",
@@ -59,6 +60,17 @@ const state = {
   markers: [],
   jobs: { analysis: null, region: null, detail: null, export: null, storage: null },
   storedExports: [],
+  analysisExchange: {
+    preview: null,
+    lastBundle: null,
+    lastBundleBlob: null,
+    receipts: [],
+    guidance: null,
+    guidanceStatus: "empty",
+    guidanceDecisions: {},
+    auditLog: [],
+    activeSuggestionId: null,
+  },
   metadata: {
     title: "",
     series: "Twenty Minutes Here",
@@ -94,6 +106,7 @@ let analysisWorker = null;
 let exportWorker = null;
 let activeTrimHandle = null;
 let projectTools = null;
+let analysisExchangeTools = null;
 let resizeFrame = 0;
 let audioContext = null;
 let audioSourceNode = null;
@@ -108,6 +121,7 @@ const timelinePointers = new Map();
 let timelineGesture = null;
 let detailTimer = 0;
 let regionTimer = 0;
+let exchangePreviewSequence = 0;
 
 const elements = {
   appVersion: $("#appVersion"),
@@ -207,6 +221,29 @@ const elements = {
   updateBanner: $("#updateBanner"),
   applyUpdate: $("#applyUpdateButton"),
   dismissUpdate: $("#dismissUpdateButton"),
+  exchangeCapabilityStatus: $("#exchangeCapabilityStatus"),
+  openAnalysisExport: $("#openAnalysisExportButton"),
+  importGuidance: $("#importGuidanceButton"),
+  guidanceFileInput: $("#guidanceFileInput"),
+  analysisExchangeStatus: $("#analysisExchangeStatus"),
+  exchangeArtifact: $("#exchangeArtifact"),
+  exchangeArtifactDetails: $("#exchangeArtifactDetails"),
+  exchangeArtifactDigest: $("#exchangeArtifactDigest"),
+  downloadAnalysisAgain: $("#downloadAnalysisAgainButton"),
+  guidanceOriginStatus: $("#guidanceOriginStatus"),
+  guidanceVerification: $("#guidanceVerification"),
+  guidanceList: $("#guidanceList"),
+  analysisExchangeDialog: $("#analysisExchangeDialog"),
+  analysisExchangeForm: $("#analysisExchangeForm"),
+  exchangeManifestList: $("#exchangeManifestList"),
+  exchangeJsonPreview: $("#exchangeJsonPreview"),
+  exchangeDialogStatus: $("#exchangeDialogStatus"),
+  createAnalysisBundle: $("#createAnalysisBundleButton"),
+  suggestionTransferDialog: $("#suggestionTransferDialog"),
+  suggestionTransferSummary: $("#suggestionTransferSummary"),
+  suggestionBeforeValue: $("#suggestionBeforeValue"),
+  suggestionAfterValue: $("#suggestionAfterValue"),
+  confirmSuggestionTransfer: $("#confirmSuggestionTransferButton"),
 };
 
 const helpContent = {
@@ -573,6 +610,18 @@ function markEditChanged(reason = "edit") {
   state.regionAnalysis = null;
   state.verifiedExport = null;
   state.lastExportReport = null;
+  state.analysisExchange.preview = null;
+  state.analysisExchange.lastBundle = null;
+  state.analysisExchange.lastBundleBlob = null;
+  if (elements.exchangeArtifact) elements.exchangeArtifact.hidden = true;
+  if (state.analysisExchange.guidanceStatus === "matched") {
+    state.analysisExchange.guidanceStatus = "unverified";
+    elements.guidanceOriginStatus.textContent = "gAIa, osignerad, inaktuell";
+    elements.guidanceOriginStatus.className = "guidance-origin is-unverified";
+    elements.guidanceVerification.textContent = "Redigeringen har ändrats. Importera vägledningen igen efter att ett nytt analysunderlag har skapats.";
+    renderGuidanceSuggestions();
+  }
+  syncAnalysisExchangeAvailability();
   if (state.exportStatus === "complete") state.exportStatus = "idle";
   if (elements.regionMeasureStatus) elements.regionMeasureStatus.textContent = "Behöver beräknas på nytt";
   if (elements.verifiedMeasureStatus) elements.verifiedMeasureStatus.textContent = "Ogiltig efter ändring";
@@ -585,6 +634,7 @@ function invalidateSeriesProposal() {
   state.series.status = "preserved";
   state.series.proposedGainDb = null;
   state.monitoring.previewGainOverride = null;
+  state.monitoring.previewEditOverride = null;
   syncSeriesUi();
 }
 
@@ -689,6 +739,21 @@ async function openAudioFile(file) {
   state.analysisStatus = "idle";
   state.exportStatus = "idle";
   state.lastExportReport = null;
+  state.analysisExchange.preview = null;
+  state.analysisExchange.lastBundle = null;
+  state.analysisExchange.lastBundleBlob = null;
+  state.analysisExchange.guidance = null;
+  state.analysisExchange.guidanceStatus = "empty";
+  state.analysisExchange.guidanceDecisions = {};
+  state.analysisExchange.receipts = [];
+  state.analysisExchange.auditLog = [];
+  clearGuidancePreview();
+  elements.exchangeArtifact.hidden = true;
+  elements.guidanceOriginStatus.textContent = "Ingen fil importerad";
+  elements.guidanceOriginStatus.className = "guidance-origin";
+  elements.guidanceVerification.textContent = "Vägledning måste matcha bundle-ID, analysdigest och den lokalt verifierade källfilen.";
+  renderGuidanceSuggestions();
+  syncAnalysisExchangeAvailability();
   state.markers = [];
   state.trim.startSeconds = 0;
   state.trim.startFrame = 0;
@@ -771,6 +836,7 @@ function handleAnalysisMessage(data = {}) {
     if (operation === "analysis") finishAnalysisJob("Analysen avbröts");
     if (operation === "region") { elements.regionMeasureStatus.textContent = "Beräkningen avbröts"; elements.cancelRegion.hidden = true; }
     if (operation === "detail") setDetailStatus("Detaljläsningen avbröts", false);
+    if (operation === "region" || operation === "analysis") syncAnalysisExchangeAvailability();
     return;
   }
   if (data.type === "result" || data.result) {
@@ -785,9 +851,11 @@ function handleAnalysisMessage(data = {}) {
     if (operation !== "analysis") {
       if (operation === "detail" && elements.detailStatus) setDetailStatus("Detaljdata kunde inte läsas", false);
       if (operation === "region" && elements.regionMeasureStatus) { elements.regionMeasureStatus.textContent = "Beräkningen misslyckades"; elements.cancelRegion.hidden = true; }
+      if (operation === "region") syncAnalysisExchangeAvailability();
       return;
     }
     state.analysisStatus = "error";
+    syncAnalysisExchangeAvailability();
     elements.analyzeButton.disabled = false;
     elements.analyzeButton.textContent = "Försök analysera igen";
     updateAnalysisProgress(0, data.message || data.error || "Analysen misslyckades");
@@ -799,6 +867,7 @@ function handleAnalysisMessage(data = {}) {
 
 function finishAnalysisJob(message) {
   state.analysisStatus = state.analysis ? "complete" : "idle";
+  syncAnalysisExchangeAvailability();
   elements.analyzeButton.disabled = false;
   elements.analyzeButton.textContent = state.analysis ? "Analysera igen" : "Starta analys";
   elements.cancelAnalysis.hidden = true;
@@ -821,6 +890,17 @@ function startAnalysis() {
     return;
   }
   try {
+    state.analysisExchange.preview = null;
+    state.analysisExchange.lastBundle = null;
+    state.analysisExchange.lastBundleBlob = null;
+    state.analysisExchange.guidance = null;
+    state.analysisExchange.guidanceStatus = "empty";
+    state.analysisExchange.guidanceDecisions = {};
+    elements.exchangeArtifact.hidden = true;
+    elements.guidanceOriginStatus.textContent = "Ingen aktiv vägledning";
+    elements.guidanceOriginStatus.className = "guidance-origin";
+    elements.guidanceVerification.textContent = "Analysen körs om. Tidigare vägledning kan inte användas utan ett nytt matchande underlag.";
+    renderGuidanceSuggestions();
     analysisWorker?.terminate();
     analysisWorker = null;
     analysisWorker = ensureAnalysisWorker();
@@ -828,6 +908,7 @@ function startAnalysis() {
     state.jobs.analysis = jobId;
     analysisWorker.onerror = (event) => handleAnalysisMessage({ type: "error", jobId, operation: "analyze", message: event.message || "Analysmotorn kunde inte starta." });
     state.analysisStatus = "running";
+    syncAnalysisExchangeAvailability();
     elements.analyzeButton.disabled = true;
     elements.analyzeButton.textContent = "Analys pågår";
     elements.cancelAnalysis.hidden = false;
@@ -903,6 +984,7 @@ function applyAnalysisResult(result) {
   requestWaveformDetail();
   state.jobs.analysis = null;
   state.dirty = true;
+  syncAnalysisExchangeAvailability();
   showToast("Analysen är klar. Inga ändringar har gjorts i ljudet.");
   emitState("analysis-complete");
 }
@@ -924,6 +1006,7 @@ function requestRegionAnalysis() {
   if (previous) analysisWorker.postMessage({ type: "cancel", jobId: previous, operation: "analyze-region" });
   const jobId = nextJobId("region");
   state.jobs.region = jobId;
+  syncAnalysisExchangeAvailability();
   if (elements.regionMeasureStatus) elements.regionMeasureStatus.textContent = "Beräknar exakt urval";
   elements.cancelRegion.hidden = false;
   analysisWorker.postMessage({ type: "analyze-region", jobId, file: state.file, options: regionOptions() });
@@ -932,6 +1015,7 @@ function requestRegionAnalysis() {
 function applyRegionResult(result) {
   state.regionAnalysis = result;
   state.jobs.region = null;
+  syncAnalysisExchangeAvailability();
   elements.cancelRegion.hidden = true;
   const summary = result?.processed?.summary || result?.summary || {};
   const lufs = finite(summary.integratedLufs ?? summary.lufsI);
@@ -1498,18 +1582,23 @@ function configureMonitorRouting() {
 
 function fadeGeometry() {
   const rate = sampleRate();
-  const totalFrames = Math.max(0, state.trim.endFrame - state.trim.startFrame);
-  const fadeInFrames = Math.min(totalFrames, Math.max(0, Math.round(state.trim.fadeInSeconds * rate)));
-  const fadeOutFrames = Math.min(totalFrames, Math.max(0, Math.round(state.trim.fadeOutSeconds * rate)));
+  const edit = state.monitoring.previewMode === "export" && state.monitoring.previewEditOverride
+    ? state.monitoring.previewEditOverride
+    : state.trim;
+  const startFrame = edit === state.trim ? state.trim.startFrame : Math.round(edit.startSeconds * rate);
+  const endFrame = edit === state.trim ? state.trim.endFrame : Math.round(edit.endSeconds * rate);
+  const totalFrames = Math.max(0, endFrame - startFrame);
+  const fadeInFrames = Math.min(totalFrames, Math.max(0, Math.round(edit.fadeInSeconds * rate)));
+  const fadeOutFrames = Math.min(totalFrames, Math.max(0, Math.round(edit.fadeOutSeconds * rate)));
   return {
     rate,
-    start: state.trim.startFrame / rate,
-    end: state.trim.endFrame / rate,
+    start: startFrame / rate,
+    end: endFrame / rate,
     fadeInFrames,
     fadeOutFrames,
-    fadeInEnd: state.trim.startFrame / rate + Math.max(0, fadeInFrames - 1) / rate,
-    fadeOutStart: state.trim.endFrame / rate - fadeOutFrames / rate,
-    fadeOutEnd: state.trim.endFrame / rate - 1 / rate,
+    fadeInEnd: startFrame / rate + Math.max(0, fadeInFrames - 1) / rate,
+    fadeOutStart: endFrame / rate - fadeOutFrames / rate,
+    fadeOutEnd: endFrame / rate - 1 / rate,
   };
 }
 
@@ -1941,6 +2030,399 @@ async function loadProjectTools() {
   updateCapabilities(state.capabilities.analysis, state.capabilities.export);
 }
 
+async function loadAnalysisExchangeTools() {
+  try {
+    analysisExchangeTools = await import("./analysis-exchange.js");
+    elements.exchangeCapabilityStatus.textContent = "Lokalt tillgängligt";
+    elements.exchangeCapabilityStatus.classList.add("is-ready");
+  } catch {
+    analysisExchangeTools = null;
+    elements.exchangeCapabilityStatus.textContent = "Modul saknas";
+    elements.analysisExchangeStatus.textContent = "Analysutbyte är inte tillgängligt i den här byggnaden.";
+  }
+  syncAnalysisExchangeAvailability();
+}
+
+function syncAnalysisExchangeAvailability() {
+  const analysisReady = Boolean(analysisExchangeTools && state.file && state.analysisStatus === "complete" && state.analysis);
+  const ready = Boolean(analysisReady && state.regionAnalysis && !state.jobs.region);
+  elements.openAnalysisExport.disabled = !ready;
+  elements.importGuidance.disabled = !ready;
+  if (ready && !state.analysisExchange.lastBundle) elements.analysisExchangeStatus.textContent = "Källanalysen är klar. Du kan granska ett lokalt underlag eller importera vägledning.";
+  else if (analysisReady && !state.regionAnalysis) elements.analysisExchangeStatus.textContent = "Väntar på Beräknat exporturval innan analysunderlaget kan skapas.";
+}
+
+function exchangePrivacyOptions() {
+  const form = new FormData(elements.analysisExchangeForm);
+  return {
+    includeIdentity: form.has("includeIdentity"),
+    includeFileName: form.has("includeFileName"),
+    includeLocation: form.has("includeLocation"),
+    includeNotes: form.has("includeNotes"),
+    includeCreator: form.has("includeCreator"),
+  };
+}
+
+function exchangeProfile() {
+  return new FormData(elements.analysisExchangeForm).get("exchangeProfile") || "minimal";
+}
+
+function exchangeMetadata() {
+  const privacy = exchangePrivacyOptions();
+  const source = collectMetadata();
+  return {
+    ...(privacy.includeIdentity ? { title: source.title, series: source.series, episode: source.episode, sessionId: source.sessionId, project: source.project, date: source.date, localTime: source.localTime, lightConditions: source.lightConditions } : {}),
+    ...(privacy.includeFileName ? { sourceFileName: state.file?.name || "" } : {}),
+    ...(privacy.includeLocation ? { place: source.place, latitude: source.coordinatePrecision === "hidden" ? null : finite(source.latitude), longitude: source.coordinatePrecision === "hidden" ? null : finite(source.longitude) } : {}),
+    ...(privacy.includeNotes ? { tags: source.tags, environment: source.environment, notes: source.notes, relatedImage: source.relatedImage } : {}),
+    ...(privacy.includeCreator ? { creator: source.creator, equipment: source.equipment, license: source.license } : {}),
+  };
+}
+
+function analysisExchangeInput() {
+  const privacySelection = exchangePrivacyOptions();
+  const metadata = exchangeMetadata();
+  return {
+    file: state.file,
+    analysis: state.analysis,
+    regionAnalysis: state.regionAnalysis,
+    markers: state.markers.filter((marker) => marker.suggested === true && marker.origin === "analysis"),
+    metadata,
+    edit: projectEdit(),
+    assessment: state.assessment,
+    profile: exchangeProfile() === "temporal-diagnostics" ? "temporal-diagnostic" : "minimal",
+    privacy: privacySelection.includeLocation && state.metadata.coordinatePrecision === "exact" ? "exact" : "redacted",
+    privacySelection,
+    release: RELEASE,
+  };
+}
+
+function analysisBundleBuilder() {
+  return analysisExchangeTools?.buildAnalysisBundle
+    || analysisExchangeTools?.createAnalysisBundle
+    || analysisExchangeTools?.buildExchangeBundle
+    || null;
+}
+
+function normalizeBundleResult(result) {
+  const bundle = result?.bundle || result?.publicBundle || result;
+  if (!bundle || typeof bundle !== "object") throw new Error("Utbytesmodulen returnerade inget analysunderlag.");
+  const serialized = typeof result?.json === "string" ? result.json : analysisExchangeTools?.serializeAnalysisBundle?.(bundle);
+  const json = typeof serialized === "string" ? serialized : typeof serialized?.json === "string" ? serialized.json : JSON.stringify(bundle, null, 2);
+  const fileName = result?.fileName || `ljudr-analysis-${bundle.bundleId || "local"}.json`;
+  const digest = result?.analysisDigest || result?.digest || bundle.analysisDigest || bundle.binding?.analysisDigest || "digest saknas";
+  return { bundle, json, fileName, digest, receipt: result?.receipt || result?.localReceipt || null };
+}
+
+function auditEditSnapshot() {
+  return {
+    globalGainDb: state.trim.gainDb,
+    trimStartFrame: state.trim.startFrame,
+    trimEndFrame: state.trim.endFrame,
+    fadeInFrames: Math.round(state.trim.fadeInSeconds * sampleRate()),
+    fadeOutFrames: Math.round(state.trim.fadeOutSeconds * sampleRate()),
+  };
+}
+
+function appendAnalysisExchangeAudit(action, { bundleId, analysisDigest, suggestionId = null, before = auditEditSnapshot(), after = auditEditSnapshot() } = {}) {
+  if (!analysisExchangeTools?.appendAuditEntry || !bundleId || !analysisDigest) return;
+  state.analysisExchange.auditLog = analysisExchangeTools.appendAuditEntry(state.analysisExchange.auditLog, { action, bundleId, analysisDigest, suggestionId, before, after });
+}
+
+function renderExchangeManifest(profile = exchangeProfile(), bundle = null) {
+  const privacy = exchangePrivacyOptions();
+  const rows = [
+    "Objektiva sammanfattningsvärden och metodstatus",
+    "Observationer, markörer och synliga redigeringsval",
+    profile === "temporal-diagnostics"
+      ? "Grova 5-sekundersaggregat, högst 720 segment: Momentary p10, median och max, Short-term median och max, program-sample-peak max, låg-nivåandel samt stereokorrelation median och min"
+      : "Ingen kontinuerlig mätserie",
+    "Bundle-ID och analysdigest. Full källhash stannar lokalt",
+    "Aldrig ljud, waveform, L/R-nivåserier, RMS-arrayer eller råa samples",
+  ];
+  const selected = Object.entries(privacy).filter(([, enabled]) => enabled).map(([key]) => ({
+    includeIdentity: "Titel och sessionsuppgifter",
+    includeFileName: "Källfilens namn",
+    includeLocation: "Plats enligt aktiv koordinatprecision",
+    includeNotes: "Taggar, miljö, anteckningar och länk",
+    includeCreator: "Skapare, utrustning och licens",
+  })[key]);
+  rows.push(selected.length ? `Frivillig metadata: ${selected.join(", ")}` : "Ingen frivillig metadata");
+  if (privacy.includeLocation && state.metadata.coordinatePrecision === "exact") rows.push("Exakt platsprofil är vald. Markörtider kan därför behålla decimalprecision. Granska JSON-preview före export.");
+  if (bundle?.temporalSegments?.length) rows.push(`${bundle.temporalSegments.length} temporala segment`);
+  elements.exchangeManifestList.innerHTML = rows.map((row) => `<li>${escapeHtml(row)}</li>`).join("");
+}
+
+async function refreshAnalysisBundlePreview() {
+  const builder = analysisBundleBuilder();
+  if (!builder || !state.analysis) return;
+  const requestSequence = ++exchangePreviewSequence;
+  elements.createAnalysisBundle.disabled = true;
+  elements.exchangeDialogStatus.textContent = "Sammanställer och integritetsgranskar lokalt";
+  try {
+    const result = await builder(analysisExchangeInput());
+    if (requestSequence !== exchangePreviewSequence) return;
+    const normalized = normalizeBundleResult(result);
+    if (analysisExchangeTools?.createLocalReceipt) normalized.receipt = await analysisExchangeTools.createLocalReceipt(normalized.bundle, { sourceIdentity: state.analysis?.sourceIdentity || null });
+    state.analysisExchange.preview = normalized;
+    elements.exchangeJsonPreview.textContent = normalized.json;
+    renderExchangeManifest(exchangeProfile(), normalized.bundle);
+    elements.exchangeDialogStatus.textContent = `Preview klar. ${formatBytes(new Blob([normalized.json]).size)}. Kontrollera innehållet innan filen skapas.`;
+    elements.createAnalysisBundle.disabled = false;
+  } catch (error) {
+    if (requestSequence !== exchangePreviewSequence) return;
+    state.analysisExchange.preview = null;
+    elements.exchangeJsonPreview.textContent = "Preview kunde inte skapas.";
+    elements.exchangeDialogStatus.textContent = error.message || "Analysunderlaget kunde inte skapas.";
+  }
+}
+
+async function openAnalysisExchangeReview() {
+  if (!state.analysis || !analysisExchangeTools) return;
+  if (!state.regionAnalysis || state.jobs.region) {
+    showToast("Vänta tills Beräknat exporturval är klart.", "error", 6500);
+    return;
+  }
+  state.analysisExchange.preview = null;
+  renderExchangeManifest();
+  elements.exchangeJsonPreview.textContent = "Skapar exakt JSON-preview lokalt.";
+  elements.analysisExchangeDialog.showModal();
+  await refreshAnalysisBundlePreview();
+}
+
+function createLocalAnalysisBundle() {
+  const preview = state.analysisExchange.preview;
+  if (!preview) return;
+  const blob = new Blob([preview.json], { type: "application/json" });
+  state.analysisExchange.lastBundle = preview;
+  state.analysisExchange.lastBundleBlob = blob;
+  if (preview.receipt) state.analysisExchange.receipts = [preview.receipt, ...state.analysisExchange.receipts.filter((item) => item?.bundleId !== preview.receipt?.bundleId)];
+  appendAnalysisExchangeAudit("export", { bundleId: preview.bundle.bundleId, analysisDigest: preview.digest });
+  downloadBlob(blob, preview.fileName);
+  elements.exchangeArtifact.hidden = false;
+  elements.exchangeArtifactDetails.textContent = `${preview.fileName} · ${formatBytes(blob.size)}`;
+  elements.exchangeArtifactDigest.textContent = `Analysdigest: ${preview.digest}`;
+  elements.analysisExchangeStatus.textContent = "Analysunderlaget är klart. Filen skapades lokalt och inget laddades upp.";
+  elements.analysisExchangeDialog.close();
+  state.dirty = true;
+  emitState("analysis-bundle-created");
+}
+
+function guidanceImporter() {
+  return analysisExchangeTools?.parseGuidanceFile
+    || analysisExchangeTools?.importGuidanceFile
+    || analysisExchangeTools?.validateGuidance
+    || analysisExchangeTools?.readGuidance
+    || null;
+}
+
+function normalizedGuidanceResult(result) {
+  const guidance = result?.guidance || result?.data || result;
+  const suggestions = Array.isArray(result?.suggestions) ? result.suggestions : Array.isArray(guidance?.suggestions) ? guidance.suggestions : [];
+  const moduleMatch = result?.matched === true || result?.verified === true || result?.match === true || result?.match?.matches === true || result?.status === "matched" || result?.status === "bound-current";
+  const hasCurrentDigest = Boolean(state.analysisExchange.lastBundle?.digest);
+  const matched = moduleMatch && hasCurrentDigest;
+  const reason = !hasCurrentDigest
+    ? "Skapa ett nytt aktuellt analysunderlag innan vägledningen kan aktiveras."
+    : result?.match?.reason || result?.reason || result?.message || guidance?.verification?.message || "Ingen verifieringsförklaring angavs.";
+  return { guidance, suggestions, matched, receipt: result?.receipt || null, reason };
+}
+
+async function importGuidanceFile(file) {
+  if (!file) return;
+  clearGuidancePreview();
+  if (file.size > 2 * 1024 * 1024) {
+    showToast("Vägledningsfilen är större än 2 MB och avvisades.", "error", 8000);
+    return;
+  }
+  const importer = guidanceImporter();
+  if (!importer) return;
+  elements.guidanceVerification.textContent = "Verifierar bundle-ID, analysdigest och lokal källidentitet";
+  try {
+    const text = await file.text();
+    JSON.parse(text);
+    const result = await importer(text, {
+      bundleReceipts: state.analysisExchange.receipts,
+      sourceIdentity: state.analysis?.sourceIdentity || null,
+      currentAnalysisDigest: state.analysisExchange.lastBundle?.digest || null,
+    });
+    const normalized = normalizedGuidanceResult(result);
+    state.analysisExchange.guidance = normalized;
+    state.analysisExchange.guidanceStatus = normalized.matched ? "matched" : "unverified";
+    state.analysisExchange.guidanceDecisions = {};
+    appendAnalysisExchangeAudit("import", { bundleId: normalized.guidance?.bundleId, analysisDigest: normalized.guidance?.analysisDigest });
+    elements.guidanceOriginStatus.textContent = normalized.matched ? "gAIa, osignerad, matchad" : "gAIa, osignerad, overifierad";
+    elements.guidanceOriginStatus.className = `guidance-origin ${normalized.matched ? "is-matched" : "is-unverified"}`;
+    elements.guidanceVerification.textContent = normalized.matched
+      ? "Bundle-ID och analysdigest matchar. Källfilen har verifierats lokalt. Inget förslag har använts."
+      : `Förslagen är endast läsbara och kan inte överföras. ${normalized.reason}`;
+    renderGuidanceSuggestions();
+    showToast(normalized.matched ? "Vägledningen matchar aktuell lokal analys." : "Vägledningen kunde inte bindas säkert till aktuell analys.", normalized.matched ? "info" : "error", 8000);
+    emitState("guidance-imported");
+  } catch (error) {
+    state.analysisExchange.guidance = null;
+    state.analysisExchange.guidanceStatus = "rejected";
+    elements.guidanceOriginStatus.textContent = "Fil avvisad";
+    elements.guidanceOriginStatus.className = "guidance-origin is-unverified";
+    elements.guidanceVerification.textContent = error.message || "Vägledningsfilen kunde inte valideras.";
+    renderGuidanceSuggestions();
+    showToast("Vägledningsfilen avvisades. Inga kontroller ändrades.", "error", 8000);
+  } finally {
+    elements.guidanceFileInput.value = "";
+  }
+}
+
+function normalizeSuggestion(suggestion, index) {
+  const action = suggestion?.action || suggestion?.type || suggestion?.kind || "review-region";
+  const proposedValue = suggestion?.proposedValue ?? suggestion?.globalGainDb ?? suggestion?.value ?? suggestion?.after ?? null;
+  const startSeconds = finite(suggestion?.startSeconds ?? suggestion?.region?.startSeconds ?? suggestion?.timeSeconds);
+  const endSeconds = finite(suggestion?.endSeconds ?? suggestion?.region?.endSeconds);
+  return {
+    ...suggestion,
+    id: String(suggestion?.id || `guidance-${index + 1}`),
+    action,
+    proposedValue,
+    startSeconds,
+    endSeconds,
+    title: String(suggestion?.title || suggestion?.summary || suggestion?.label || "Externt förslag"),
+    rationale: String(suggestion?.rationale || suggestion?.reason || suggestion?.description || "Ingen motivering angavs."),
+  };
+}
+
+function suggestionEvidence(suggestion) {
+  const evidence = Array.isArray(suggestion.evidenceRefs) ? suggestion.evidenceRefs.join(" · ") : Array.isArray(suggestion.evidence) ? suggestion.evidence.join(" · ") : suggestion.evidence || suggestion.measurement || "Inget särskilt mätunderlag angavs";
+  const region = suggestion.startSeconds === null ? "" : ` · Region ${formatTime(suggestion.startSeconds)}${suggestion.endSeconds === null ? "" : ` till ${formatTime(suggestion.endSeconds)}`}`;
+  return `${evidence}${region}`;
+}
+
+function renderGuidanceSuggestions() {
+  const normalized = state.analysisExchange.guidance;
+  const suggestions = normalized?.suggestions?.map(normalizeSuggestion) || [];
+  if (!suggestions.length) {
+    elements.guidanceList.innerHTML = '<li class="list-placeholder">Inga externa förslag</li>';
+    return;
+  }
+  const actionable = state.analysisExchange.guidanceStatus === "matched";
+  elements.guidanceList.innerHTML = suggestions.map((suggestion) => {
+    const decision = state.analysisExchange.guidanceDecisions[suggestion.id] || "Ogranskat";
+    const disabled = actionable ? "" : " disabled";
+    const canTransfer = actionable && suggestion.action === "global-gain" && !validBitsTransformBlocked();
+    const canPreview = actionable && suggestion.action === "global-gain";
+    const classification = { objective: "Objektivt underlag", heuristic: "Heuristisk tolkning", artistic: "Konstnärligt förslag" }[suggestion.classification] || "Extern tolkning";
+    const prediction = [finite(suggestion.predictedIntegratedLufs) === null ? null : `${formatDecimal(suggestion.predictedIntegratedLufs, 1)} LUFS-I`, finite(suggestion.predictedTruePeakDbtp) === null ? null : `${formatDecimal(suggestion.predictedTruePeakDbtp, 1)} dBTP`].filter(Boolean).join(" · ");
+    return `<li class="guidance-card" data-guidance-id="${escapeHtml(suggestion.id)}"><div class="guidance-card-head"><h4>${escapeHtml(suggestion.title)}</h4><span class="guidance-decision">${escapeHtml(decision)}</span></div><small>${escapeHtml(classification)}${finite(suggestion.confidence) === null ? "" : ` · Konfidens ${formatDecimal(suggestion.confidence, 2)}`}</small><p>${escapeHtml(suggestion.rationale)}</p><div class="guidance-evidence"><strong>Evidens</strong><span>${escapeHtml(suggestionEvidence(suggestion))}${prediction ? ` · Förutsagt: ${escapeHtml(prediction)}` : ""}</span></div><div class="guidance-card-actions"><button class="button button-quiet button-small" type="button" data-guidance-action="show"${disabled}>Visa i tidslinjen</button><button class="button button-secondary button-small" type="button" data-guidance-action="preview"${canPreview ? "" : " disabled"}>Prova i medhörning</button><button class="button button-primary button-small" type="button" data-guidance-action="transfer"${canTransfer ? "" : " disabled"}>Överför till kontroller</button><button class="button button-quiet button-small" type="button" data-guidance-action="reject"${disabled}>Avvisa</button><button class="button button-quiet button-small" type="button" data-guidance-action="preserve"${disabled}>Bevara oförändrat</button></div></li>`;
+  }).join("");
+}
+
+function guidanceSuggestions() {
+  return state.analysisExchange.guidance?.suggestions?.map(normalizeSuggestion) || [];
+}
+
+function currentSuggestionValue(suggestion) {
+  if (["global-gain", "globalGainDb", "gain"].includes(suggestion.action)) return `${formatDecimal(state.trim.gainDb, 1)} dB`;
+  if (["trim-start", "startFrame", "startSeconds"].includes(suggestion.action)) return formatTime(state.trim.startSeconds);
+  if (["trim-end", "endFrame", "endSeconds"].includes(suggestion.action)) return formatTime(state.trim.endSeconds);
+  if (["fade-in", "fadeInSeconds"].includes(suggestion.action)) return `${formatDecimal(state.trim.fadeInSeconds, 3)} s`;
+  if (["fade-out", "fadeOutSeconds"].includes(suggestion.action)) return `${formatDecimal(state.trim.fadeOutSeconds, 3)} s`;
+  if (["add-marker", "marker"].includes(suggestion.action)) return "Ingen egen markör";
+  return "Oförändrat";
+}
+
+function proposedSuggestionValue(suggestion) {
+  if (typeof suggestion.proposedValue === "object" && suggestion.proposedValue !== null) return JSON.stringify(suggestion.proposedValue);
+  return String(suggestion.proposedValue ?? "Bevara nuvarande värde");
+}
+
+function showGuidanceSuggestion(suggestion) {
+  const references = Array.isArray(suggestion.evidenceRefs) ? suggestion.evidenceRefs : [];
+  const marker = state.markers.find((item) => references.includes(item.id)
+    || references.includes(item.type)
+    || (references.includes("true-peak") && /true peak|topp/i.test(`${item.text || ""} ${item.detail || ""}`)));
+  if (marker) {
+    const center = finite(marker.seconds) ?? 0;
+    const end = finite(marker.endSeconds) ?? center;
+    setZoomAround(center + (end - center) / 2, Math.max(2, (end - center) * 2));
+    state.playback.currentSeconds = clamp(center, 0, durationSeconds());
+    elements.audio.currentTime = state.playback.currentSeconds;
+  } else fitTimeline();
+  setMode("analyze");
+  scheduleCanvasRender();
+  showToast(marker ? "Evidensmarkören visas i källkontext." : "Hela analysens tidslinje visas. Förslaget saknar en specifik tidsregion.");
+}
+
+function clearGuidancePreview() {
+  state.monitoring.previewEditOverride = null;
+  state.monitoring.previewGainOverride = null;
+  updateMonitoringGraph();
+}
+
+function previewGuidanceSuggestion(suggestion) {
+  state.monitoring.previewMode = "export";
+  state.monitoring.previewEditOverride = { ...state.trim };
+  state.monitoring.previewGainOverride = null;
+  const value = finite(suggestion.proposedValue);
+  if (["global-gain", "globalGainDb", "gain"].includes(suggestion.action) && value !== null) state.monitoring.previewGainOverride = value;
+  else if (["trim-start", "startSeconds"].includes(suggestion.action) && value !== null) state.monitoring.previewEditOverride.startSeconds = value;
+  else if (["trim-end", "endSeconds"].includes(suggestion.action) && value !== null) state.monitoring.previewEditOverride.endSeconds = value;
+  else if (["fade-in", "fadeInSeconds"].includes(suggestion.action) && value !== null) state.monitoring.previewEditOverride.fadeInSeconds = value;
+  else if (["fade-out", "fadeOutSeconds"].includes(suggestion.action) && value !== null) state.monitoring.previewEditOverride.fadeOutSeconds = value;
+  const radio = $("input[name='previewMode'][value='export']");
+  if (radio) radio.checked = true;
+  updateMonitoringGraph();
+  syncAuditionUi();
+  state.analysisExchange.guidanceDecisions[suggestion.id] = "Provas tillfälligt";
+  renderGuidanceSuggestions();
+  state.playback.previewStopAt = state.monitoring.previewEditOverride.endSeconds;
+  playFrom(suggestion.startSeconds ?? state.monitoring.previewEditOverride.startSeconds);
+}
+
+function openSuggestionTransfer(suggestion) {
+  state.analysisExchange.activeSuggestionId = suggestion.id;
+  elements.suggestionTransferSummary.textContent = `${suggestion.title}. ${suggestion.rationale}`;
+  elements.suggestionBeforeValue.textContent = currentSuggestionValue(suggestion);
+  elements.suggestionAfterValue.textContent = proposedSuggestionValue(suggestion);
+  elements.suggestionTransferDialog.showModal();
+}
+
+function applyGuidanceSuggestion(suggestion) {
+  const value = finite(suggestion.proposedValue);
+  if (suggestion.action !== "global-gain" || value === null) throw new Error("Förslagstypen kan inte överföras till en kontroll i denna version.");
+  const before = auditEditSnapshot();
+  updateGain(value);
+  if (Math.abs(value) > 1e-9) {
+    const editedRadio = $("input[name='exportProfile'][value='edited-wav']");
+    if (editedRadio) editedRadio.checked = true;
+    setExportProfile("edited-wav");
+  }
+  clearGuidancePreview();
+  state.analysisExchange.guidanceDecisions[suggestion.id] = "Övertaget till kontroller";
+  appendAnalysisExchangeAudit("accept", { bundleId: state.analysisExchange.guidance?.guidance?.bundleId, analysisDigest: state.analysisExchange.guidance?.guidance?.analysisDigest, suggestionId: suggestion.id, before, after: auditEditSnapshot() });
+  elements.suggestionTransferDialog.close();
+  renderGuidanceSuggestions();
+  showToast("Förslaget överfördes efter ditt uttryckliga beslut. Exporturvalet beräknas om.");
+  emitState("guidance-transferred");
+}
+
+function handleGuidanceAction(event) {
+  const button = event.target.closest("[data-guidance-action]");
+  const card = button?.closest("[data-guidance-id]");
+  if (!button || !card || state.analysisExchange.guidanceStatus !== "matched") return;
+  const suggestion = guidanceSuggestions().find((item) => item.id === card.dataset.guidanceId);
+  if (!suggestion) return;
+  const action = button.dataset.guidanceAction;
+  if (action === "show") showGuidanceSuggestion(suggestion);
+  if (action === "preview") previewGuidanceSuggestion(suggestion);
+  if (action === "transfer") openSuggestionTransfer(suggestion);
+  if (action === "reject" || action === "preserve") {
+    clearGuidancePreview();
+    state.analysisExchange.guidanceDecisions[suggestion.id] = action === "reject" ? "Avvisat" : "Bevara oförändrat";
+    appendAnalysisExchangeAudit("reject", { bundleId: state.analysisExchange.guidance?.guidance?.bundleId, analysisDigest: state.analysisExchange.guidance?.guidance?.analysisDigest, suggestionId: suggestion.id });
+    renderGuidanceSuggestions();
+    state.dirty = true;
+    emitState(`guidance-${action}`);
+  }
+}
+
 function collectMetadata() {
   const data = Object.fromEntries(new FormData(elements.metadataForm).entries());
   state.metadata = { ...state.metadata, ...data };
@@ -1982,6 +2464,13 @@ function projectSettings() {
     },
     assessment: { ...state.assessment },
     series: { ...state.series },
+    analysisExchange: {
+      receipts: state.analysisExchange.receipts.map((receipt) => ({ ...receipt })),
+      guidance: state.analysisExchange.guidance?.guidance || null,
+      guidanceStatus: state.analysisExchange.guidanceStatus,
+      guidanceDecisions: { ...state.analysisExchange.guidanceDecisions },
+      auditLog: state.analysisExchange.auditLog.map((entry) => ({ ...entry })),
+    },
   };
 }
 
@@ -2075,6 +2564,26 @@ async function applyPendingProjectToFile() {
   const profileRadio = $(`input[name='exportProfile'][value='${state.exportProfile}']`);
   if (profileRadio) profileRadio.checked = true;
   state.series = { ...state.series, ...(project.settings?.series || {}) };
+  const savedExchange = project.settings?.analysisExchange || {};
+  if (Array.isArray(savedExchange.receipts)) state.analysisExchange.receipts = savedExchange.receipts.filter((receipt) => receipt && typeof receipt === "object");
+  if (Array.isArray(savedExchange.auditLog)) {
+    try {
+      analysisExchangeTools?.validateAuditLog?.(savedExchange.auditLog);
+      state.analysisExchange.auditLog = savedExchange.auditLog.map((entry) => ({ ...entry }));
+    } catch {
+      state.analysisExchange.auditLog = [];
+      showToast("Projektets auditlogg kunde inte verifieras och lästes inte in.", "error", 8000);
+    }
+  }
+  if (savedExchange.guidance && typeof savedExchange.guidance === "object") {
+    state.analysisExchange.guidance = normalizedGuidanceResult({ guidance: savedExchange.guidance, status: "unverified", reason: "Importera vägledningsfilen igen för ny lokal verifiering." });
+    state.analysisExchange.guidanceStatus = "unverified";
+    state.analysisExchange.guidanceDecisions = { ...(savedExchange.guidanceDecisions || {}) };
+    elements.guidanceOriginStatus.textContent = "gAIa, osignerad, kräver ny verifiering";
+    elements.guidanceOriginStatus.className = "guidance-origin is-unverified";
+    elements.guidanceVerification.textContent = "Projektet innehåller tidigare vägledning. Importera originalfilen igen innan någon åtgärd kan användas.";
+    renderGuidanceSuggestions();
+  }
   const savedMonitoring = project.settings?.monitoring || {};
   state.monitoring = {
     ...state.monitoring,
@@ -2083,6 +2592,7 @@ async function applyPendingProjectToFile() {
     previewMode: ["source", "export"].includes(savedMonitoring.previewMode) ? savedMonitoring.previewMode : state.monitoring.previewMode,
     channelMode: ["stereo", "left", "right", "mono"].includes(savedMonitoring.channelMode) ? savedMonitoring.channelMode : state.monitoring.channelMode,
     previewGainOverride: null,
+    previewEditOverride: null,
   };
   const savedView = project.settings?.view || {};
   const savedViewStart = clamp(finite(savedView.startSeconds) ?? state.view.startSeconds, 0, durationSeconds());
@@ -2141,6 +2651,11 @@ function reportInput() {
       regionAnalysis: state.regionAnalysis,
       verifiedExport: hasCurrentVerifiedExport ? state.verifiedExport : null,
       series: state.series,
+      analysisExchange: {
+        guidanceStatus: state.analysisExchange.guidanceStatus,
+        guidanceDecisions: { ...state.analysisExchange.guidanceDecisions },
+        auditLog: state.analysisExchange.auditLog.map((entry) => ({ ...entry })),
+      },
     },
   };
 }
@@ -2924,6 +3439,18 @@ function bindEvents() {
 
   elements.metadataForm.addEventListener("input", () => {
     collectMetadata();
+    state.analysisExchange.preview = null;
+    state.analysisExchange.lastBundle = null;
+    state.analysisExchange.lastBundleBlob = null;
+    elements.exchangeArtifact.hidden = true;
+    if (state.analysisExchange.guidanceStatus === "matched") {
+      state.analysisExchange.guidanceStatus = "unverified";
+      elements.guidanceOriginStatus.textContent = "gAIa, osignerad, inaktuell";
+      elements.guidanceOriginStatus.className = "guidance-origin is-unverified";
+      elements.guidanceVerification.textContent = "Metadata som ingick i analysunderlaget har ändrats. Skapa ett nytt underlag och importera vägledningen igen.";
+      renderGuidanceSuggestions();
+    }
+    if (state.analysis) elements.analysisExchangeStatus.textContent = "Metadata har ändrats. Skapa och granska ett nytt analysunderlag.";
     state.dirty = true;
     emitState("metadata");
   });
@@ -2940,6 +3467,33 @@ function bindEvents() {
   $$("input[name='exportProfile']").forEach((input) => input.addEventListener("change", () => setExportProfile(input.value)));
   elements.storedExportsList.addEventListener("click", handleStoredExportAction);
   elements.clearStoredExports.addEventListener("click", clearStoredExports);
+
+  elements.openAnalysisExport.addEventListener("click", openAnalysisExchangeReview);
+  elements.importGuidance.addEventListener("click", () => elements.guidanceFileInput.click());
+  elements.guidanceFileInput.addEventListener("change", () => importGuidanceFile(elements.guidanceFileInput.files?.[0]));
+  $("#closeAnalysisExchangeButton").addEventListener("click", () => elements.analysisExchangeDialog.close());
+  $("#cancelAnalysisExchangeButton").addEventListener("click", () => elements.analysisExchangeDialog.close());
+  $("#refreshAnalysisPreviewButton").addEventListener("click", refreshAnalysisBundlePreview);
+  elements.createAnalysisBundle.addEventListener("click", () => {
+    try { createLocalAnalysisBundle(); } catch (error) { showToast(`Analysunderlaget kunde inte sparas: ${error.message}`, "error", 8000); }
+  });
+  elements.analysisExchangeForm.addEventListener("change", (event) => {
+    if (event.target.matches("input[name='exchangeProfile'], input[type='checkbox']")) refreshAnalysisBundlePreview();
+  });
+  elements.analysisExchangeDialog.addEventListener("click", (event) => { if (event.target === elements.analysisExchangeDialog) elements.analysisExchangeDialog.close(); });
+  elements.downloadAnalysisAgain.addEventListener("click", () => {
+    if (state.analysisExchange.lastBundleBlob) downloadBlob(state.analysisExchange.lastBundleBlob, state.analysisExchange.lastBundle.fileName);
+  });
+  elements.guidanceList.addEventListener("click", (event) => {
+    try { handleGuidanceAction(event); } catch (error) { showToast(`Beslutet kunde inte sparas: ${error.message}`, "error", 8000); }
+  });
+  $("#closeSuggestionTransferButton").addEventListener("click", () => elements.suggestionTransferDialog.close());
+  $("#cancelSuggestionTransferButton").addEventListener("click", () => elements.suggestionTransferDialog.close());
+  elements.confirmSuggestionTransfer.addEventListener("click", () => {
+    const suggestion = guidanceSuggestions().find((item) => item.id === state.analysisExchange.activeSuggestionId);
+    if (!suggestion || state.analysisExchange.guidanceStatus !== "matched") return;
+    try { applyGuidanceSuggestion(suggestion); } catch (error) { showToast(error.message, "error", 7000); }
+  });
 
   $("#helpButton").addEventListener("click", () => openHelp());
   $("#closeHelpButton").addEventListener("click", () => elements.helpDialog.close());
@@ -2992,6 +3546,7 @@ async function initialize() {
   setExportProfile(state.exportProfile, { dirty: false, force: true });
   renderStoredExports();
   await loadProjectTools();
+  await loadAnalysisExchangeTools();
   if (state.capabilities.opfs && state.capabilities.workers) sendStorageCommand("storage-list");
   if ("serviceWorker" in navigator && location.protocol !== "file:") {
     navigator.serviceWorker.register(new URL("../sw.js", import.meta.url), { scope: "./" }).then(watchServiceWorkerRegistration).catch(() => {});

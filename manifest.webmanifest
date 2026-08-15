@@ -2,7 +2,7 @@
   "name": "LjudR Analysverkstad",
   "id": "./?app=ljudr-analysverkstad",
   "short_name": "LjudR",
-  "description": "Lokal analys och varsam trimning av fältinspelningar.",
+  "description": "Lokal analys, ljudfritt analysunderlag och varsam trimning av fältinspelningar.",
   "lang": "sv-SE",
   "start_url": "./",
   "scope": "./",

@@ -7,6 +7,10 @@ import { resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
 const read = path => readFile(resolve(root, path), "utf8");
+let buildPromise;
+const ensureBuild = () => buildPromise ||= Promise.resolve().then(() => {
+  execFileSync(process.execPath, ["scripts/build-site.mjs"], { cwd: root, stdio: "pipe" });
+});
 
 test("releaseversionen är konsekvent i motorer, projekt och PWA-cache", async () => {
   const packageData = JSON.parse(await read("package.json"));
@@ -43,7 +47,7 @@ test("Pages använder separata jobb och actions pinnade till full SHA", async ()
 });
 
 test("webbpaketet innehåller exakt den uttryckliga tillåtelselistan", async () => {
-  execFileSync(process.execPath, ["scripts/build-site.mjs"], { cwd: root, stdio: "pipe" });
+  await ensureBuild();
   const files = (await readdir(resolve(root, "_site"), { recursive: true, withFileTypes: true }))
     .filter(entry => entry.isFile())
     .map(entry => {
@@ -58,6 +62,7 @@ test("webbpaketet innehåller exakt den uttryckliga tillåtelselistan", async ()
     "build-manifest.json",
     "index.html",
     "manifest.webmanifest",
+    "src/analysis-exchange.js",
     "src/analysis-worker.js",
     "src/app.js",
     "src/dsp-core.js",
@@ -75,7 +80,7 @@ test("webbpaketet innehåller exakt den uttryckliga tillåtelselistan", async ()
 });
 
 test("buildmanifestet binder varje publik fil till releasecommit och SHA-256", async () => {
-  execFileSync(process.execPath, ["scripts/build-site.mjs"], { cwd: root, stdio: "pipe" });
+  await ensureBuild();
   const manifest = JSON.parse(await readFile(resolve(root, "_site/build-manifest.json"), "utf8"));
   const deployedReleaseMeta = await readFile(resolve(root, "_site/src/release-meta.js"), "utf8");
   assert.equal(manifest.schema, "se.gaia.ljudr.build-manifest/1");

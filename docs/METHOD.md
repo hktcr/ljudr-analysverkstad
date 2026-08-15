@@ -47,3 +47,11 @@ Efter skrivning kontrolleras header, chunkgränser, frameCount, format och dataB
 ## Identitet och reproducerbarhet
 
 Full lokal inkrementell SHA-256 över hela originalfilens bytes är projektets säkra källidentitet. Den beräknas blockvis utan helfilsbuffert och verifieras mot standardvektorer och oberoende verktyg. Edge-hash är endast snabb förkontroll. Exportens fulla hash beräknas över exakt skrivna bytes. Projekt, rapport och buildmanifest anger appversion, motorversion, metodversion, releasecommit och valideringsstatus när underlaget finns.
+
+## Ljudfritt analysunderlag
+
+Ett underlag enligt `se.gaia.ljudr.analysis-exchange/1` är en minimerad representation för extern tolkning. Det är inte en ljudexport och innehåller inte originalets fulla filhash. Underlagets slumpmässiga bundleId och kanoniska analysisDigest binds lokalt till full källidentitet, metodversion och editidentitet.
+
+Minimal innehåller ingen kontinuerlig tidsserie. Temporal diagnostik använder minst 5 sekunder per intervall och högst 720 intervall. För längre material ökas bredden deterministiskt i steg om 5 sekunder. Endast aggregerad Momentary, Short-term, sample peak, låg-nivåandel och stereokorrelation ingår. Segmentbaserad True Peak är uttryckligen otillgänglig eftersom motorn saknar en verifierad True Peak-tidsserie. Samples, waveform, spektrum, kanalnivåserier, RMS-arrayer och exakta samplepositioner är förbjudna.
+
+Guidance enligt `se.gaia.ljudr.guidance/1` är ett externt tolkningslager. Den måste matcha exakt bundleId och analysisDigest, redovisa gAIa/VEP-provenance och referera till känd evidens. Modellbaserad text är inte deterministisk. Guidance förändrar aldrig editkedjan förrän användaren granskat rådet och gjort ett separat uttryckligt val.

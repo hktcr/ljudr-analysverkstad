@@ -1,6 +1,6 @@
 # LjudR Analysverkstad
 
-LjudR är ett lokalt och icke destruktivt verktyg för analys och varsam redigering av fältinspelningar och ljudlandskap. Version `1.0.0-rc.3` är en offentlig valideringskandidat, inte en produktionsverifierad 1.0.
+LjudR är ett lokalt och icke destruktivt verktyg för analys och varsam redigering av fältinspelningar och ljudlandskap. Version `1.0.0-rc.4` är en offentlig valideringskandidat, inte en produktionsverifierad 1.0.
 
 ## Integritet och princip
 
@@ -38,6 +38,14 @@ Rapporten skiljer strikt mellan:
 - **Beräknat exporturval**, editkedjan före kvantisering
 - **Verifierad exportfil**, återöppnad och uppmätt faktisk WAV
 
+## Ljudfritt analysunderlag för gAIa och VEP
+
+LjudR kan skapa ett lokalt JSON-underlag enligt `se.gaia.ljudr.analysis-exchange/1`. Underlaget innehåller tekniska sammanfattningar och maskinella observationer men aldrig ljudsamplingar, waveform, spektrum, binär media eller originalfilens fulla SHA-256. Standardprofilen `Minimal` innehåller ingen kontinuerlig tidsserie och saknar filnamn, fria markörtexter och platskoordinater. Den uttryckliga profilen `Temporal diagnostik` kan lägga till grova programaggregat med minst 5 sekunder per segment och högst 720 segment. Segmenten innehåller sample peak, inte segmentbaserad True Peak, eftersom motorn saknar en verifierad True Peak-tidsserie.
+
+Exporten är alltid manuell och visas i sin helhet före hämtning. All frivillig metadata är av från början och väljs fältgrupp för fältgrupp. Exakta koordinater kräver ett uttryckligt exakt integritetsval. LjudR ansluter inte till gAIa eller någon AI-tjänst och behåller `connect-src 'none'`. Användaren kan själv föra JSON-filen till ett separat gAIa/VEP-flöde.
+
+Vägledning kan återimporteras enligt `se.gaia.ljudr.guidance/1`. Den binds till exakt `bundleId` och `analysisDigest`, valideras som obetrodd data och kan aldrig automatiskt ändra trim, fade, gain, profil eller export. Osignerad vägledning märks som integritetskontrollerad men inte kryptografiskt avsändarverifierad. Se [gAIa-flödet](docs/GAIA_ANALYSIS_FLOW.md).
+
 ## Frivillig serieorientering
 
 Serien kan använda -19 LUFS-I som redaktionell orientering, intervallet -20 till -18 LUFS-I som frivillig arbetsreferens och -2 dBTP som frivill topporientering. Detta är inte en teknisk acceptansgräns eller ett kvalitetsbetyg. Flödet är separat: **Beräkna**, **Prova**, **Använd**. Bevara oförändrat är ett likvärdigt huvudval. Om toppmarginalen begränsar gain visas att loudnessreferensen inte nås. Ingen dold extra sänkning används.
@@ -60,11 +68,11 @@ Stora exporter kan använda webbläsarens privata lokala filsystem, OPFS. En par
 
 Mätmotorn är kontrollerad mot den relevanta filbaserade mono/stereo-delen av EBU Loudness Test Set v5.0: 68 av 68 krav för 62 filer. Samtliga 19 relevanta mono/stereo-filer i ITU-R BS.2217-2 klaras inom rapportens tolerans på +/-0,1 LKFS. Detta är verifiering inom dokumenterad scope, inte extern produktcertifiering eller garanti för varje signal eller leveranskedja.
 
-Se [valideringsplanen](docs/VALIDATION.md), [metoden](docs/METHOD.md), [integritetstexten](PRIVACY.md) och [releasechecklistan](RELEASE_CHECKLIST.md).
+Se [valideringsplanen](docs/VALIDATION.md), [metoden](docs/METHOD.md), [gAIa-flödet](docs/GAIA_ANALYSIS_FLOW.md), [integritetstexten](PRIVACY.md) och [releasechecklistan](RELEASE_CHECKLIST.md).
 
 ## Releaseport
 
-`1.0.0-rc.3` får publiceras som valideringskandidat. Versionsnumret `1.0.0` är förbjudet tills hela den fixerade testsuiten, EBU 68/68, ITU 19/19 och den fysiska iPad-matrisen är godkända. Matrisen omfattar en 15 till 20 minuter lång stereo float32/96 kHz-fil nära 1 GB i både Safari och installerad PWA, inklusive export, Filer-handoff, bakgrund/återgång, quota, avbrott, OPFS-städning, offline och uppdatering.
+`1.0.0-rc.4` får publiceras som valideringskandidat. Versionsnumret `1.0.0` är förbjudet tills hela den fixerade testsuiten, EBU 68/68, ITU 19/19 och den fysiska iPad-matrisen är godkända. Matrisen omfattar en 15 till 20 minuter lång stereo float32/96 kHz-fil nära 1 GB i både Safari och installerad PWA, inklusive analysunderlag och guidanceimport, export, Filer-handoff, bakgrund/återgång, quota, avbrott, OPFS-städning, offline och uppdatering.
 
 ## Lokal utveckling
 

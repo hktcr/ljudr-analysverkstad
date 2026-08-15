@@ -325,6 +325,30 @@
                   </div>
                 </div>
               </details>
+
+              <section class="analysis-exchange" id="analysisExchange" aria-labelledby="analysisExchangeTitle">
+                <div class="analysis-exchange-heading">
+                  <div><span class="eyebrow">Frivilligt lokalt utbyte</span><h2 id="analysisExchangeTitle">Analysunderlag för gAIa</h2><p>Skapa en granskad JSON-fil utan ljud. Appen ansluter inte till gAIa och laddar aldrig upp något automatiskt.</p></div>
+                  <span class="status-pill" id="exchangeCapabilityStatus">Kontrollerar</span>
+                </div>
+                <div class="analysis-exchange-actions">
+                  <button class="button button-primary" id="openAnalysisExportButton" type="button" disabled>Exportera analysunderlag för gAIa</button>
+                  <button class="button button-secondary" id="importGuidanceButton" type="button" disabled>Importera vägledning från gAIa</button>
+                  <input id="guidanceFileInput" type="file" accept=".json,application/json" hidden>
+                </div>
+                <p class="exchange-status-line" id="analysisExchangeStatus" role="status" aria-live="polite">Kör källanalysen innan ett underlag skapas.</p>
+
+                <article class="exchange-artifact" id="exchangeArtifact" hidden aria-labelledby="exchangeArtifactTitle">
+                  <div><span class="completion-mark" aria-hidden="true">✓</span><div><strong id="exchangeArtifactTitle">Analysunderlaget är klart</strong><small id="exchangeArtifactDetails"></small><code id="exchangeArtifactDigest"></code></div></div>
+                  <button class="button button-secondary button-small" id="downloadAnalysisAgainButton" type="button">Hämta igen</button>
+                </article>
+
+                <section class="external-guidance" id="externalGuidance" aria-labelledby="externalGuidanceTitle">
+                  <div class="external-guidance-heading"><div><h3 id="externalGuidanceTitle">Extern vägledning</h3><p>Importerade råd visas separat och ändrar aldrig ljud eller kontroller automatiskt.</p></div><span class="guidance-origin" id="guidanceOriginStatus">Ingen fil importerad</span></div>
+                  <div class="guidance-verification" id="guidanceVerification" role="status">Vägledning måste matcha bundle-ID, analysdigest och den lokalt verifierade källfilen.</div>
+                  <ol class="guidance-list" id="guidanceList"><li class="list-placeholder">Inga externa förslag</li></ol>
+                </section>
+              </section>
             </div>
 
             <aside class="inspector" aria-label="Analysinspektör">
@@ -627,6 +651,47 @@
         </nav>
         <div class="help-copy" id="helpCopy"></div>
       </div>
+    </dialog>
+
+    <dialog class="exchange-dialog" id="analysisExchangeDialog" aria-labelledby="analysisExchangeDialogTitle">
+      <form method="dialog" class="exchange-dialog-shell" id="analysisExchangeForm">
+        <div class="dialog-header">
+          <div><span class="eyebrow">Integritetsgranskning</span><h2 id="analysisExchangeDialogTitle">Exportera analysunderlag för gAIa</h2><p>Välj exakt vad den lokala JSON-filen ska innehålla.</p></div>
+          <button class="icon-button" id="closeAnalysisExchangeButton" type="button" aria-label="Stäng exportgranskningen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6.4 5 5.6 5.6L17.6 5 19 6.4 13.4 12l5.6 5.6-1.4 1.4-5.6-5.6L6.4 19 5 17.6l5.6-5.6L5 6.4 6.4 5Z"/></svg></button>
+        </div>
+        <div class="exchange-dialog-content">
+          <fieldset class="exchange-profile-picker">
+            <legend>Dataprofil</legend>
+            <label><input type="radio" name="exchangeProfile" value="minimal" checked><span><strong>Minimal</strong><small>Sammanfattande mått, maskinella observationer och markörer. Ingen kontinuerlig tidsserie, waveform, RMS-array eller samples.</small></span></label>
+            <label><input type="radio" name="exchangeProfile" value="temporal-diagnostics"><span><strong>Temporal diagnostik</strong><small>Grova 5-sekundersaggregat för programnivå och stereokorrelation, högst 720 segment. Aldrig waveform, L/R-nivåserier, RMS, råa samples eller ljud.</small></span></label>
+          </fieldset>
+          <fieldset class="exchange-privacy-picker">
+            <legend>Frivillig metadata</legend>
+            <p>All metadata är avstängd från början. Mätdata kan ändå säga något om inspelningen.</p>
+            <label><input type="checkbox" name="includeIdentity"><span>Titel, serie, avsnitt och sessions-ID</span></label>
+            <label><input type="checkbox" name="includeFileName"><span>Källfilens namn</span></label>
+            <label><input type="checkbox" name="includeLocation"><span>Plats och koordinater enligt valt integritetsläge</span></label>
+            <label><input type="checkbox" name="includeNotes"><span>Taggar, miljö, anteckningar och relaterad länk</span></label>
+            <label><input type="checkbox" name="includeCreator"><span>Skapare, utrustning och licens</span></label>
+          </fieldset>
+          <section class="exchange-manifest" aria-labelledby="exchangeManifestTitle"><h3 id="exchangeManifestTitle">Detta kommer med</h3><ul id="exchangeManifestList"></ul></section>
+          <details class="exchange-json-preview" open><summary>Exakt JSON-preview</summary><pre id="exchangeJsonPreview" tabindex="0">Välj profil för att skapa preview.</pre></details>
+          <p class="exchange-dialog-status" id="exchangeDialogStatus" role="status" aria-live="polite"></p>
+        </div>
+        <div class="dialog-actions exchange-dialog-actions">
+          <button class="button button-quiet" id="cancelAnalysisExchangeButton" type="button">Avbryt</button>
+          <button class="button button-secondary" id="refreshAnalysisPreviewButton" type="button">Uppdatera preview</button>
+          <button class="button button-primary" id="createAnalysisBundleButton" type="button">Skapa lokal JSON-fil</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="suggestion-transfer-dialog" id="suggestionTransferDialog" aria-labelledby="suggestionTransferTitle">
+      <form method="dialog">
+        <div class="dialog-header"><div><span class="eyebrow">Uttryckligt beslut</span><h2 id="suggestionTransferTitle">Överför förslag till kontroller</h2></div><button class="icon-button" id="closeSuggestionTransferButton" type="button" aria-label="Stäng"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6.4 5 5.6 5.6L17.6 5 19 6.4 13.4 12l5.6 5.6-1.4 1.4-5.6-5.6L6.4 19 5 17.6l5.6-5.6L5 6.4 6.4 5Z"/></svg></button></div>
+        <div class="dialog-content"><p id="suggestionTransferSummary"></p><dl class="suggestion-change"><div><dt>Före</dt><dd id="suggestionBeforeValue"></dd></div><div><dt>Efter</dt><dd id="suggestionAfterValue"></dd></div></dl><p class="notice-inline">Detta ändrar en synlig kontroll. Därefter beräknas exporturvalet om och tidigare exportverifiering blir ogiltig.</p></div>
+        <div class="dialog-actions"><button class="button button-quiet" id="cancelSuggestionTransferButton" type="button">Avbryt</button><button class="button button-primary" id="confirmSuggestionTransferButton" type="button">Bekräfta överföring</button></div>
+      </form>
     </dialog>
 
     <script type="module" src="./src/app.js"></script>

@@ -1,14 +1,14 @@
 {
   "schema": "se.gaia.ljudr.validation-manifest/1",
-  "release": "1.0.0-rc.3",
+  "release": "1.0.0-rc.4",
   "status": "public-validation-candidate",
   "certification": false,
   "verifiedAt": "2026-08-15",
-  "engineVersion": "1.0.0-rc.3",
+  "engineVersion": "1.0.0-rc.4",
   "automatedTestInventory": {
     "fixedBy": "tests/test-inventory.json",
-    "tests": 72,
-    "sha256": "e4451b5d390981e715fe25d7dce4bd45ce0dc799ce072e3366446638ad35d367",
+    "tests": 94,
+    "sha256": "07efbc1d3c8a7fa6e344f80dff8998bb013ba99234763e8a79217a57f41fd27f",
     "requiredFailures": 0
   },
   "ebu": {
@@ -25,6 +25,18 @@
     "filesTotal": 19,
     "toleranceLkfs": 0.1,
     "fixtureManifestSha256": "d1a496580da2351eda28464e84402ed362590e7a997632a6be1689e865dec69d"
+  },
+  "analysisExchange": {
+    "schema": "se.gaia.ljudr.analysis-exchange/1",
+    "guidanceSchema": "se.gaia.ljudr.guidance/1",
+    "defaultDataProfile": "minimal",
+    "defaultPrivacyMode": "redacted-no-optional-metadata",
+    "audioIncluded": false,
+    "fullSourceHashIncluded": false,
+    "applicationNetworkTransfer": false,
+    "guidanceAutoApply": false,
+    "signatureRequired": false,
+    "unsignedGuidanceTrust": "integrity-checked-not-sender-verified"
   },
   "productionGate": {
     "passed": false,

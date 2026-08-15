@@ -1,7 +1,22 @@
 {
   "schema": "se.gaia.ljudr.test-inventory/1",
-  "release": "1.0.0-rc.3",
+  "release": "1.0.0-rc.4",
   "files": {
+    "analysis-exchange.test.mjs": [
+      "kanonisk JSON är nyckelordningsoberoende och digest stabil",
+      "minimal redacted bundle saknar källhash, ljuddata och tidsserie",
+      "temporal diagnostic innehåller endast femsekunders programaggregat",
+      "digest avslöjar manipulation och förbjudna fält stoppas",
+      "prototyper, icke ändliga tal och överdjupa träd stoppas",
+      "lokalt kvitto binder bundle och digest till full SHA utan att exportera den",
+      "guidance är strikt bunden, läsbar och aldrig auto-apply",
+      "guidance med okända actions eller fel bindning avvisas",
+      "metadata kräver separat opt-in och Minimal läcker ingen fri markörtext",
+      "långa tidslinjer får högst 720 deterministiska segment med 5 s multipel",
+      "guidance kräver känd evidens och audit är hashkedjad före och efter",
+      "guidance blir aldrig bound-current utan både aktuell full hash och digest",
+      "strict schema avvisar okända och feltypade nested scalarer efter omdigest"
+    ],
     "dsp.test.mjs": [
       "tolkar PCM16 och hoppar över ett udda okänt chunk",
       "analyserar en sammanhängande stereosinus med rimliga råmått",
@@ -66,6 +81,17 @@
       "inkrementell SHA-256 klarar etablerade testvektorer",
       "Blob-hashning är lokal, blockvis och redovisar hela filens scope"
     ],
+    "ui-analysis-exchange.test.mjs": [
+      "analysutbytet är lokalt, granskat och uttryckligt",
+      "profilerna följer den låsta integritetspolicyn",
+      "app-lik temporal input accepteras av den faktiska buildern",
+      "bundle-ID och digest binds lokalt utan källhash i UI-paketet",
+      "extern vägledning är separat, osignerad och aldrig autoapplicerad",
+      "endast strikt global gain kan överföras från guidance v1",
+      "redigering gör bundle och matchad vägledning inaktuella men behåller auditkvitton",
+      "export, import, beslut och före efter sparas i kedjad auditlogg",
+      "utbytesytan är iPad-anpassad och har status för hjälpmedel"
+    ],
     "ui-editing.test.mjs": [
       "toningar är valfria, flexibla och har stora iPad-reglage",
       "medhörningen schemalägger samma linjära fadefunktion med AudioParam",
@@ -99,5 +125,5 @@
       "Ren trimning bevarar PCM32 exakt"
     ]
   },
-  "total": 72
+  "total": 94
 }

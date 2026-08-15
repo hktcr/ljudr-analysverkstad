@@ -1,8 +1,8 @@
-# Valideringsplan för 1.0.0-rc.3
+# Valideringsplan för 1.0.0-rc.4
 
 ## Status
 
-`1.0.0-rc.3` är en offentlig valideringskandidat. Den får inte beskrivas som produktionsverifierad 1.0.
+`1.0.0-rc.4` är en offentlig valideringskandidat. Den får inte beskrivas som produktionsverifierad 1.0.
 
 Loudnessmotorn klarar hela den relevanta filbaserade mono/stereo-delen av EBU Loudness Test Set v5.0: 68 av 68 krav för 62 filer. Den klarar även samtliga 19 relevanta mono/stereo-filer i ITU-R BS.2217-2 inom +/-0,1 LKFS. EBU:s flerkanalsfall och uttryckliga live-mätarfall ligger utanför verktygets filbaserade mono/stereo-scope. Resultaten är verifiering inom dokumenterad scope, inte produktcertifiering.
 
@@ -34,6 +34,15 @@ Maskinläsbar status finns i `validation-manifest.json`. Manifestet binder testi
 - semantisk HTML/JSON utan `[object Object]` och med HTML-escaping
 - PWA-resurser, cacheversionsbyte och update-UX kontrolleras statiskt; faktisk offlinekörning ingår i den fysiska matrisen
 - canvasens textmotsvarighet och tangentbordskontrakt kontrolleras statiskt; VoiceOver och faktisk tangentbordsoperation ingår i den manuella matrisen
+- Minimal exchange saknar ljud, samples, waveform, spektrum, kontinuerlig tidsserie, full källhash, filnamn, fria markertexter och koordinater
+- Temporal diagnostik följer minsta intervall, högst 720 segment, tillåtna programmått och deterministisk aggregering
+- temporal sample peak beskrivs inte som True Peak; segmentbaserad True Peak redovisas som otillgänglig
+- analysisDigest och guidanceDigest klarar kanoniska fixtures i både LjudR och gAIa-flödet
+- guidance avvisas vid fel bundle, digest, källkoppling, editidentitet, evidensreferens eller schema
+- replay, stale edit, extrema tal, objektdjup, prototype pollution, HTML och prompt injection provas
+- dataprofil, frivill metadata och exakt koordinatval har fixerade integritetssnapshots
+- guidance kan aldrig automatiskt tillämpa trim, fade, gain, profil eller export
+- appens CSP behåller `connect-src 'none'` och export/import initierar ingen nättrafik
 
 ## Fysisk iPad-matris
 
@@ -49,7 +58,8 @@ Följande är blockerande för versionsnumret `1.0.0`:
 8. Verifiera lista, återhämtning och explicit rensning av complete i OPFS.
 9. Verifiera kall offline-start och uppdatering från föregående version.
 10. Kör VoiceOver, externt tangentbord, 200/400 procents zoom, kontrast och reduced motion.
-11. Logga tid, maximal observerbar minnesbelastning, temperaturvarning och varje fel.
+11. Exportera Minimal underlag, kontrollera exakt preview, importera matchande guidance och verifiera att inget råd tillämpas automatiskt.
+12. Logga tid, maximal observerbar minnesbelastning, temperaturvarning och varje fel.
 
 ## Releaseport
 

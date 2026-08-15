@@ -34,6 +34,7 @@ jobs:
           node --check src/export-worker.js
           node --check src/project.js
           node --check src/sha256.js
+          node --check src/analysis-exchange.js
           node --check src/release-meta.js
           node --check sw.js
           node --check scripts/build-site.mjs
