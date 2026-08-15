@@ -1,5 +1,16 @@
 # Ändringslogg
 
+## 1.0.0-rc.9, 2026-08-15
+
+- visar aktuellt A/B-trimfönster genom analys, trimning och export
+- låter hela trimfönstret flyttas med dragning, knappar och tangentbord utan att längden ändras
+- ger vågformer större yta och en expanderad tidslinje för iPad, mobil och desktop
+- genererar tidsaxeln från aktuell zoom och placerar A/B-etiketter vid verkliga gränser
+- lägger till valbart lager för stereokorrelation och monorisk
+- visar en kompakt källöversikt med exporturval och verifierad filtid i exportsteget
+- gör expanderad tidslinje modal, fokusisolerad och rullbar samt säkrar 44 px touchmål
+- förtydligar svenska texter och skiljer källfilsmått från exporturvalsmått
+
 ## 1.0.0-rc.8, 2026-08-15
 
 - rättar analysutbytets tidsaxel efter trimning och bevarar maskinella markörtyper

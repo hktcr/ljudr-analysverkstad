@@ -28,7 +28,7 @@ test("profilerna följer den låsta integritetspolicyn", () => {
   assert.match(html, /name="exchangeProfile" value="temporal-diagnostics"/);
   assert.match(html, /Grova 5-sekundersaggregat/);
   assert.match(html, /högst 720 segment/);
-  assert.match(html, /Aldrig waveform, L\/R-nivåserier, RMS, råa samples eller ljud/);
+  assert.match(html, /Aldrig vågform, L\/R-nivåserier, RMS, råa samplingar eller ljud/);
   assert.doesNotMatch(html, /Nedsamplad L\/R min, max och RMS/);
   for (const option of ["includeIdentity", "includeFileName", "includeLocation", "includeNotes", "includeCreator"]) {
     assert.match(html, new RegExp(`name="${option}"`));

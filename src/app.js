@@ -68,6 +68,7 @@ const state = {
       waveform: true,
       loudness: true,
       peaks: true,
+      correlation: false,
       markers: true,
     },
     detail: null,
@@ -122,6 +123,9 @@ const state = {
 let analysisWorker = null;
 let exportWorker = null;
 let activeTrimHandle = null;
+let trimGesture = null;
+let expandedTimelineRestoreFocus = null;
+let expandedTimelineInert = [];
 let projectTools = null;
 let analysisExchangeTools = null;
 let resizeFrame = 0;
@@ -231,6 +235,13 @@ const elements = {
   trimEndLabel: $("#trimEndLabel"),
   trimWindowDurationInput: $("#trimWindowDurationInput"),
   trimWindowStatus: $("#trimWindowStatus"),
+  trimHudRange: $("#trimHudRange"),
+  trimHudDuration: $("#trimHudDuration"),
+  trimHudMoveLeft: $("#trimHudMoveLeft"),
+  trimHudMoveRight: $("#trimHudMoveRight"),
+  analysisTimeAxis: $("#analysisTimeAxis"),
+  exportTrimCanvas: $("#exportTrimCanvas"),
+  exportSelectionMapping: $("#exportSelectionMapping"),
   monitorVolume: $("#monitorVolume"),
   fadeInToggle: $("#fadeInToggle"),
   fadeInNumber: $("#fadeInNumber"),
@@ -389,7 +400,7 @@ const helpContent = {
     body: `
       <p>Sätt startgränsen efter handhavandeljudet i början och slutgränsen före handhavandeljudet i slutet. Använd knapparna för 1, 10 och 100 ms när du vill finjustera.</p>
       <p>Toning är av som standard. Om ett snitt ändå ger ett klick kan en kort linjär toning vara relevant. Medhörning och export använder samma amplitudkurva.</p>
-      <p>Intervallet räknas som startbildrutan inkluderad och slutbildrutan exkluderad. Det ger reproducerbara exporter.</p>`,
+      <p>Intervallet inkluderar samplingen vid startgränsen men inte samplingen vid slutgränsen. Det ger reproducerbara exporter.</p>`,
   },
   privacy: {
     title: "Ljudfilen stannar på din enhet",
@@ -552,12 +563,12 @@ const helpTopics = {
     title: "Exportprofiler",
     meaning: "Profilerna beskriver avsikten med filen. I denna version bevarar båda aktiva profilerna källans WAV format.",
     relation: "Profilen redovisas i exportrapporten tillsammans med trimning, gain, toningar och toppkontroll.",
-    caution: "Sample-payload-identiskt trimutdrag blockerar gain och fades. Redigerad WAV-master redovisar varje ingrepp.",
+    caution: "Sample-payload-identiskt trimutdrag blockerar gain och toningar. Redigerad WAV-master redovisar varje ingrepp.",
     recommendation: "Skapa distributionsformat i Ferrite från den verifierade WAV-mastern.",
   },
   "preservation-export": {
     title: "Sample-payload-identiskt trimutdrag",
-    meaning: "Ett sammanhängande WAV-utdrag som behåller de valda samplebyten exakt och inte tillåter gain eller fades.",
+    meaning: "Ett sammanhängande WAV-utdrag som behåller de valda samplebyten exakt och inte tillåter gain eller toningar.",
     relation: "Ren trimning kan vara bitidentisk i ljuddatat. Gain eller toningar kräver omräkning.",
     caution: "Metadata från okända WAV block kan inte alltid bevaras och redovisas därför i exportrapporten.",
     recommendation: "Använd denna som ny arbetsmaster och behåll alltid originalinspelningen separat.",
@@ -720,6 +731,7 @@ function markEditChanged(reason = "edit") {
   updateProjectedMetrics();
   updateExportRecommendation();
   renderPublicationCard();
+  syncTrimHud();
   window.clearTimeout(regionTimer);
   regionTimer = window.setTimeout(requestRegionAnalysis, 450);
   emitState(reason);
@@ -1236,7 +1248,7 @@ function applyDetailResult(result) {
   state.jobs.detail = null;
   state.view.detailStatus = result?.channels?.some((channel) => Array.isArray(channel.samples) && channel.samples.length) ? "samples" : "detail";
   const framesPerBin = finite(result?.framesPerBin) ?? 0;
-  if (elements.detailStatus) setDetailStatus(state.view.detailStatus === "samples" ? "Exakta sampel" : `Detaljdata, ${framesPerBin} bildrutor per bin`, false);
+  if (elements.detailStatus) setDetailStatus(state.view.detailStatus === "samples" ? "Exakta samplingar" : `Detaljdata, ${framesPerBin} bildrutor per intervall`, false);
   scheduleCanvasRender();
   renderCanvasTextAlternative();
 }
@@ -1531,7 +1543,7 @@ function renderMarkers() {
   scheduleCanvasRender();
 }
 
-function syncTrimUi() {
+function syncTrimUi({ emit = true } = {}) {
   const duration = durationSeconds();
   state.trim.startSeconds = clamp(state.trim.startSeconds, 0, Math.max(0, duration));
   state.trim.endSeconds = clamp(state.trim.endSeconds || duration, state.trim.startSeconds, duration);
@@ -1539,16 +1551,54 @@ function syncTrimUi() {
   state.trim.endFrame = toFrame(state.trim.endSeconds);
   elements.trimStartInput.value = formatTime(state.trim.startSeconds);
   elements.trimEndInput.value = formatTime(state.trim.endSeconds);
-  elements.trimStartLabel.textContent = `Start ${formatTime(state.trim.startSeconds)}`;
-  elements.trimEndLabel.textContent = `Slut ${formatTime(state.trim.endSeconds)}`;
+  elements.trimStartLabel.textContent = `A ${formatTime(state.trim.startSeconds)}`;
+  elements.trimEndLabel.textContent = `B ${formatTime(state.trim.endSeconds)}`;
   elements.selectedDuration.textContent = formatTime(state.trim.endSeconds - state.trim.startSeconds);
   elements.transportDuration.textContent = formatTime(duration);
   elements.currentTime.textContent = formatTime(state.playback.currentSeconds);
   syncFadeUi();
   syncSeriesUi();
   updateExportSummary();
+  syncTrimHud();
   scheduleCanvasRender();
-  emitState("trim");
+  if (emit) emitState("trim");
+}
+
+function syncTrimHud() {
+  if (!elements.trimHudRange || !elements.trimHudDuration) return;
+  const sourceDuration = durationSeconds();
+  const selectedDuration = selectionDurationSeconds();
+  const hasFile = Boolean(state.file && sourceDuration > 0);
+  elements.trimHudRange.textContent = hasFile
+    ? `A ${formatTime(state.trim.startSeconds)} · B ${formatTime(state.trim.endSeconds)}`
+    : "A 00:00.000 · B 00:00.000";
+  const wholeSource = hasFile && state.trim.startSeconds <= 0.0005 && Math.abs(state.trim.endSeconds - sourceDuration) <= 0.0005;
+  const verifiedDuration = finite(state.verifiedExport?.format?.durationSeconds ?? state.verifiedExport?.durationSeconds ?? state.verifiedExport?.summary?.durationSeconds);
+  elements.trimHudDuration.textContent = !hasFile
+    ? "Ingen källfil"
+    : state.exportStatus === "complete" && verifiedDuration !== null
+      ? `${formatTime(selectedDuration)} valt · verifierad fil 00:00.000 till ${formatTime(verifiedDuration)}`
+      : wholeSource
+        ? `Hela källfilen · mållängd ${formatTime(state.trimWindowSeconds)}`
+        : `${formatTime(selectedDuration)} valt · mållängd ${formatTime(state.trimWindowSeconds)}`;
+  const movable = hasFile && selectedDuration < sourceDuration - 1 / Math.max(1, sampleRate());
+  elements.trimHudMoveLeft.disabled = !movable || state.trim.startSeconds <= 0;
+  elements.trimHudMoveRight.disabled = !movable || state.trim.endSeconds >= sourceDuration;
+  if (elements.exportSelectionMapping) {
+    elements.exportSelectionMapping.textContent = !hasFile
+      ? "Källan är ännu inte vald"
+      : state.exportStatus === "complete" && verifiedDuration !== null
+        ? `Källa ${formatTime(state.trim.startSeconds)} till ${formatTime(state.trim.endSeconds)} · verifierad fil 00:00.000 till ${formatTime(verifiedDuration)}`
+        : `Källa ${formatTime(state.trim.startSeconds)} till ${formatTime(state.trim.endSeconds)} · export ${formatTime(selectedDuration)}`;
+  }
+}
+
+function syncTrackControls() {
+  $$("[data-track]").forEach(control => {
+    const active = Boolean(state.view.tracks[control.dataset.track]);
+    control.classList.toggle("is-on", active);
+    control.setAttribute("aria-pressed", String(active));
+  });
 }
 
 function syncTrimWindowUi(message = "") {
@@ -1570,6 +1620,49 @@ function updateTrimWindowDuration(value) {
   syncTrimWindowUi();
   emitState("trim-window-duration");
   return true;
+}
+
+function setTrimWindowPosition(startSeconds, { commit = true, reason = "trim-window-moved" } = {}) {
+  const sourceDuration = durationSeconds();
+  const windowLength = Math.min(selectionDurationSeconds(), sourceDuration);
+  if (!(sourceDuration > 0) || !(windowLength > 0)) return false;
+  const start = clamp(startSeconds, 0, Math.max(0, sourceDuration - windowLength));
+  if (Math.abs(start - state.trim.startSeconds) < 0.5 / Math.max(1, sampleRate())) return false;
+  state.trim.startSeconds = start;
+  state.trim.endSeconds = start + windowLength;
+  syncTrimUi({ emit: false });
+  if (commit) {
+    invalidateSeriesProposal();
+    markEditChanged(reason);
+    syncTrimWindowUi(`Trimfönstret flyttades till ${formatTime(start)} till ${formatTime(start + windowLength)}.`);
+  }
+  return true;
+}
+
+function moveTrimWindow(deltaSeconds, options = {}) {
+  const delta = finite(deltaSeconds);
+  if (delta === null || delta === 0) return false;
+  return setTrimWindowPosition(state.trim.startSeconds + delta, options);
+}
+
+function centerTrimWindowAt(seconds, { commit = true } = {}) {
+  const center = clamp(finite(seconds) ?? state.playback.currentSeconds, 0, durationSeconds());
+  return setTrimWindowPosition(center - selectionDurationSeconds() / 2, { commit, reason: "trim-window-centered" });
+}
+
+function resizeTrimWindowToTarget() {
+  const sourceDuration = durationSeconds();
+  if (!(sourceDuration > 0)) return;
+  const windowLength = Math.min(state.trimWindowSeconds, sourceDuration);
+  const currentCenter = selectionDurationSeconds() > 0
+    ? (state.trim.startSeconds + state.trim.endSeconds) / 2
+    : state.playback.currentSeconds;
+  state.trim.startSeconds = clamp(currentCenter - windowLength / 2, 0, Math.max(0, sourceDuration - windowLength));
+  state.trim.endSeconds = state.trim.startSeconds + windowLength;
+  syncTrimUi({ emit: false });
+  invalidateSeriesProposal();
+  markEditChanged("trim-window-duration-applied");
+  syncTrimWindowUi(`Trimfönstret är ${formatTime(windowLength)} från ${formatTime(state.trim.startSeconds)} till ${formatTime(state.trim.endSeconds)}.`);
 }
 
 function applyTrimWindow(anchor) {
@@ -1999,8 +2092,9 @@ function drawTimeline(canvas, trimMode = false) {
   const { context, width, height } = canvasMetrics(canvas);
   const analysis = state.analysis;
   const fullDuration = Math.max(0.001, durationSeconds());
-  const viewStart = clamp(state.view.startSeconds, 0, fullDuration);
-  const viewEnd = clamp(state.view.endSeconds || fullDuration, viewStart + 0.001, fullDuration);
+  const compactExport = canvas === elements.exportTrimCanvas;
+  const viewStart = compactExport ? 0 : clamp(state.view.startSeconds, 0, fullDuration);
+  const viewEnd = compactExport ? fullDuration : clamp(state.view.endSeconds || fullDuration, viewStart + 0.001, fullDuration);
   const viewDuration = viewEnd - viewStart;
   const labelWidth = width < 520 ? 44 : 58;
   const plotLeft = labelWidth;
@@ -2011,10 +2105,10 @@ function drawTimeline(canvas, trimMode = false) {
   context.fillStyle = "#0c1728";
   context.fillRect(0, 0, width, height);
 
-  const visibleTracks = trimMode
+  const visibleTracks = compactExport
     ? ["waveform", "markers"]
     : Object.entries(state.view.tracks).filter(([, visible]) => visible).map(([name]) => name);
-  const weights = { waveform: trimMode ? 0.83 : 0.47, loudness: 0.29, peaks: 0.17, markers: trimMode ? 0.17 : 0.07 };
+  const weights = { waveform: compactExport ? 0.86 : trimMode ? 0.55 : 0.47, loudness: 0.25, peaks: 0.15, correlation: 0.14, markers: compactExport ? 0.14 : 0.08 };
   const totalWeight = visibleTracks.reduce((sum, track) => sum + weights[track], 0) || 1;
   let cursorY = 0;
   const tracks = {};
@@ -2051,7 +2145,7 @@ function drawTimeline(canvas, trimMode = false) {
     }
     context.fillStyle = "rgba(255,255,255,.53)";
     context.font = "600 9px ui-sans-serif, system-ui";
-    const label = { waveform: "L / R", loudness: "LUFS", peaks: "TOPP", markers: "MÄRKE" }[name];
+    const label = { waveform: "L / R", loudness: "LUFS", peaks: "TOPP", correlation: "KORR", markers: "MARKÖR" }[name];
     context.fillText(label, 7, track.top + 15);
   });
 
@@ -2153,6 +2247,31 @@ function drawTimeline(canvas, trimMode = false) {
     context.restore();
   }
 
+  if (analysis && tracks.correlation) {
+    const timelines = analysis.timelines || {};
+    const values = timelines.correlation || [];
+    const interval = finite(timelines.intervalSeconds) ?? 0.1;
+    const track = tracks.correlation;
+    const xAtIndex = (index) => xAtTime(timelines.timeSeconds?.[index] ?? (index + 1) * interval);
+    const yAtValue = (value) => track.top + 6 + (1 - (clamp(value, -1, 1) + 1) / 2) * (track.height - 12);
+    context.save();
+    context.beginPath();
+    context.rect(plotLeft, track.top, plotWidth, track.height);
+    context.clip();
+    const riskY = yAtValue(-0.25);
+    context.fillStyle = "rgba(238,91,77,.10)";
+    context.fillRect(plotLeft, riskY, plotWidth, track.bottom - riskY);
+    context.setLineDash([4, 4]);
+    context.strokeStyle = "rgba(255,255,255,.22)";
+    context.beginPath();
+    context.moveTo(plotLeft, yAtValue(0));
+    context.lineTo(plotRight, yAtValue(0));
+    context.stroke();
+    context.setLineDash([]);
+    drawLineSeries(context, values, xAtIndex, yAtValue, "rgba(239,143,104,.96)", 1.4);
+    context.restore();
+  }
+
   if (tracks.markers) {
     state.markers.forEach((marker) => {
       if (state.markerFilter !== "all" && marker.severity !== state.markerFilter) return;
@@ -2179,12 +2298,25 @@ function drawTimeline(canvas, trimMode = false) {
     });
   }
 
+  const selectionVisible = state.file && (trimMode || compactExport
+    || state.trim.startSeconds > 0.0005
+    || Math.abs(state.trim.endSeconds - fullDuration) > 0.0005);
+  if (selectionVisible) {
+    const startX = xAtTime(state.trim.startSeconds);
+    const endX = xAtTime(state.trim.endSeconds);
+    context.fillStyle = trimMode || compactExport ? "rgba(4,10,18,.7)" : "rgba(4,10,18,.48)";
+    context.fillRect(plotLeft, 0, Math.max(0, startX - plotLeft), height);
+    context.fillRect(endX, 0, Math.max(0, plotRight - endX), height);
+    context.strokeStyle = trimMode ? "rgba(217,239,236,.75)" : "rgba(226,171,71,.92)";
+    context.lineWidth = trimMode ? 1 : 2;
+    context.setLineDash(trimMode ? [] : [7, 5]);
+    context.strokeRect(Math.max(plotLeft, startX), 1, Math.max(0, Math.min(plotRight, endX) - Math.max(plotLeft, startX)), Math.max(0, height - 2));
+    context.setLineDash([]);
+  }
+
   if (trimMode) {
     const startX = xAtTime(state.trim.startSeconds);
     const endX = xAtTime(state.trim.endSeconds);
-    context.fillStyle = "rgba(4,10,18,.7)";
-    context.fillRect(plotLeft, 0, Math.max(0, startX - plotLeft), height);
-    context.fillRect(endX, 0, Math.max(0, plotRight - endX), height);
     const geometry = fadeGeometry();
     context.save();
     context.beginPath();
@@ -2245,13 +2377,49 @@ function drawTimeline(canvas, trimMode = false) {
     context.lineTo(x, height);
     context.stroke();
   }
+  return { startX: xAtTime(state.trim.startSeconds), endX: xAtTime(state.trim.endSeconds), plotLeft, plotRight, width, viewStart, viewEnd };
+}
+
+function renderTimeAxis() {
+  if (!elements.analysisTimeAxis) return;
+  const start = state.view.startSeconds;
+  const end = state.view.endSeconds || durationSeconds();
+  const count = matchMedia("(max-width: 720px)").matches ? 3 : 5;
+  elements.analysisTimeAxis.innerHTML = Array.from({ length: count }, (_, index) => {
+    const seconds = start + (end - start) * index / Math.max(1, count - 1);
+    return `<span>${formatTime(seconds, false)}</span>`;
+  }).join("");
+}
+
+function positionTrimLabels(geometry) {
+  if (!geometry || !elements.trimStartLabel || !elements.trimEndLabel) return;
+  const { startX, endX, plotLeft, plotRight, viewStart, viewEnd } = geometry;
+  const startHidden = state.trim.startSeconds < viewStart;
+  const endHidden = state.trim.endSeconds > viewEnd;
+  const startPosition = clamp(startX, plotLeft + 4, plotRight - 4);
+  const endPosition = clamp(endX, plotLeft + 4, plotRight - 4);
+  elements.trimStartLabel.style.left = `${startPosition}px`;
+  elements.trimStartLabel.style.right = "auto";
+  elements.trimStartLabel.style.transform = startHidden ? "translateX(0)" : "translateX(-2px)";
+  elements.trimEndLabel.style.left = `${endPosition}px`;
+  elements.trimEndLabel.style.right = "auto";
+  elements.trimEndLabel.style.transform = endHidden ? "translateX(-100%)" : "translateX(calc(-100% + 2px))";
+  elements.trimStartLabel.textContent = startHidden
+    ? `A ligger ${formatTime(viewStart - state.trim.startSeconds, false)} åt vänster`
+    : `A ${formatTime(state.trim.startSeconds)}`;
+  elements.trimEndLabel.textContent = endHidden
+    ? `B ligger ${formatTime(state.trim.endSeconds - viewEnd, false)} åt höger`
+    : `B ${formatTime(state.trim.endSeconds)}`;
 }
 
 function scheduleCanvasRender() {
   cancelAnimationFrame(resizeFrame);
   resizeFrame = requestAnimationFrame(() => {
     drawTimeline(elements.analysisCanvas, false);
-    drawTimeline(elements.trimCanvas, true);
+    const trimGeometry = drawTimeline(elements.trimCanvas, true);
+    drawTimeline(elements.exportTrimCanvas, false);
+    positionTrimLabels(trimGeometry);
+    renderTimeAxis();
     const rangeStart = state.view.startSeconds;
     const rangeEnd = state.view.endSeconds || durationSeconds();
     elements.timelineRange.textContent = rangeStart === 0 && Math.abs(rangeEnd - durationSeconds()) < 0.01
@@ -2274,6 +2442,7 @@ function findTrimHandle(canvas, event) {
   const tolerance = secondsPerPixel * 28;
   if (Math.abs(time - state.trim.startSeconds) <= tolerance) return "start";
   if (Math.abs(time - state.trim.endSeconds) <= tolerance) return "end";
+  if (time > state.trim.startSeconds && time < state.trim.endSeconds) return "window";
   return null;
 }
 
@@ -2420,7 +2589,7 @@ function renderExchangeManifest(profile = exchangeProfile(), bundle = null) {
       ? "Grova 5-sekundersaggregat, högst 720 segment: Momentary p10, median och max, Short-term median och max, program-sample-peak max, låg-nivåandel samt stereokorrelation median och min"
       : "Ingen kontinuerlig mätserie",
     "Bundle-ID och analysdigest. Full källhash stannar lokalt",
-    "Aldrig ljud, waveform, L/R-nivåserier, RMS-arrayer eller råa samples",
+    "Aldrig ljud, vågform, L/R-nivåserier, RMS-serier eller råa samplingar",
   ];
   const selected = Object.entries(privacy).filter(([, enabled]) => enabled).map(([key]) => ({
     includeIdentity: "Titel och sessionsuppgifter",
@@ -2965,6 +3134,7 @@ async function applyPendingProjectToFile() {
   renderObservations();
   renderMarkers();
   renderPublicationCard();
+  syncTrackControls();
   syncTrimUi();
   syncTrimWindowUi();
   syncAuditionUi();
@@ -3122,7 +3292,7 @@ function startExport() {
   const selectedProfile = $("input[name='exportProfile']:checked")?.value;
   const edited = Math.abs(state.trim.gainDb) > 1e-9 || state.trim.fadeInSeconds > 0 || state.trim.fadeOutSeconds > 0;
   if (selectedProfile === "sample-payload-trim" && edited) {
-    showToast("Sample-payload-identiskt trimutdrag tillåter inte gain eller fades. Välj Redigerad WAV-master eller återställ ingreppen.", "error", 9000);
+    showToast("Sample-payload-identiskt trimutdrag tillåter inte gain eller toningar. Välj Redigerad WAV-master eller återställ ingreppen.", "error", 9000);
     return;
   }
   if (!state.capabilities.workers) {
@@ -3141,6 +3311,7 @@ function startExport() {
     exportWorker.onerror = (event) => handleExportMessage({ type: "error", jobId, operation: "export", message: event.message || "Exportmotorn kunde inte starta." });
     state.exportStatus = "running";
     renderPublicationCard();
+    syncTrimHud();
     elements.exportAudio.disabled = true;
     elements.exportAudio.textContent = "Export pågår";
     updateExportProgress(0, "Förbereder blockvis WAV-export");
@@ -3214,6 +3385,7 @@ function handleExportMessage(data = {}) {
     state.regionStatus = state.regionAnalysis ? "complete" : state.regionStatus;
     state.verifiedExport = data.verifiedOutput || data.result?.verifiedOutput || null;
     state.exportStatus = "complete";
+    syncTrimHud();
     elements.exportAudio.disabled = false;
     elements.exportAudio.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 3h2v10.2l3.6-3.6L18 11l-6 6-6-6 1.4-1.4 3.6 3.6V3ZM5 19h14v2H5v-2Z"/></svg>Exportera ljudfil';
     updateExportProgress(1, "Exporten är klar");
@@ -3335,7 +3507,7 @@ function setExportProfile(profile, options = {}) {
   if (profile === "sample-payload-trim" && hasEdits && !options.force) {
     const editedRadio = $("input[name='exportProfile'][value='edited-wav']");
     if (editedRadio) editedRadio.checked = true;
-    showToast("Återställ gain och fades innan du väljer ett sample-payload-identiskt trimutdrag.", "error", 8000);
+    showToast("Återställ gain och toningar innan du väljer ett sample-payload-identiskt trimutdrag.", "error", 8000);
     return;
   }
   state.exportProfile = profile;
@@ -3346,7 +3518,7 @@ function setExportProfile(profile, options = {}) {
   $(".gain-section")?.classList.toggle("is-profile-disabled", !edited);
   if (!edited && (state.trim.fadeInSeconds > 0 || state.trim.fadeOutSeconds > 0 || Math.abs(state.trim.gainDb) > 1e-9)) {
     elements.exportAudio.disabled = true;
-    showToast("Återställ gain och fades för ett sample-payload-identiskt trimutdrag, eller välj Redigerad WAV-master.", "error", 8000);
+    showToast("Återställ gain och toningar för ett sample-payload-identiskt trimutdrag, eller välj Redigerad WAV-master.", "error", 8000);
   } else if (state.exportStatus !== "running") elements.exportAudio.disabled = false;
   updateExportSummary();
   if (options.dirty !== false) state.dirty = true;
@@ -3355,7 +3527,7 @@ function setExportProfile(profile, options = {}) {
 
 function syncAuditionUi() {
   if (!elements.auditionStatus) return;
-  const preview = state.monitoring.previewMode === "source" ? "Källkontext: inga fades eller nivåval hörs." : "Exportförhandsvisning: exakt trim, fades och synlig global gain hörs.";
+  const preview = state.monitoring.previewMode === "source" ? "Källkontext: inga toningar eller nivåval hörs." : "Exportförhandsvisning: exakt trim, toningar och synlig global gain hörs.";
   const monoSource = (state.analysis?.format?.channels ?? state.fileInfo?.channels) === 1;
   const mode = monoSource ? "Monokällan till båda öron" : { stereo: "Stereo", left: "Vänster till båda öron", right: "Höger till båda öron", mono: "Mono som 0,5 × (L + R)" }[state.monitoring.channelMode];
   elements.auditionStatus.textContent = `${preview} Monitor: ${mode}. Monitorval påverkar aldrig export.`;
@@ -3448,6 +3620,89 @@ function fitTimeline() {
   scheduleCanvasRender();
   scheduleDetailRequest();
   renderCanvasTextAlternative();
+}
+
+function fitTrimSelection() {
+  const duration = durationSeconds();
+  const selection = selectionDurationSeconds();
+  if (!(duration > 0) || !(selection > 0)) return;
+  const padding = Math.min(Math.max(selection * 0.04, 0.25), Math.max(0, (duration - selection) / 2));
+  state.view.startSeconds = Math.max(0, state.trim.startSeconds - padding);
+  state.view.endSeconds = Math.min(duration, state.trim.endSeconds + padding);
+  state.view.detail = null;
+  scheduleCanvasRender();
+  scheduleDetailRequest();
+  renderCanvasTextAlternative();
+}
+
+function updateTimelineExpansionButtons(cardId = null) {
+  $$('[data-expand-timeline]').forEach(button => {
+    const active = Boolean(cardId && button.dataset.expandTimeline === cardId);
+    button.setAttribute("aria-pressed", String(active));
+    button.textContent = active ? "Stäng expanderad vy" : "Expandera tidslinjen";
+  });
+}
+
+function restoreExpandedTimeline({ restoreFocus = true } = {}) {
+  const expanded = $(".timeline-card.is-timeline-expanded");
+  if (expanded) {
+    expanded.classList.remove("is-timeline-expanded");
+    expanded.removeAttribute("role");
+    expanded.removeAttribute("aria-modal");
+    expanded.removeAttribute("aria-label");
+    expanded.removeAttribute("tabindex");
+  }
+  expandedTimelineInert.forEach(({ element, inert }) => { element.inert = inert; });
+  expandedTimelineInert = [];
+  document.body.classList.remove("has-expanded-timeline");
+  updateTimelineExpansionButtons();
+  if (restoreFocus && expandedTimelineRestoreFocus?.isConnected) expandedTimelineRestoreFocus.focus();
+  expandedTimelineRestoreFocus = null;
+}
+
+function isolateExpandedTimeline(card) {
+  let branch = card;
+  while (branch.parentElement) {
+    const parent = branch.parentElement;
+    [...parent.children].forEach(element => {
+      if (element === branch || !(element instanceof HTMLElement)) return;
+      expandedTimelineInert.push({ element, inert: element.inert });
+      element.inert = true;
+    });
+    if (parent === document.body) break;
+    branch = parent;
+  }
+}
+
+function timelineFocusableElements(card) {
+  return [...card.querySelectorAll('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])')]
+    .filter(element => !element.hidden && element.getAttribute("aria-hidden") !== "true");
+}
+
+function toggleTimelineExpansion(cardId, force = null) {
+  const card = document.getElementById(cardId);
+  if (!card) return;
+  const next = force === null ? !card.classList.contains("is-timeline-expanded") : Boolean(force);
+  if (!next) {
+    restoreExpandedTimeline();
+    window.setTimeout(scheduleCanvasRender, 30);
+    return;
+  }
+  if ($(".timeline-card.is-timeline-expanded")) restoreExpandedTimeline({ restoreFocus: false });
+  expandedTimelineRestoreFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  card.classList.add("is-timeline-expanded");
+  card.setAttribute("role", "dialog");
+  card.setAttribute("aria-modal", "true");
+  card.setAttribute("aria-label", "Expanderad ljudtidslinje");
+  card.tabIndex = -1;
+  isolateExpandedTimeline(card);
+  document.body.classList.add("has-expanded-timeline");
+  updateTimelineExpansionButtons(cardId);
+  window.setTimeout(() => {
+    scheduleCanvasRender();
+    const closeButton = card.querySelector(`[data-expand-timeline="${cardId}"]`);
+    (closeButton || timelineFocusableElements(card)[0] || card).focus();
+  }, 30);
 }
 
 function panTimeline(deltaSeconds) {
@@ -3600,8 +3855,33 @@ function renderHelp(section) {
 }
 
 function bindEvents() {
+  document.addEventListener("keydown", event => {
+    const expanded = $(".timeline-card.is-timeline-expanded");
+    if (!expanded) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      toggleTimelineExpansion(expanded.id, false);
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const focusable = timelineFocusableElements(expanded);
+    if (!focusable.length) {
+      event.preventDefault();
+      expanded.focus();
+      return;
+    }
+    const first = focusable[0];
+    const last = focusable.at(-1);
+    if (event.shiftKey && (document.activeElement === first || !expanded.contains(document.activeElement))) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && (document.activeElement === last || !expanded.contains(document.activeElement))) {
+      event.preventDefault();
+      first.focus();
+    }
+  });
   $$(".mode-tab").forEach((tab) => tab.addEventListener("click", () => setMode(tab.dataset.mode)));
-  $$('[data-mode-link="open"]').forEach((link) => link.addEventListener("click", (event) => { event.preventDefault(); setMode("open"); }));
+  $$('[data-mode-link]').forEach((link) => link.addEventListener("click", (event) => { event.preventDefault(); setMode(link.dataset.modeLink); }));
   elements.audioInput.addEventListener("change", () => openAudioFile(elements.audioInput.files?.[0]));
   elements.changeFile.addEventListener("click", () => elements.audioInput.click());
   ["dragenter", "dragover"].forEach((name) => elements.dropZone.addEventListener(name, (event) => {
@@ -3667,32 +3947,86 @@ function bindEvents() {
   $$('[data-zoom]').forEach((button) => button.addEventListener("click", () => zoomTimeline(button.dataset.zoom)));
   $("#fitTimelineButton").addEventListener("click", fitTimeline);
   $("#fitTrimButton").addEventListener("click", fitTimeline);
+  $$('[data-fit-selection]').forEach(button => button.addEventListener("click", fitTrimSelection));
+  $$('[data-expand-timeline]').forEach(button => button.addEventListener("click", () => toggleTimelineExpansion(button.dataset.expandTimeline)));
   $$(".legend-chip").forEach((button) => button.addEventListener("click", () => {
     const track = button.dataset.track;
     state.view.tracks[track] = !state.view.tracks[track];
-    button.classList.toggle("is-on", state.view.tracks[track]);
-    button.setAttribute("aria-pressed", String(state.view.tracks[track]));
+    $$(`[data-track="${track}"]`).forEach(control => {
+      control.classList.toggle("is-on", state.view.tracks[track]);
+      control.setAttribute("aria-pressed", String(state.view.tracks[track]));
+    });
     scheduleCanvasRender();
   }));
 
   bindTimelineGestures(elements.analysisCanvas);
   elements.trimCanvas.addEventListener("pointerdown", (event) => {
     activeTrimHandle = findTrimHandle(elements.trimCanvas, event);
-    if (activeTrimHandle) {
-      elements.trimCanvas.setPointerCapture(event.pointerId);
-      setBoundary(activeTrimHandle, canvasTimeFromPointer(elements.trimCanvas, event));
-    } else {
-      state.playback.currentSeconds = canvasTimeFromPointer(elements.trimCanvas, event);
-      elements.audio.currentTime = state.playback.currentSeconds;
-      syncTrimUi();
-    }
+    if (activeTrimHandle) elements.trimCanvas.setPointerCapture(event.pointerId);
+    trimGesture = {
+      pointerId: event.pointerId,
+      target: activeTrimHandle,
+      startX: event.clientX,
+      startTime: canvasTimeFromPointer(elements.trimCanvas, event),
+      startBoundary: state.trim.startSeconds,
+      endBoundary: state.trim.endSeconds,
+      moved: false,
+    };
   });
   elements.trimCanvas.addEventListener("pointermove", (event) => {
-    if (activeTrimHandle) setBoundary(activeTrimHandle, canvasTimeFromPointer(elements.trimCanvas, event));
+    if (!trimGesture || trimGesture.pointerId !== event.pointerId) return;
+    if (Math.abs(event.clientX - trimGesture.startX) > 5) trimGesture.moved = true;
+    if (!trimGesture.moved || !trimGesture.target) return;
+    const time = canvasTimeFromPointer(elements.trimCanvas, event);
+    if (trimGesture.target === "window") {
+      setTrimWindowPosition(trimGesture.startBoundary + time - trimGesture.startTime, { commit: false });
+    } else if (trimGesture.target === "start") {
+      state.trim.startSeconds = clamp(time, 0, Math.max(0, state.trim.endSeconds - 1 / sampleRate()));
+      syncTrimUi({ emit: false });
+    } else if (trimGesture.target === "end") {
+      state.trim.endSeconds = clamp(time, Math.min(durationSeconds(), state.trim.startSeconds + 1 / sampleRate()), durationSeconds());
+      syncTrimUi({ emit: false });
+    }
   });
-  const releaseTrim = () => { activeTrimHandle = null; };
-  elements.trimCanvas.addEventListener("pointerup", releaseTrim);
-  elements.trimCanvas.addEventListener("pointercancel", releaseTrim);
+  const releaseTrim = (event, cancelled = false) => {
+    if (!trimGesture || trimGesture.pointerId !== event.pointerId) return;
+    const gesture = trimGesture;
+    trimGesture = null;
+    activeTrimHandle = null;
+    if (cancelled && gesture.moved) {
+      state.trim.startSeconds = gesture.startBoundary;
+      state.trim.endSeconds = gesture.endBoundary;
+      syncTrimUi({ emit: false });
+      return;
+    }
+    if (cancelled) return;
+    if (gesture.moved && gesture.target) {
+      invalidateSeriesProposal();
+      markEditChanged(gesture.target === "window" ? "trim-window-dragged" : "trim-boundary-dragged");
+      syncTrimWindowUi(`Trimfönstret är ${formatTime(selectionDurationSeconds())} från ${formatTime(state.trim.startSeconds)} till ${formatTime(state.trim.endSeconds)}.`);
+      return;
+    }
+    state.playback.currentSeconds = canvasTimeFromPointer(elements.trimCanvas, event);
+    elements.audio.currentTime = state.playback.currentSeconds;
+    syncTrimUi();
+  };
+  elements.trimCanvas.addEventListener("pointerup", event => releaseTrim(event));
+  elements.trimCanvas.addEventListener("pointercancel", event => releaseTrim(event, true));
+  elements.trimCanvas.tabIndex = 0;
+  elements.trimCanvas.addEventListener("keydown", event => {
+    const step = event.shiftKey ? 10 : 1;
+    if (["ArrowLeft", "ArrowRight", "+", "=", "-", "0", "Home"].includes(event.key)) event.preventDefault();
+    if (event.altKey && event.key === "ArrowLeft") moveTrimWindow(-step);
+    else if (event.altKey && event.key === "ArrowRight") moveTrimWindow(step);
+    else if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+      state.playback.currentSeconds = clamp(state.playback.currentSeconds + (event.key === "ArrowLeft" ? -step : step), 0, durationSeconds());
+      elements.audio.currentTime = state.playback.currentSeconds;
+      syncTrimUi();
+    } else if (event.key === "+" || event.key === "=") zoomTimeline("in");
+    else if (event.key === "-") zoomTimeline("out");
+    else if (event.key === "0") fitTrimSelection();
+    else if (event.key === "Home") fitTimeline();
+  });
 
   elements.addMarker.addEventListener("click", () => {
     elements.markerCompose.hidden = false;
@@ -3836,10 +4170,17 @@ function bindEvents() {
     if (value === null) showToast("Sluttiden kunde inte tolkas.", "error");
     else setBoundary("end", value);
   });
-  elements.trimWindowDurationInput.addEventListener("change", () => updateTrimWindowDuration(elements.trimWindowDurationInput.value));
+  elements.trimWindowDurationInput.addEventListener("change", () => {
+    if (updateTrimWindowDuration(elements.trimWindowDurationInput.value)) resizeTrimWindowToTarget();
+  });
   $("#applyWindowFromStartButton").addEventListener("click", () => applyTrimWindow("start"));
   $("#applyWindowAtPlayheadButton").addEventListener("click", () => applyTrimWindow("playhead"));
   $("#applyWindowToEndButton").addEventListener("click", () => applyTrimWindow("end"));
+  $$('[data-move-window]').forEach(button => button.addEventListener("click", () => moveTrimWindow(Number(button.dataset.moveWindow))));
+  $("#centerWindowAtPlayheadButton").addEventListener("click", () => centerTrimWindowAt(elements.audio.currentTime || state.playback.currentSeconds));
+  elements.trimHudMoveLeft.addEventListener("click", () => moveTrimWindow(-10));
+  elements.trimHudMoveRight.addEventListener("click", () => moveTrimWindow(10));
+  $("#trimHudOpen").addEventListener("click", () => { setMode("trim"); window.setTimeout(fitTrimSelection, 60); });
   $("#setStartAtPlayhead").addEventListener("click", () => setBoundary("start", elements.audio.currentTime || state.playback.currentSeconds));
   $("#setEndAtPlayhead").addEventListener("click", () => setBoundary("end", elements.audio.currentTime || state.playback.currentSeconds));
   $$("[data-nudge]").forEach((button) => button.addEventListener("click", () => {
@@ -4036,6 +4377,7 @@ async function initialize() {
   renderAnalysisSummary();
   renderObservations();
   renderMarkers();
+  syncTrackControls();
   syncTrimUi();
   syncTrimWindowUi();
   syncSeriesUi();

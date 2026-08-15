@@ -17,6 +17,18 @@ test("trimfönstret har 20 minuter som redigerbart standardvärde", () => {
   assert.match(app, /function applyTrimWindow\(anchor\)/);
   assert.match(app, /Math\.min\(state\.trimWindowSeconds, sourceDuration\)/);
   assert.match(app, /trimWindowSeconds: state\.trimWindowSeconds/);
+  for (const id of ["trimHud", "trimHudRange", "trimHudDuration", "exportTrimCanvas", "analysisTimeAxis", "centerWindowAtPlayheadButton"]) assert.match(html, new RegExp(`id="${id}"`));
+  assert.match(html, /data-move-window="-60"/);
+  assert.match(html, /data-move-window="60"/);
+  assert.match(html, /data-fit-selection/);
+  assert.match(html, /data-expand-timeline="analysisTimelineCard"/);
+  assert.match(html, /data-expand-timeline="trimTimelineCard"/);
+  assert.doesNotMatch(html, /<div class="time-axis"[^>]*><span>00:00/);
+  assert.match(app, /function moveTrimWindow\(deltaSeconds/);
+  assert.match(app, /function setTrimWindowPosition\(startSeconds/);
+  assert.match(app, /const windowLength = Math\.min\(selectionDurationSeconds\(\), sourceDuration\)/);
+  assert.match(app, /function fitTrimSelection\(\)/);
+  assert.match(app, /function toggleTimelineExpansion\(cardId/);
 });
 
 test("toningar är valfria, flexibla och har stora iPad-reglage", () => {
@@ -29,6 +41,8 @@ test("toningar är valfria, flexibla och har stora iPad-reglage", () => {
   assert.doesNotMatch(html, /id="fade(?:In|Out)Toggle"[^>]+checked/);
   assert.match(css, /\.fade-switch\s*\{[^}]*min-height:\s*44px/s);
   assert.match(css, /\.preset-row button\s*\{[^}]*min-height:\s*44px/s);
+  assert.match(css, /\.nudge-group button\s*\{[^}]*min-height:\s*44px/s);
+  assert.match(html, />−10 ms<|>\+10 ms</);
 });
 
 test("medhörningen schemalägger samma linjära fadefunktion med AudioParam", () => {
@@ -107,6 +121,19 @@ test("adaptiv detalj, previewkanaler och workerjobb är operabla", () => {
   assert.match(html, /name="monitorMode" value="mono"/);
   assert.match(app, /function nextJobId/);
   assert.match(app, /function isCurrentJob/);
+  assert.match(app, /tracks\.correlation/);
+  assert.match(app, /timelines\.correlation/);
+  assert.match(app, /KORR/);
+  assert.match(css, /\.timeline-card\.is-timeline-expanded/);
+  assert.match(css, /@media\(pointer:coarse\).*\.timeline-canvas\{touch-action:pan-y\}/);
+  assert.doesNotMatch(css, /touch-action:none/);
+  assert.match(css, /\.button-small\s*\{[^}]*min-height:\s*44px/s);
+  assert.match(css, /\.legend-chip\s*\{[^}]*min-height:\s*44px/s);
+  assert.match(app, /card\.setAttribute\("role", "dialog"\)/);
+  assert.match(app, /card\.setAttribute\("aria-modal", "true"\)/);
+  assert.match(app, /isolateExpandedTimeline\(card\)/);
+  assert.match(app, /timelineFocusableElements\(expanded\)/);
+  assert.match(app, /expandedTimelineRestoreFocus\.focus\(\)/);
   assert.match(html, /id="cancelAnalysisButton"/);
   assert.match(html, /id="cancelExportButton"/);
 });

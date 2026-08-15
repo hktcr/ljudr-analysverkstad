@@ -1,8 +1,8 @@
-# Valideringsplan för 1.0.0-rc.8
+# Valideringsplan för 1.0.0-rc.9
 
 ## Status
 
-`1.0.0-rc.8` är en offentlig valideringskandidat. Den får inte beskrivas som produktionsverifierad 1.0.
+`1.0.0-rc.9` är en offentlig valideringskandidat. Den får inte beskrivas som produktionsverifierad 1.0.
 
 Loudnessmotorn klarar hela den relevanta filbaserade mono/stereo-delen av EBU Loudness Test Set v5.0: 68 av 68 krav för 62 filer. Den klarar även samtliga 19 relevanta mono/stereo-filer i ITU-R BS.2217-2 inom +/-0,1 LKFS. EBU:s flerkanalsfall och uttryckliga live-mätarfall ligger utanför verktygets filbaserade mono/stereo-scope. Resultaten är verifiering inom dokumenterad scope, inte produktcertifiering.
 
@@ -64,6 +64,8 @@ Följande är blockerande för versionsnumret `1.0.0`:
 10. Kör VoiceOver, externt tangentbord, 200/400 procents zoom, kontrast och reduced motion.
 11. Skapa Minimal underlag, kontrollera exakt preview, kopiera texten, klistra in matchande guidance och verifiera att inget råd tillämpas automatiskt.
 12. Logga tid, maximal observerbar minnesbelastning, temperaturvarning och varje fel.
+
+Kontrollera dessutom i stående och liggande iPad-läge att A/B-fönstret är synligt i analys, trimning och export, att den expanderade tidslinjen går att öppna och stänga, att sidan kan rullas utanför aktiv trimdragning och att hela fönstret kan flyttas utan att dess längd ändras.
 
 ## Releaseport
 

@@ -26,7 +26,7 @@
           </span>
           <span>
             <strong>LjudR</strong>
-            <small>Analysverkstad <span class="brand-version" id="appVersion" aria-label="Programversion">v1.0.0-rc.8</span></small>
+            <small>Analysverkstad <span class="brand-version" id="appVersion" aria-label="Programversion">v1.0.0-rc.9</span></small>
           </span>
         </a>
 
@@ -81,8 +81,20 @@
         </div>
         <div class="file-assurance">
           <span class="status-dot"></span>
-          <span>Originalet är skrivskyddat</span>
+          <span>Originalet ändras inte</span>
         </div>
+        <section class="trim-hud" id="trimHud" aria-label="Aktuellt trimfönster">
+          <div class="trim-hud-copy">
+            <span>Aktuellt trimfönster</span>
+            <strong id="trimHudRange">A 00:00.000 · B 00:00.000</strong>
+            <small id="trimHudDuration">Hela källfilen</small>
+          </div>
+          <div class="trim-hud-actions" role="group" aria-label="Flytta eller öppna trimfönstret">
+            <button class="icon-button" id="trimHudMoveLeft" type="button" aria-label="Flytta trimfönstret tio sekunder åt vänster">−10 s</button>
+            <button class="icon-button" id="trimHudMoveRight" type="button" aria-label="Flytta trimfönstret tio sekunder åt höger">+10 s</button>
+            <button class="button button-quiet button-small" id="trimHudOpen" type="button">Öppna</button>
+          </div>
+        </section>
         <button class="button button-quiet button-small" id="changeFileButton" type="button">Byt fil</button>
       </div>
 
@@ -100,7 +112,7 @@
               </div>
               <dl class="hero-capabilities" aria-label="Verktygets huvudfunktioner">
                 <div><dt>Objektiv mätning</dt><dd>LUFS, True Peak, LRA, PLR och stereodata</dd></div>
-                <div><dt>Varsam redigering</dt><dd>Trimning, linjära fades och konstant global gain</dd></div>
+                <div><dt>Varsam redigering</dt><dd>Trimning, linjära toningar och konstant global gain</dd></div>
                 <div><dt>Spårbart flöde</dt><dd>Projekt, rapport och ljudfritt analysunderlag</dd></div>
               </dl>
             </div>
@@ -225,7 +237,7 @@
                 <article class="chain-card"><span>3</span><div><strong>Verifierad exportfil</strong><small id="verifiedMeasureStatus">Skapas först efter WAV-export</small></div></article>
               </section>
 
-              <article class="timeline-card">
+              <article class="timeline-card" id="analysisTimelineCard">
                 <div class="card-toolbar">
                   <div>
                     <h2>Översikt</h2>
@@ -233,8 +245,10 @@
                   </div>
                   <div class="toolbar-group" aria-label="Tidslinjens vy">
                     <button class="icon-button" type="button" data-zoom="out" aria-label="Zooma ut"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 11h14v2H5z"/></svg></button>
+                    <button class="button button-quiet button-small" type="button" data-fit-selection>Visa trimfönster</button>
                     <button class="button button-quiet button-small" type="button" id="fitTimelineButton">Visa allt</button>
                     <button class="icon-button" type="button" data-zoom="in" aria-label="Zooma in"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></svg></button>
+                    <button class="button button-secondary button-small" type="button" data-expand-timeline="analysisTimelineCard" aria-pressed="false">Expandera tidslinjen</button>
                   </div>
                 </div>
                 <div class="track-legend" aria-label="Spår i tidslinjen">
@@ -243,6 +257,7 @@
                   <span class="channel-key channel-right"><i></i>Höger</span>
                   <button class="legend-chip is-on" type="button" data-track="loudness"><i class="legend-loudness"></i>Loudness</button>
                   <button class="legend-chip is-on" type="button" data-track="peaks"><i class="legend-peaks"></i>Toppar</button>
+                  <button class="legend-chip" type="button" data-track="correlation"><i class="legend-correlation"></i>Stereo och monorisk</button>
                   <button class="legend-chip is-on" type="button" data-track="markers"><i class="legend-markers"></i>Markörer</button>
                 </div>
                 <div class="canvas-wrap">
@@ -253,7 +268,7 @@
                   </div>
                 </div>
                 <div class="detail-status" id="detailStatus" role="status"><span class="status-dot"></span><span>Översiktsdata</span><button class="text-button" id="cancelDetailButton" type="button" hidden>Avbryt detaljläsning</button></div>
-                <div class="time-axis" aria-hidden="true"><span>00:00</span><span>05:00</span><span>10:00</span><span>15:00</span><span>20:00</span></div>
+                <div class="time-axis" id="analysisTimeAxis" aria-hidden="true"></div>
               </article>
 
               <details class="canvas-text-alternative" id="canvasTextAlternative">
@@ -263,9 +278,9 @@
 
               <div class="metric-grid" aria-label="Sammanfattande mätvärden">
                 <article class="metric-card metric-violet">
-                  <div class="metric-label"><span>Integrated loudness</span><button class="info-dot" type="button" data-help-topic="lufs" aria-label="Om Integrated loudness">i</button></div>
+                  <div class="metric-label"><span>Integrerad loudness</span><button class="info-dot" type="button" data-help-topic="lufs" aria-label="Om integrerad loudness">i</button></div>
                   <strong id="metricLufs">ej analyserat</strong>
-                  <small>LUFS-I, hela urvalet</small>
+                  <small>LUFS-I, hela källfilen</small>
                 </article>
                 <article class="metric-card metric-cyan">
                   <div class="metric-label"><span>True Peak</span><button class="info-dot" type="button" data-help-topic="peak" aria-label="Om True Peak">i</button></div>
@@ -273,7 +288,7 @@
                   <small>dBTP, högsta kanal</small>
                 </article>
                 <article class="metric-card metric-gold">
-                  <div class="metric-label"><span>Loudness range</span><button class="info-dot" type="button" data-help-topic="lra" aria-label="Om Loudness range">i</button></div>
+                  <div class="metric-label"><span>Loudness Range</span><button class="info-dot" type="button" data-help-topic="lra" aria-label="Om Loudness Range">i</button></div>
                   <strong id="metricLra">ej analyserat</strong>
                   <small>LU, dynamisk spridning</small>
                 </article>
@@ -343,7 +358,7 @@
                   </div>
                   <section class="spectral-diagnostics" aria-labelledby="spectralDiagnosticsTitle">
                     <div><h3 id="spectralDiagnosticsTitle">Frivillig spektral orientering</h3><p>Samplar deterministiska fönster för lågfrekvent rumble och 50 Hz-brum. Resultatet är en granskningspunkt, inte ett felbesked eller ett EQ-förslag.</p></div>
-                    <button class="button button-secondary button-small" id="runSpectralDiagnosticsButton" type="button" disabled>Mät rumble och nätbrum</button>
+                    <button class="button button-secondary button-small" id="runSpectralDiagnosticsButton" type="button" disabled>Mät lågfrekvent buller och 50 Hz-brum</button>
                     <dl id="spectralDiagnosticsResult"><div><dt>Status</dt><dd>Inte körd</dd></div></dl>
                   </section>
                 </div>
@@ -427,25 +442,33 @@
           <div class="workspace-grid">
             <div class="workspace-main">
               <div class="section-heading">
-                <div><span class="eyebrow">Steg 3</span><h1 id="trimTitle">Trimma och lyssna</h1><p>Trimma ytterkanterna och gör endast globala nivåval. Ingen lokal nivåjustering görs.</p></div>
+                <div><span class="eyebrow">Steg 3</span><h1 id="trimTitle">Trimma och lyssna</h1><p>Trimma början och slutet och gör endast globala nivåval. Ingen lokal nivåjustering görs.</p></div>
                 <span class="read-only-pill"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h12v16H6V4Zm2 2v12h8V6H8Z"/></svg>Originalet påverkas inte</span>
               </div>
 
-              <article class="timeline-card trim-timeline-card">
+              <article class="timeline-card trim-timeline-card" id="trimTimelineCard">
                 <div class="card-toolbar">
                   <div><h2>Valt utsnitt</h2><span id="selectedDuration">00:00.000</span></div>
-                  <div class="toolbar-group"><button class="button button-quiet button-small" id="resetTrimButton" type="button">Återställ gränser</button><button class="button button-quiet button-small" id="fitTrimButton" type="button">Visa allt</button></div>
+                  <div class="toolbar-group"><button class="icon-button" type="button" data-zoom="out" aria-label="Zooma ut"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 11h14v2H5z"/></svg></button><button class="button button-quiet button-small" type="button" data-fit-selection>Visa trimfönster</button><button class="button button-quiet button-small" id="fitTrimButton" type="button">Visa allt</button><button class="icon-button" type="button" data-zoom="in" aria-label="Zooma in"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></svg></button><button class="button button-secondary button-small" type="button" data-expand-timeline="trimTimelineCard" aria-pressed="false">Expandera tidslinjen</button><button class="button button-quiet button-small" id="resetTrimButton" type="button">Återställ gränser</button></div>
+                </div>
+                <div class="track-legend" aria-label="Spår i trimtidslinjen">
+                  <button class="legend-chip is-on" type="button" data-track="waveform"><i class="legend-wave"></i>Vågform L/R</button>
+                  <button class="legend-chip is-on" type="button" data-track="loudness"><i class="legend-loudness"></i>LUFS M/S</button>
+                  <button class="legend-chip is-on" type="button" data-track="peaks"><i class="legend-peaks"></i>Sample peak</button>
+                  <button class="legend-chip" type="button" data-track="correlation"><i class="legend-correlation"></i>Stereo och monorisk</button>
+                  <button class="legend-chip is-on" type="button" data-track="markers"><i class="legend-markers"></i>Markörer</button>
                 </div>
                 <div class="canvas-wrap canvas-wrap-trim">
-                  <canvas id="trimCanvas" class="timeline-canvas" role="img" aria-label="Tidslinje med trimgränser för början och slut"></canvas>
+                  <canvas id="trimCanvas" class="timeline-canvas" role="img" aria-label="Tidslinje med trimgränser för början och slut" aria-describedby="trimCanvasInstructions"></canvas>
                   <div class="trim-handle-label trim-start-label" id="trimStartLabel">Start 00:00.000</div>
                   <div class="trim-handle-label trim-end-label" id="trimEndLabel">Slut 00:00.000</div>
                 </div>
+                <p class="timeline-instructions" id="trimCanvasInstructions">Dra A eller B för att ändra längden. Dra inne i det valda fönstret för att flytta båda gränserna. Alt + vänster- eller högerpil flyttar hela fönstret.</p>
                 <div class="audition-toolbar">
                   <fieldset class="segmented-control" id="previewModeControl"><legend>Provlyssning</legend><label><input type="radio" name="previewMode" value="source" checked><span>Källkontext</span></label><label><input type="radio" name="previewMode" value="export"><span>Exportförhandsvisning</span></label></fieldset>
                   <fieldset class="segmented-control" id="monitorModeControl"><legend>Monitor</legend><label><input type="radio" name="monitorMode" value="stereo" checked><span>Stereo</span></label><label><input type="radio" name="monitorMode" value="left"><span>Vänster</span></label><label><input type="radio" name="monitorMode" value="right"><span>Höger</span></label><label><input type="radio" name="monitorMode" value="mono"><span>Mono</span></label></fieldset>
                 </div>
-                <p class="audition-status" id="auditionStatus">Källkontext: inga fades eller nivåval hörs. Monitorval påverkar aldrig export.</p>
+                <p class="audition-status" id="auditionStatus">Källkontext: inga toningar eller nivåval hörs. Monitorval påverkar aldrig export.</p>
                 <div class="transport">
                   <div class="transport-buttons">
                     <button class="icon-button" type="button" id="jumpStartButton" aria-label="Gå till startgränsen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h2v14H5V5Zm4 7 10-7v14L9 12Z"/></svg></button>
@@ -473,29 +496,38 @@
                     <button class="button button-secondary button-small" id="applyWindowAtPlayheadButton" type="button">Runt spelhuvudet</button>
                     <button class="button button-secondary button-small" id="applyWindowToEndButton" type="button">Till slutgräns</button>
                   </div>
+                  <div class="trim-window-shift" role="group" aria-label="Flytta hela trimfönstret med bibehållen längd">
+                    <button type="button" data-move-window="-60">−1 min</button>
+                    <button type="button" data-move-window="-10">−10 s</button>
+                    <button type="button" data-move-window="-1">−1 s</button>
+                    <button type="button" data-move-window="1">+1 s</button>
+                    <button type="button" data-move-window="10">+10 s</button>
+                    <button type="button" data-move-window="60">+1 min</button>
+                  </div>
+                  <button class="button button-quiet button-small" id="centerWindowAtPlayheadButton" type="button">Centrera befintligt fönster vid spelhuvudet</button>
                   <p id="trimWindowStatus" class="trim-window-status" role="status" aria-live="polite">Mållängd: 20:00.000</p>
                 </div>
               </article>
 
               <div class="trim-control-grid">
                 <article class="control-card">
-                  <div class="control-card-heading"><span class="boundary-chip boundary-start">A</span><div><h2>Startgräns</h2><p>Första bildrutan som tas med</p></div></div>
+                  <div class="control-card-heading"><span class="boundary-chip boundary-start">A</span><div><h2>Startgräns</h2><p>Samplingen vid startgränsen tas med</p></div></div>
                   <label class="time-input-label">Tid<input id="trimStartInput" class="time-input" type="text" inputmode="decimal" value="00:00.000" aria-label="Starttid"></label>
                   <button class="button button-secondary button-full" id="setStartAtPlayhead" type="button">Sätt vid spelhuvudet</button>
                   <div class="nudge-group" aria-label="Finjustera startgräns">
-                    <button type="button" data-nudge="start:-0.1">−100 ms</button><button type="button" data-nudge="start:-0.01">−10</button><button type="button" data-nudge="start:-0.001">−1</button>
-                    <button type="button" data-nudge="start:0.001">+1</button><button type="button" data-nudge="start:0.01">+10</button><button type="button" data-nudge="start:0.1">+100 ms</button>
+                    <button type="button" data-nudge="start:-0.1">−100 ms</button><button type="button" data-nudge="start:-0.01">−10 ms</button><button type="button" data-nudge="start:-0.001">−1 ms</button>
+                    <button type="button" data-nudge="start:0.001">+1 ms</button><button type="button" data-nudge="start:0.01">+10 ms</button><button type="button" data-nudge="start:0.1">+100 ms</button>
                   </div>
                   <button class="text-button preview-boundary" type="button" data-preview-boundary="start">Lyssna runt gränsen</button>
                 </article>
 
                 <article class="control-card">
-                  <div class="control-card-heading"><span class="boundary-chip boundary-end">B</span><div><h2>Slutgräns</h2><p>Första bildrutan som inte tas med</p></div></div>
+                  <div class="control-card-heading"><span class="boundary-chip boundary-end">B</span><div><h2>Slutgräns</h2><p>Samplingen vid slutgränsen tas inte med</p></div></div>
                   <label class="time-input-label">Tid<input id="trimEndInput" class="time-input" type="text" inputmode="decimal" value="00:00.000" aria-label="Sluttid"></label>
                   <button class="button button-secondary button-full" id="setEndAtPlayhead" type="button">Sätt vid spelhuvudet</button>
                   <div class="nudge-group" aria-label="Finjustera slutgräns">
-                    <button type="button" data-nudge="end:-0.1">−100 ms</button><button type="button" data-nudge="end:-0.01">−10</button><button type="button" data-nudge="end:-0.001">−1</button>
-                    <button type="button" data-nudge="end:0.001">+1</button><button type="button" data-nudge="end:0.01">+10</button><button type="button" data-nudge="end:0.1">+100 ms</button>
+                    <button type="button" data-nudge="end:-0.1">−100 ms</button><button type="button" data-nudge="end:-0.01">−10 ms</button><button type="button" data-nudge="end:-0.001">−1 ms</button>
+                    <button type="button" data-nudge="end:0.001">+1 ms</button><button type="button" data-nudge="end:0.01">+10 ms</button><button type="button" data-nudge="end:0.1">+100 ms</button>
                   </div>
                   <button class="text-button preview-boundary" type="button" data-preview-boundary="end">Lyssna runt gränsen</button>
                 </article>
@@ -540,8 +572,8 @@
               </section>
 
               <section class="inspector-section gain-section">
-                <div class="inspector-heading"><div class="heading-with-help"><h2>Gain för hela verket</h2><button class="info-dot" type="button" data-help-topic="gain" aria-label="Om global gain">i</button></div><button class="text-button" id="resetGainButton" type="button">Återställ</button></div>
-                <p class="section-description">Samma nivåändring över hela inspelningen. Ingen kompressor eller limiter används.</p>
+                <div class="inspector-heading"><div class="heading-with-help"><h2>Gain för exporturvalet</h2><button class="info-dot" type="button" data-help-topic="gain" aria-label="Om global gain">i</button></div><button class="text-button" id="resetGainButton" type="button">Återställ</button></div>
+                <p class="section-description">Samma nivåändring över hela det valda exporturvalet. Ingen kompressor eller limiter används.</p>
                 <div class="gain-value"><input id="gainNumber" type="number" min="-24" max="24" step="0.1" value="0.0" aria-label="Gain i decibel"><span>dB</span></div>
                 <input id="gainRange" class="accent-range" type="range" min="-24" max="24" step="0.1" value="0" aria-label="Gain i decibel">
                 <div class="projected-metrics">
@@ -593,23 +625,28 @@
                 </dl>
               </article>
 
+              <article class="export-selection-card" aria-labelledby="exportSelectionTitle">
+                <div class="card-toolbar"><div><h2 id="exportSelectionTitle">Källöversikt och exporturval</h2><span id="exportSelectionMapping">Källan är ännu inte vald</span></div><button class="button button-quiet button-small" type="button" data-mode-link="trim">Ändra trimfönster</button></div>
+                <div class="canvas-wrap export-canvas-wrap"><canvas id="exportTrimCanvas" class="timeline-canvas" role="img" aria-label="Källöversikt med markerat exporturval"></canvas></div>
+              </article>
+
               <fieldset class="profile-fieldset">
                 <legend><span>Välj exportprofil</span><button class="info-dot" type="button" data-help-topic="export-profiles" aria-label="Om exportprofiler">i</button></legend>
                 <div class="profile-option-wrap"><label class="profile-option">
                   <input type="radio" name="exportProfile" value="sample-payload-trim" checked>
                   <span class="radio-visual"></span>
                   <span class="profile-icon profile-blue"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4V5Zm3 3v8h2V8H7Zm4-2v12h2V6h-2Zm4 3v6h2V9h-2Z"/></svg></span>
-                  <span class="profile-copy"><span class="profile-title"><strong>Sample-payload-identiskt trimutdrag</strong></span><small>Ett sammanhängande utsnitt utan gain eller fades. Valda samplebyte bevaras exakt.</small><span class="profile-tags"><i>WAV</i><i>Endast trim</i><i>Sample-identiskt</i></span></span>
+                  <span class="profile-copy"><span class="profile-title"><strong>Sample-payload-identiskt trimutdrag</strong></span><small>Ett sammanhängande utsnitt utan gain eller toningar. Valda samplebyte bevaras exakt.</small><span class="profile-tags"><i>WAV</i><i>Endast trim</i><i>Sample-identiskt</i></span></span>
                 </label><button class="info-dot profile-info" type="button" data-help-topic="preservation-export" aria-label="Om sample-payload-identiskt trimutdrag">i</button></div>
                 <div class="profile-option-wrap"><label class="profile-option">
                   <input type="radio" name="exportProfile" value="edited-wav">
                   <span class="radio-visual"></span>
                   <span class="profile-icon profile-violet"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v10.3a4 4 0 1 0 2 3.46V8h5V3h-7Z"/></svg></span>
-                  <span class="profile-copy"><span class="profile-title"><strong>Redigerad WAV-master</strong></span><small>Tillåter uttrycklig kantfade och en bekräftad global gain. Alla ingrepp redovisas.</small><span class="profile-tags"><i>WAV</i><i>Redigerad</i></span></span>
+                  <span class="profile-copy"><span class="profile-title"><strong>Redigerad WAV-master</strong></span><small>Tillåter uttryckliga kanttoningar och en bekräftad global gain. Alla ingrepp redovisas.</small><span class="profile-tags"><i>WAV</i><i>Redigerad</i></span></span>
                 </label><button class="info-dot profile-info" type="button" data-help-topic="distribution-export" aria-label="Om redigerad WAV-master">i</button></div>
               </fieldset>
 
-              <p class="scope-note"><strong>Distributionsformat ligger utanför 1.0.</strong> Spotify for Creators kan ta emot den verifierade WAV-mastern direkt. Använd Ferrite när avsnittet behöver interna klipp, montage eller separat codec-export.</p>
+              <p class="scope-note"><strong>Separata codecformat och direktpublicering ligger utanför verktyget.</strong> Spotify for Creators kan ta emot den verifierade WAV-mastern direkt. Använd Ferrite när avsnittet behöver interna klipp, montage eller separat codec-export.</p>
 
               <div class="export-progress" id="exportProgress" hidden aria-live="polite">
                 <div class="progress-copy"><strong id="exportProgressLabel">Förbereder export</strong><span id="exportProgressPercent">0 %</span></div>
@@ -737,13 +774,13 @@
           <fieldset class="exchange-profile-picker">
             <legend>Analysstadium</legend>
             <label><input type="radio" name="exchangeStage" value="source"><span><strong>Källfil</strong><small>Originalets signal före trimning och nivåval.</small></span></label>
-            <label><input type="radio" name="exchangeStage" value="calculated-export-selection" checked><span><strong>Beräknat exporturval</strong><small>Aktuellt trimfönster efter synliga fades och global gain, före kvantisering.</small></span></label>
+            <label><input type="radio" name="exchangeStage" value="calculated-export-selection" checked><span><strong>Beräknat exporturval</strong><small>Aktuellt trimfönster efter synliga toningar och global gain, före kvantisering.</small></span></label>
             <label><input type="radio" name="exchangeStage" value="verified-output"><span><strong>Verifierad WAV</strong><small>Den faktiskt skrivna och återöppnade exportfilen. Tillgänglig efter export.</small></span></label>
           </fieldset>
           <fieldset class="exchange-profile-picker">
             <legend>Dataprofil</legend>
-            <label><input type="radio" name="exchangeProfile" value="minimal" checked><span><strong>Minimal</strong><small>Sammanfattande mått, maskinella observationer och markörer. Ingen kontinuerlig tidsserie, waveform, RMS-array eller samples.</small></span></label>
-            <label><input type="radio" name="exchangeProfile" value="temporal-diagnostics"><span><strong>Temporal diagnostik</strong><small>Grova 5-sekundersaggregat för programnivå och stereokorrelation, högst 720 segment. Aldrig waveform, L/R-nivåserier, RMS, råa samples eller ljud.</small></span></label>
+            <label><input type="radio" name="exchangeProfile" value="minimal" checked><span><strong>Minimal</strong><small>Sammanfattande mått, maskinella observationer och markörer. Ingen kontinuerlig tidsserie, vågform, RMS-serie eller samplingar.</small></span></label>
+            <label><input type="radio" name="exchangeProfile" value="temporal-diagnostics"><span><strong>Temporal diagnostik</strong><small>Grova 5-sekundersaggregat för programnivå och stereokorrelation, högst 720 segment. Aldrig vågform, L/R-nivåserier, RMS, råa samplingar eller ljud.</small></span></label>
           </fieldset>
           <fieldset class="exchange-privacy-picker">
             <legend>Frivillig metadata</legend>
