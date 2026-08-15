@@ -1757,6 +1757,21 @@ function syncTrimWindowUi(message = "") {
   elements.trimWindowStatus.textContent = message || `Mållängd: ${formatTime(target)}`;
 }
 
+function activateTrimAudition({ pause = true } = {}) {
+  if (!state.file) return;
+  if (pause) stopPlayback();
+  state.monitoring.previewMode = "export";
+  const exportRadio = $("input[name='previewMode'][value='export']");
+  if (exportRadio) exportRadio.checked = true;
+  state.playback.previewStopAt = null;
+  state.playback.currentSeconds = state.trim.startSeconds;
+  elements.audio.currentTime = state.trim.startSeconds;
+  syncAuditionUi();
+  updateMonitoringGraph();
+  elements.currentTime.textContent = formatTime(state.playback.currentSeconds);
+  scheduleCanvasRender();
+}
+
 function updateTrimWindowDuration(value) {
   const parsed = parseTime(value);
   if (parsed === null || parsed <= 0) {
@@ -1783,6 +1798,7 @@ function setTrimWindowPosition(startSeconds, { commit = true } = {}) {
   syncTrimUi({ emit: false });
   if (commit) {
     markTrimCandidateChanged(`Trimfönstret placerades vid ${formatTime(start)} till ${formatTime(start + windowLength)}. Lås och provlyssna innan det tillämpas.`);
+    activateTrimAudition();
   }
   return true;
 }
@@ -1810,6 +1826,7 @@ function resizeTrimWindowToTarget() {
   state.trim.endSeconds = state.trim.startSeconds + windowLength;
   syncTrimUi({ emit: false });
   markTrimCandidateChanged(`Trimfönstret är ${formatTime(windowLength)} från ${formatTime(state.trim.startSeconds)} till ${formatTime(state.trim.endSeconds)}. Lås det när placeringen känns rätt.`);
+  activateTrimAudition();
 }
 
 function applyTrimWindow(anchor) {
@@ -1837,6 +1854,7 @@ function applyTrimWindow(anchor) {
   markTrimCandidateChanged(state.trimWindowSeconds > sourceDuration
     ? `Källan är kortare än mållängden. Hela ${formatTime(sourceDuration)} valdes.`
     : `Trimfönstret är ${formatTime(windowLength)} från ${formatTime(start)} till ${formatTime(start + windowLength)}. Lås det när placeringen känns rätt.`);
+  activateTrimAudition();
 }
 
 function setBoundary(boundary, seconds) {
@@ -3801,6 +3819,35 @@ function fitTrimSelection() {
   renderCanvasTextAlternative();
 }
 
+function showTrimWindow() {
+  const duration = durationSeconds();
+  if (!state.file || !(duration > 0)) {
+    showToast("Öppna en ljudfil först.", "error");
+    return;
+  }
+  setMode("trim");
+  stopPlayback();
+  state.trimEditor.unlocked = true;
+  const target = Math.min(Math.max(1 / sampleRate(), state.trimWindowSeconds), duration);
+  const wholeSource = state.trim.startSeconds <= 0.5 / sampleRate()
+    && Math.abs(state.trim.endSeconds - duration) <= 0.5 / sampleRate();
+  if (wholeSource && target < duration - 0.5 / sampleRate()) {
+    const playhead = clamp(finite(elements.audio.currentTime) ?? state.playback.currentSeconds, 0, duration);
+    const start = clamp(playhead - target / 2, 0, duration - target);
+    state.trim.startSeconds = start;
+    state.trim.endSeconds = start + target;
+    syncTrimUi({ emit: false });
+    markTrimCandidateChanged(`Ett flyttbart trimfönster på ${formatTime(target)} har placerats vid ${formatTime(start)} till ${formatTime(start + target)}.`);
+  } else {
+    syncTrimEditorUi();
+  }
+  activateTrimAudition();
+  window.setTimeout(fitTrimSelection, 60);
+  showToast(target >= duration - 0.5 / sampleRate()
+    ? "Hela källfilen visas. Trimfönstret är upplåst och uppspelningen börjar vid A."
+    : "Trimfönstret är upplåst. Uppspelningen börjar vid A och stannar vid B.");
+}
+
 function updateTimelineExpansionButtons(cardId = null) {
   $$('[data-expand-timeline]').forEach(button => {
     const active = Boolean(cardId && button.dataset.expandTimeline === cardId);
@@ -4113,7 +4160,7 @@ function bindEvents() {
   $$('[data-zoom]').forEach((button) => button.addEventListener("click", () => zoomTimeline(button.dataset.zoom)));
   $("#fitTimelineButton").addEventListener("click", fitTimeline);
   $("#fitTrimButton").addEventListener("click", fitTimeline);
-  $$('[data-fit-selection]').forEach(button => button.addEventListener("click", fitTrimSelection));
+  $$('[data-fit-selection]').forEach(button => button.addEventListener("click", showTrimWindow));
   $$('[data-expand-timeline]').forEach(button => button.addEventListener("click", () => toggleTimelineExpansion(button.dataset.expandTimeline)));
   $$(".legend-chip").forEach((button) => button.addEventListener("click", () => {
     const track = button.dataset.track;
@@ -4180,6 +4227,7 @@ function bindEvents() {
     if (cancelled) return;
     if (gesture.moved && gesture.target) {
       markTrimCandidateChanged(`Trimfönstret är ${formatTime(selectionDurationSeconds())} från ${formatTime(state.trim.startSeconds)} till ${formatTime(state.trim.endSeconds)}. Lås det när placeringen känns rätt.`);
+      if (gesture.target === "window") activateTrimAudition();
       return;
     }
     state.playback.currentSeconds = canvasTimeFromPointer(elements.trimCanvas, event);
@@ -4364,7 +4412,7 @@ function bindEvents() {
   $("#centerWindowAtPlayheadButton").addEventListener("click", () => centerTrimWindowAt(elements.audio.currentTime || state.playback.currentSeconds));
   elements.trimHudMoveLeft.addEventListener("click", () => moveTrimWindow(-10));
   elements.trimHudMoveRight.addEventListener("click", () => moveTrimWindow(10));
-  $("#trimHudOpen").addEventListener("click", () => { setMode("trim"); window.setTimeout(fitTrimSelection, 60); });
+  $("#trimHudOpen").addEventListener("click", showTrimWindow);
   $("#setStartAtPlayhead").addEventListener("click", () => setBoundary("start", elements.audio.currentTime || state.playback.currentSeconds));
   $("#setEndAtPlayhead").addEventListener("click", () => setBoundary("end", elements.audio.currentTime || state.playback.currentSeconds));
   $$("[data-nudge]").forEach((button) => button.addEventListener("click", () => {

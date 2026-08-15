@@ -1,4 +1,4 @@
-const CACHE_NAME = "ljudr-shell-v1.0.0-rc.10";
+const CACHE_NAME = "ljudr-shell-v1.0.0-rc.11";
 const SHELL = [
   "./",
   "./index.html",

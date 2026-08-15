@@ -1,5 +1,13 @@
 # Ändringslogg
 
+## 1.0.0-rc.11, 2026-08-15
+
+- gör Visa och flytta trimfönstret till en tydlig åtgärd som öppnar trimvyn och låser upp placeringen
+- skapar ett flyttbart målfönster när hela källfilen tidigare var vald
+- flyttar spelhuvudet till nya A när trimfönstret flyttas
+- väljer exportförhandslyssning så att uppspelningen börjar vid A och stannar vid B
+- utökar regressionstestet för trimknappen och kopplingen mellan fönster och uppspelning
+
 ## 1.0.0-rc.10, 2026-08-15
 
 - inför ett uttryckligt låst och upplåst läge för trimfönstret

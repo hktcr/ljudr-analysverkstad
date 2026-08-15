@@ -28,6 +28,12 @@ test("trimfönstret har 20 minuter som redigerbart standardvärde", () => {
   assert.match(app, /function setTrimWindowPosition\(startSeconds/);
   assert.match(app, /const windowLength = Math\.min\(selectionDurationSeconds\(\), sourceDuration\)/);
   assert.match(app, /function fitTrimSelection\(\)/);
+  assert.match(app, /function showTrimWindow\(\)/);
+  assert.match(app, /data-fit-selection[\s\S]*showTrimWindow/);
+  assert.match(app, /function activateTrimAudition/);
+  assert.match(app, /state\.playback\.currentSeconds = state\.trim\.startSeconds/);
+  assert.match(app, /if \(gesture\.target === "window"\) activateTrimAudition\(\)/);
+  assert.match(html, /Visa och flytta trimfönstret/);
   assert.match(app, /function toggleTimelineExpansion\(cardId/);
   assert.match(html, /id="toggleTrimEditorButton"[^>]*>Lås upp trimfönstret/);
   assert.match(html, /id="applyTrimSelectionButton"[^>]*disabled>Trimma bort utanför A\/B/);

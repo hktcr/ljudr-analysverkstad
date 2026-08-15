@@ -8,7 +8,7 @@
 import { decodeSampleAt, inspectWav, parseWavHeader as parseSharedWavHeader } from "./wav.js";
 import { sha256Blob } from "./sha256.js";
 
-export const ENGINE_VERSION = "1.0.0-rc.10";
+export const ENGINE_VERSION = "1.0.0-rc.11";
 
 export const DEFAULT_PEAK_HANDLING = Object.freeze({
   enabled: false,
