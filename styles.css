@@ -1287,7 +1287,7 @@ svg {
 .assessment-actions li {
   display: grid;
   padding: 8px 10px;
-  grid-template-columns: 24px 1fr;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
   color: var(--ink-soft);
@@ -1296,6 +1296,8 @@ svg {
   border-radius: 9px;
   font-size: 0.72rem;
 }
+
+.assessment-actions li .button { min-height: 44px; }
 
 .assessment-actions li > span {
   display: grid;
@@ -1993,6 +1995,114 @@ svg {
   color: var(--ink);
   font-size: 1rem;
 }
+
+.diagram-transport {
+  display: flex;
+  min-height: 56px;
+  padding: 7px 12px;
+  align-items: center;
+  gap: 7px;
+  background: #eef2f5;
+  border-top: 1px solid var(--border);
+}
+
+.diagram-transport button {
+  min-height: 44px;
+  padding: 7px 12px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  font: inherit;
+  font-size: .72rem;
+  font-weight: 750;
+}
+
+.diagram-transport .diagram-play {
+  color: #fff;
+  background: var(--blue);
+  border-color: var(--blue);
+}
+
+.diagram-transport output {
+  margin-left: auto;
+  font-size: .75rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+}
+
+.diagram-transport-dark {
+  color: #fff;
+  background: #111f33;
+  border-top-color: rgba(255,255,255,.12);
+}
+
+.diagnostic-regions,
+.float-overrange-regions {
+  display: grid;
+  gap: 8px;
+}
+
+.diagnostic-region,
+.float-overrange-region {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 10px 12px;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--surface);
+}
+
+.diagnostic-region div,
+.float-overrange-region div { display: grid; gap: 2px; }
+.diagnostic-region small,
+.float-overrange-region small { color: var(--ink-muted); line-height: 1.4; }
+.diagnostic-region button,
+.float-overrange-region button { min-height: 44px; }
+
+.float-overrange-map {
+  display: grid;
+  margin-top: 18px;
+  padding: 20px;
+  gap: 14px;
+  border: 1px solid rgba(154,126,207,.38);
+  border-radius: 18px;
+  background: rgba(247,243,253,.86);
+}
+
+.float-overrange-map p { margin: 4px 0 0; color: var(--ink-muted); }
+.float-overrange-summary { font-weight: 750; }
+
+.observation-heading-actions { display: flex; align-items: center; gap: 8px; }
+
+.observations-dialog {
+  width: min(1040px, calc(100vw - 32px));
+  max-width: none;
+  max-height: calc(100dvh - 32px);
+  padding: 0;
+  border: 0;
+  border-radius: 18px;
+  color: var(--ink);
+  background: var(--surface);
+}
+
+.observations-dialog::backdrop { background: rgba(5,13,24,.78); backdrop-filter: blur(4px); }
+.observations-dialog-shell { display: grid; max-height: calc(100dvh - 32px); grid-template-rows: auto auto minmax(0, 1fr); }
+.observations-dialog .dialog-header p { margin: 4px 0 0; color: var(--ink-muted); }
+.observations-explainer { display: grid; padding: 14px 20px; grid-template-columns: repeat(3, 1fr); gap: 10px; background: var(--surface-muted); border-bottom: 1px solid var(--line); }
+.observations-explainer div { display: grid; gap: 3px; }
+.observations-explainer strong { font-size: .78rem; }
+.observations-explainer span { color: var(--ink-muted); font-size: .7rem; line-height: 1.4; }
+.observation-dialog-list { overflow: auto; padding: 20px; overscroll-behavior: contain; }
+.observation-dialog-card { display: grid; margin-bottom: 12px; padding: 17px; gap: 12px; border: 1px solid var(--line); border-radius: 14px; background: #fff; }
+.observation-dialog-card header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.observation-dialog-card h3 { margin: 0; font-size: 1rem; }
+.observation-dialog-card p { margin: 0; line-height: 1.55; }
+.observation-meta { display: flex; flex-wrap: wrap; gap: 7px; }
+.observation-meta span { padding: 5px 8px; border-radius: 999px; color: var(--ink-muted); background: var(--surface-muted); font-size: .66rem; font-weight: 750; }
+.observation-next-step { padding: 10px 12px; border-left: 3px solid var(--gold); background: #fff8e8; font-size: .76rem; }
 
 .volume-control {
   display: flex;
@@ -3887,4 +3997,9 @@ body.has-expanded-timeline::before {
   .publication-auto-checks,
   .publication-manual-checks { grid-template-columns: 1fr; }
   .series-overview-result { overflow-x: auto; }
+  .diagram-transport { flex-wrap: wrap; }
+  .diagram-transport output { width: 100%; margin: 0; text-align: right; }
+  .observations-dialog { width: 100vw; max-height: 100dvh; height: 100dvh; border-radius: 0; }
+  .observations-dialog-shell { max-height: 100dvh; }
+  .observations-explainer { grid-template-columns: 1fr; }
 }

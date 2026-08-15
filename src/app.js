@@ -226,6 +226,8 @@ const elements = {
   canvasTextContent: $("#canvasTextContent"),
   observationList: $("#observationList"),
   observationCount: $("#observationCount"),
+  observationsDialog: $("#observationsDialog"),
+  observationDialogList: $("#observationDialogList"),
   markerList: $("#markerList"),
   markerCompose: $("#markerCompose"),
   markerText: $("#markerText"),
@@ -296,6 +298,9 @@ const elements = {
   clearStoredExports: $("#clearStoredExportsButton"),
   runSpectralDiagnostics: $("#runSpectralDiagnosticsButton"),
   spectralDiagnosticsResult: $("#spectralDiagnosticsResult"),
+  rumbleRegions: $("#rumbleRegions"),
+  floatOverrangeSummary: $("#floatOverrangeSummary"),
+  floatOverrangeRegions: $("#floatOverrangeRegions"),
   publicationStatus: $("#publicationStatus"),
   publicationAutoChecks: $("#publicationAutoChecks"),
   publicationExceptionNote: $("#publicationExceptionNote"),
@@ -726,6 +731,7 @@ function markEditChanged(reason = "edit") {
   state.verifiedExport = null;
   state.lastExportReport = null;
   state.spectralDiagnostics = null;
+  state.markers = state.markers.filter(marker => marker.origin !== "spectral-screening");
   state.analysisExchange.preview = null;
   state.analysisExchange.lastBundle = null;
   state.analysisExchange.lastBundleBlob = null;
@@ -743,6 +749,7 @@ function markEditChanged(reason = "edit") {
   if (elements.regionMeasureStatus) elements.regionMeasureStatus.textContent = "Behöver beräknas på nytt";
   if (elements.verifiedMeasureStatus) elements.verifiedMeasureStatus.textContent = "Ogiltig efter ändring";
   renderSpectralDiagnostics();
+  renderMarkers();
   renderDeepMeasurements();
   updateProjectedMetrics();
   updateExportRecommendation();
@@ -1231,14 +1238,32 @@ function requestSpectralDiagnostics() {
   state.jobs.spectral = jobId;
   elements.runSpectralDiagnostics.disabled = true;
   elements.spectralDiagnosticsResult.innerHTML = "<div><dt>Status</dt><dd>Förbereder lokal sampling</dd></div>";
-  analysisWorker.postMessage({ type: "spectral-diagnostics", jobId, file: state.file, options: regionOptions() });
+  analysisWorker.postMessage({ type: "spectral-diagnostics", jobId, file: state.file, options: { ...regionOptions(), windowCount: 48 } });
 }
 
 function applySpectralDiagnosticsResult(result) {
   state.jobs.spectral = null;
   state.spectralDiagnostics = result;
+  state.markers = state.markers.filter(marker => marker.origin !== "spectral-screening");
+  (result.reviewRegions || []).forEach((region, index) => {
+    state.markers.push({
+      id: `rumble-screening-${index}-${Math.round(region.startSeconds * 1000)}`,
+      seconds: region.startSeconds,
+      endSeconds: region.endSeconds,
+      type: "technical",
+      machineKind: "possible-low-frequency-disturbance",
+      severity: region.likelihood === "elevated" ? "review" : "info",
+      detail: `${region.likelihoodLabel}. Under 120 Hz ${formatDecimal(region.lowFrequencyEnergyPercent, 1)} %, subsoniskt ${formatDecimal(region.subsonicEnergyPercent, 1)} %. Samplad screening, inte källidentifiering.`,
+      objective: false,
+      origin: "spectral-screening",
+      reviewStatus: "unreviewed",
+      text: "Möjlig lågfrekvent störning",
+      suggested: true,
+    });
+  });
   elements.runSpectralDiagnostics.disabled = false;
   renderSpectralDiagnostics();
+  renderMarkers();
   emitState("spectral-diagnostics-complete");
 }
 
@@ -1246,20 +1271,60 @@ function renderSpectralDiagnostics(status = null) {
   if (!elements.spectralDiagnosticsResult) return;
   if (status) {
     elements.spectralDiagnosticsResult.innerHTML = `<div><dt>Status</dt><dd>${escapeHtml(status)}</dd></div>`;
+    if (elements.rumbleRegions) elements.rumbleRegions.replaceChildren();
     if (elements.runSpectralDiagnostics) elements.runSpectralDiagnostics.disabled = !state.analysis;
     return;
   }
   const result = state.spectralDiagnostics;
   if (!result) {
     elements.spectralDiagnosticsResult.innerHTML = "<div><dt>Status</dt><dd>Inte körd</dd></div>";
+    if (elements.rumbleRegions) elements.rumbleRegions.innerHTML = '<p>Kör screeningen för att få samplade lyssningspunkter.</p>';
     if (elements.runSpectralDiagnostics) elements.runSpectralDiagnostics.disabled = !state.analysis;
     return;
   }
   elements.spectralDiagnosticsResult.innerHTML = `
     <div><dt>Sampling</dt><dd>${Number(result.windowCount || 0)} fönster, ${formatDecimal(result.sampledSeconds, 1)} s totalt</dd></div>
     <div><dt>Lågfrekvent energi</dt><dd>median ${formatDecimal(result.lowFrequencyEnergyPercentMedian, 1)} %, max ${formatDecimal(result.lowFrequencyEnergyPercentMaximum, 1)} %</dd></div>
+    <div><dt>Subsonisk energi</dt><dd>median ${formatDecimal(result.subsonicEnergyPercentMedian, 1)} %</dd></div>
+    <div><dt>Innehåll över 120 Hz</dt><dd>median ${formatDecimal(result.contentAbove120HzPercentMedian, 1)} %</dd></div>
     <div><dt>50 Hz</dt><dd>median ${formatDecimal(result.mainsHum50RelativeDbMedian, 1)} dB, max ${formatDecimal(result.mainsHum50RelativeDbMaximum, 1)} dB relativt</dd></div>
     <div><dt>Tolkning</dt><dd>${escapeHtml(result.interpretation || "Samplad orientering för mänsklig granskning")}</dd></div>`;
+  const regions = result.reviewRegions || [];
+  elements.rumbleRegions.innerHTML = regions.length
+    ? `<h4>${regions.length} samplade område${regions.length === 1 ? "" : "n"} att lyssna på</h4>${regions.map((region, index) => `
+      <article class="diagnostic-region">
+        <div><strong>${escapeHtml(region.likelihoodLabel)} vid ${formatTime(region.startSeconds, false)}</strong><small>Under 120 Hz ${formatDecimal(region.lowFrequencyEnergyPercent, 1)} %, subsoniskt ${formatDecimal(region.subsonicEnergyPercent, 1)} %, över 120 Hz ${formatDecimal(region.contentAbove120HzPercent, 1)} %.</small></div>
+        <button class="button button-quiet button-small" type="button" data-rumble-play="${index}">Lyssna</button>
+      </article>`).join("")}`
+    : "<p>Inget samplat fönster fick måttlig eller förhöjd sannolikhet. Det utesluter inte rumble mellan de samplade fönstren.</p>";
+}
+
+function renderFloatOverrangeMap() {
+  if (!elements.floatOverrangeSummary || !elements.floatOverrangeRegions) return;
+  const summary = state.analysis?.summary || {};
+  const isFloat = /float/i.test(`${state.fileInfo?.encoding || ""} ${state.analysis?.format?.encoding || ""}`);
+  const count = finite(summary.overrangeSamples) ?? 0;
+  const peak = finite(summary.samplePeakDbfs ?? summary.samplePeak);
+  const regions = state.markers.filter(marker => marker.id.startsWith("overrange-") || marker.machineKind === "float-overrange");
+  if (!state.analysis) {
+    elements.floatOverrangeSummary.textContent = "Analysera en floatfil för att se resultatet.";
+    elements.floatOverrangeRegions.replaceChildren();
+    return;
+  }
+  if (!isFloat) {
+    elements.floatOverrangeSummary.textContent = "Källfilen är PCM. Den kan inte bevara samplingar över full skala på samma sätt som float.";
+    elements.floatOverrangeRegions.replaceChildren();
+    return;
+  }
+  if (!count) {
+    elements.floatOverrangeSummary.textContent = `Inga samplingar över 0 dBFS hittades. Högsta sample peak är ${peak === null ? "okänd" : `${formatDecimal(peak, 2)} dBFS`}.`;
+    elements.floatOverrangeRegions.replaceChildren();
+    return;
+  }
+  elements.floatOverrangeSummary.textContent = `${Number(count).toLocaleString("sv-SE")} floatsamplingar över 0 dBFS bevarades i filen. Högsta sample peak är ${peak === null ? "okänd" : `${formatDecimal(peak, 2)} dBFS`}.`;
+  elements.floatOverrangeRegions.innerHTML = regions.length
+    ? regions.map((region, index) => `<article class="float-overrange-region"><div><strong>Floatmarginal ${index + 1}: ${formatTime(region.seconds, false)}${region.endSeconds > region.seconds ? ` till ${formatTime(region.endSeconds, false)}` : ""}</strong><small>${escapeHtml(region.detail || "Minst ett floatvärde ligger över 1,0.")}</small></div><button class="button button-secondary button-small" type="button" data-float-play="${escapeHtml(region.id)}">Visa och spela</button></article>`).join("")
+    : "<p>Överrange finns, men inga separata regioner kunde redovisas i den begränsade markörlistan. Tidpunkten för högsta sample peak visas ovan.</p>";
 }
 
 function requestWaveformDetail() {
@@ -1328,6 +1393,7 @@ function renderAnalysisSummary() {
   $("#metricBalance").textContent = balance === null ? "ej analyserat" : `${balance >= 0 ? "L " : "R "}${formatDecimal(Math.abs(balance), 1)} dB`;
   updateProjectedMetrics();
   renderDeepMeasurements();
+  renderFloatOverrangeMap();
   renderAssessmentReflection();
   updateExportRecommendation();
 }
@@ -1427,21 +1493,22 @@ function renderAssessmentReflection() {
   }
 
   const actions = [];
-  if (invalid > 0) actions.push("Prioritet: kontrollera ogiltiga floatvärden");
-  if (overrange > 0) actions.push("Kontrollera float overrange före PCM export");
-  if (plr !== null && plr >= 14) actions.push("Stor toppdynamik: undvik automatisk kompression");
+  if (invalid > 0) actions.push({ text: "Prioritet: kontrollera ogiltiga floatvärden", action: "observations", button: "Visa observationer" });
+  if (overrange > 0) actions.push({ text: "Kontrollera var floatformatet bevarade toppar över 0 dBFS före PCM-export", action: "float", button: "Visa floattoppar" });
+  if (["soundscape-quiet", "soundscape-active"].includes(state.assessment.recordingType)) actions.push({ text: "Screening kan hitta möjlig mikrofonrumble utan att döma vind i grenar som fel", action: "rumble", button: "Analysera rumble" });
+  if (plr !== null && plr >= 14) actions.push({ text: "Stor toppdynamik: undvik automatisk kompression", action: "preserve", button: "Bevara dynamiken" });
   if (peak !== null && integrated !== null && state.assessment.purpose === "distribution") {
     const rating = levelClass(integrated, profile.bands);
     const available = Math.max(0, -2 - peak);
     if (rating && ["very-low", "low"].includes(rating.key) && available >= 0.5) {
       const desired = Math.max(0, profile.bands[1] - integrated);
       const trial = Math.min(desired, available, 6);
-      if (trial >= 0.5) actions.push(`Prova högst cirka +${formatDecimal(trial, 1)} dB och lyssna`);
+      if (trial >= 0.5) actions.push({ text: `Prova högst cirka +${formatDecimal(trial, 1)} dB och lyssna`, action: "workbench", button: "Öppna nivåverkstaden" });
     }
-    if (rating && ["high", "very-high"].includes(rating.key)) actions.push("Ingen nivåhöjning rekommenderas");
+    if (rating && ["high", "very-high"].includes(rating.key)) actions.push({ text: "Ingen nivåhöjning rekommenderas", action: "preserve", button: "Bevara nivån" });
   }
-  if (!actions.length) actions.push("Lyssna i hörlurar och vid låg högtalarvolym");
-  elements.assessmentActions.innerHTML = actions.map((action, index) => `<li><span>${index + 1}</span><p>${escapeHtml(action)}</p></li>`).join("");
+  if (!actions.length) actions.push({ text: "Lyssna i hörlurar och vid låg högtalarvolym", action: "review", button: "Granska markörer" });
+  elements.assessmentActions.innerHTML = actions.map((action, index) => `<li><span>${index + 1}</span><p>${escapeHtml(action.text)}</p><button class="button button-secondary button-small" type="button" data-assessment-action="${escapeHtml(action.action)}">${escapeHtml(action.button)}</button></li>`).join("");
   elements.assessmentActionCount.textContent = `${actions.length} ${actions.length === 1 ? "förslag" : "förslag"}`;
   elements.assessmentActionPlan.hidden = false;
 }
@@ -1526,14 +1593,38 @@ function renderDeepMeasurements() {
 function normalizeObservations() {
   const raw = Array.isArray(state.analysis?.observations) ? state.analysis.observations : [];
   return raw.map((item, index) => {
-    if (typeof item === "string") return { id: `observation-${index}`, title: "Observation", message: item, severity: "neutral" };
+    if (typeof item === "string") return { id: `observation-${index}`, title: "Observation", message: item, severity: "neutral", objective: false, regions: [] };
     return {
       id: item.id || `observation-${index}`,
       title: item.title || item.label || "Observation",
       message: item.message || item.description || "",
       severity: item.severity || item.type || "neutral",
+      objective: item.objective === true,
+      regions: Array.isArray(item.regions) ? item.regions : [],
     };
   });
+}
+
+function observationNextStep(item) {
+  const steps = {
+    overrange: "Öppna floatkartan, spela regionerna och bedöm sedan hur mycket negativ global gain som behövs före PCM-export.",
+    "non-finite": "Bevara originalet. Kontrollera regionerna och undvik bearbetad export tills orsaken är förstådd.",
+    "flat-top": "Förstora vågformen och lyssna. En platå kan vara klippning men också en naturlig eller syntetisk signalform.",
+    discontinuity: "Spela markörerna i källkontext. Snabba nivåsprång kan vara naturliga transienter.",
+    "low-level": "Lyssna vid normal referensvolym. Låg nivå är inte automatiskt ett kvalitetsfel.",
+    "below-gate": "Bedöm stillheten och den redaktionella avsikten. Höj inte nivån enbart för att loudnessgrinden inte passerades.",
+  };
+  return steps[item.id] || "Läs mätvärdet tillsammans med tidslinjen och lyssna innan du väljer en åtgärd.";
+}
+
+function observationCards(observations, expanded = false) {
+  return observations.map((item) => {
+    const tone = /warning|technical|error|high/i.test(item.severity) ? "is-technical" : /info|neutral|notice/i.test(item.severity) ? "is-neutral" : "";
+    if (!expanded) return `<article class="observation-item ${tone}"><i class="observation-dot" aria-hidden="true"></i><div><strong>${escapeHtml(item.title)}</strong><p>${escapeHtml(item.message)}</p></div></article>`;
+    const regionButton = item.regions.length
+      ? `<button class="button button-secondary button-small" type="button" data-observation-jump="${escapeHtml(item.id)}">Visa första av ${item.regions.length} regioner</button>` : "";
+    return `<article class="observation-dialog-card ${tone}"><header><div><h3>${escapeHtml(item.title)}</h3><div class="observation-meta"><span>${item.objective ? "Objektiv mätobservation" : "Heuristisk observation"}</span><span>${item.regions.length ? `${item.regions.length} regioner` : "Helfilsobservation"}</span><span>${escapeHtml(item.severity)}</span></div></div>${regionButton}</header><p>${escapeHtml(item.message)}</p><p class="observation-next-step"><strong>Nästa kontroll:</strong> ${escapeHtml(observationNextStep(item))}</p></article>`;
+  }).join("");
 }
 
 function renderObservations() {
@@ -1542,12 +1633,11 @@ function renderObservations() {
   if (!observations.length) {
     const message = state.analysis ? "Analysen gav inga särskilda tekniska observationer." : "Observationer visas när analysen är klar.";
     elements.observationList.innerHTML = `<div class="empty-state-small"><p>${escapeHtml(message)}</p></div>`;
+    if (elements.observationDialogList) elements.observationDialogList.innerHTML = `<div class="empty-state-small"><p>${escapeHtml(message)}</p></div>`;
     return;
   }
-  elements.observationList.innerHTML = observations.map((item) => {
-    const tone = /warning|technical|error|high/i.test(item.severity) ? "is-technical" : /info|neutral/i.test(item.severity) ? "is-neutral" : "";
-    return `<article class="observation-item ${tone}"><i class="observation-dot" aria-hidden="true"></i><div><strong>${escapeHtml(item.title)}</strong><p>${escapeHtml(item.message)}</p></div></article>`;
-  }).join("");
+  elements.observationList.innerHTML = observationCards(observations);
+  if (elements.observationDialogList) elements.observationDialogList.innerHTML = observationCards(observations, true);
 }
 
 function renderMarkers() {
@@ -2120,6 +2210,11 @@ function syncPlaybackPosition(seconds = finite(elements.audio.currentTime) ?? st
   state.playback.currentSeconds = position;
   elements.currentTime.textContent = formatTime(position);
   elements.transportSeek.value = String(position);
+  $$('[data-diagram-time]').forEach(output => { output.textContent = formatTime(position); });
+  $$('[data-diagram-action="toggle"]').forEach(button => {
+    button.textContent = elements.audio.paused ? "Spela" : "Pausa";
+    button.setAttribute("aria-label", elements.audio.paused ? "Spela" : "Pausa");
+  });
   scheduleCanvasRender();
 }
 
@@ -2363,6 +2458,18 @@ function previewBoundary(boundary) {
   const start = clamp(point - 1.5, 0, durationSeconds());
   state.playback.previewStopAt = clamp(point + 1.5, 0, durationSeconds());
   playFrom(start);
+}
+
+function playReviewRegion(startSeconds, endSeconds, { zoom = true } = {}) {
+  const start = clamp(finite(startSeconds) ?? 0, 0, durationSeconds());
+  const end = clamp(finite(endSeconds) ?? start + 5, start, durationSeconds());
+  state.monitoring.previewMode = "source";
+  const sourceRadio = $("input[name='previewMode'][value='source']");
+  if (sourceRadio) sourceRadio.checked = true;
+  syncAuditionUi();
+  if (zoom) setZoomAround((start + end) / 2, Math.max(2, Math.min(20, (end - start) * 3)));
+  state.playback.previewStopAt = Math.min(durationSeconds(), Math.max(start + 1, end + 0.75));
+  playFrom(Math.max(0, start - 0.75));
 }
 
 function canvasMetrics(canvas) {
@@ -2619,9 +2726,11 @@ function drawTimeline(canvas, trimMode = false) {
       if ((marker.endSeconds ?? marker.seconds) < viewStart || marker.seconds > viewEnd) return;
       const x = xAtTime(marker.seconds);
       const endX = xAtTime(marker.endSeconds ?? marker.seconds);
-      context.strokeStyle = marker.severity === "critical" ? "rgba(238,91,77,.95)" : marker.severity === "review" ? "rgba(226,171,71,.95)" : "rgba(92,181,190,.9)";
+      const floatOverrange = marker.id.startsWith("overrange-") || marker.machineKind === "float-overrange";
+      const possibleRumble = marker.machineKind === "possible-low-frequency-disturbance";
+      context.strokeStyle = floatOverrange ? "rgba(217,121,240,.98)" : possibleRumble ? "rgba(94,171,209,.95)" : marker.severity === "critical" ? "rgba(238,91,77,.95)" : marker.severity === "review" ? "rgba(226,171,71,.95)" : "rgba(92,181,190,.9)";
       if (endX - x > 2) {
-        context.fillStyle = marker.severity === "critical" ? "rgba(238,91,77,.18)" : marker.severity === "review" ? "rgba(226,171,71,.14)" : "rgba(92,181,190,.12)";
+        context.fillStyle = floatOverrange ? "rgba(217,121,240,.2)" : possibleRumble ? "rgba(94,171,209,.16)" : marker.severity === "critical" ? "rgba(238,91,77,.18)" : marker.severity === "review" ? "rgba(226,171,71,.14)" : "rgba(92,181,190,.12)";
         context.fillRect(x, 0, Math.max(2, endX - x), height);
       }
       context.lineWidth = 1;
@@ -4119,7 +4228,7 @@ function bindTimelineGestures(canvas) {
     if (timelinePointers.size === 1) timelineGesture = { startX: event.clientX, startView: { start: state.view.startSeconds, end: state.view.endSeconds }, moved: false };
     if (timelinePointers.size === 2) {
       const points = [...timelinePointers.values()];
-      timelineGesture = { distance: Math.abs(points[1].x - points[0].x) || 1, startView: { start: state.view.startSeconds, end: state.view.endSeconds } };
+      timelineGesture = { distance: Math.abs(points[1].x - points[0].x) || 1, startView: { start: state.view.startSeconds, end: state.view.endSeconds }, moved: true, hadMultiplePointers: true };
     }
   });
   canvas.addEventListener("pointermove", (event) => {
@@ -4149,13 +4258,18 @@ function bindTimelineGestures(canvas) {
     }
   });
   const release = (event) => {
-    if (timelinePointers.size === 1 && !timelineGesture?.moved) {
+    const hadMultiplePointers = Boolean(timelineGesture?.hadMultiplePointers || timelinePointers.size > 1);
+    if (timelinePointers.size === 1 && !timelineGesture?.moved && !hadMultiplePointers) {
       state.playback.currentSeconds = canvasTimeFromPointer(canvas, event);
       elements.audio.currentTime = state.playback.currentSeconds;
       syncTrimUi();
     }
     timelinePointers.delete(event.pointerId);
     if (!timelinePointers.size) timelineGesture = null;
+    else if (hadMultiplePointers) {
+      const remaining = [...timelinePointers.values()][0];
+      timelineGesture = { startX: remaining.x, startView: { start: state.view.startSeconds, end: state.view.endSeconds }, moved: true, hadMultiplePointers: true };
+    }
   };
   canvas.addEventListener("pointerup", release);
   canvas.addEventListener("pointercancel", release);
@@ -4324,6 +4438,39 @@ function bindEvents() {
     preserveSeries();
     showToast("Bevara oförändrat är valt. Inga förslag har applicerats.");
   });
+  elements.assessmentActions.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-assessment-action]");
+    if (!button) return;
+    const action = button.dataset.assessmentAction;
+    if (action === "observations") $("#expandObservationsButton")?.click();
+    if (action === "float") {
+      $("#deepMeasurements").open = true;
+      $("#floatOverrangeTitle")?.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+    }
+    if (action === "rumble") {
+      $("#deepMeasurements").open = true;
+      requestSpectralDiagnostics();
+      $("#spectralDiagnosticsTitle")?.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+    }
+    if (action === "workbench") elements.openRecommendations.click();
+    if (action === "preserve") elements.preserveFromAnalysis.click();
+    if (action === "review") elements.reviewFindings.click();
+  });
+  $("#expandObservationsButton").addEventListener("click", () => {
+    renderObservations();
+    if (typeof elements.observationsDialog.showModal === "function") elements.observationsDialog.showModal();
+    else elements.observationsDialog.setAttribute("open", "");
+  });
+  $("#closeObservationsButton").addEventListener("click", () => elements.observationsDialog.close());
+  elements.observationDialogList.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-observation-jump]");
+    if (!button) return;
+    const observation = normalizeObservations().find(item => item.id === button.dataset.observationJump);
+    const region = observation?.regions?.[0];
+    if (!region) return;
+    elements.observationsDialog.close();
+    playReviewRegion(region.startSeconds ?? region.timeSeconds, region.endSeconds ?? region.startSeconds ?? region.timeSeconds);
+  });
   elements.saveProject.addEventListener("click", saveProjectFile);
   elements.openProject.addEventListener("click", () => elements.projectInput.click());
   elements.projectInput.addEventListener("change", () => readProject(elements.projectInput.files?.[0]));
@@ -4342,6 +4489,31 @@ function bindEvents() {
     });
     scheduleCanvasRender();
   }));
+
+  $$("[data-diagram-action]").forEach(button => button.addEventListener("click", () => {
+    const action = button.dataset.diagramAction;
+    if (action === "toggle") togglePlayback();
+    if (action === "back") seekPlayback((elements.audio.currentTime || 0) - 10);
+    if (action === "forward") seekPlayback((elements.audio.currentTime || 0) + 10);
+    if (action === "play-visible") {
+      state.playback.previewStopAt = state.view.endSeconds;
+      playFrom(state.view.startSeconds);
+    }
+    if (action === "play-selection") {
+      state.playback.previewStopAt = state.trim.endSeconds;
+      playFrom(state.trim.startSeconds);
+    }
+  }));
+  elements.rumbleRegions.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-rumble-play]");
+    const region = state.spectralDiagnostics?.reviewRegions?.[Number(button?.dataset.rumblePlay)];
+    if (region) playReviewRegion(region.startSeconds, region.endSeconds);
+  });
+  elements.floatOverrangeRegions.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-float-play]");
+    const marker = state.markers.find(item => item.id === button?.dataset.floatPlay);
+    if (marker) playReviewRegion(marker.seconds, marker.endSeconds);
+  });
 
   bindTimelineGestures(elements.analysisCanvas);
   elements.trimCanvas.addEventListener("pointerdown", (event) => {
@@ -4512,6 +4684,7 @@ function bindEvents() {
     setTransportStatus(`Spelar från ${formatTime(elements.audio.currentTime)}`, "playing");
     elements.playButton.classList.add("is-playing");
     elements.playButton.setAttribute("aria-label", "Pausa");
+    syncPlaybackPosition();
   });
   elements.audio.addEventListener("playing", () => {
     startPlaybackClock();
@@ -4522,6 +4695,7 @@ function bindEvents() {
     state.playback.playing = false;
     elements.playButton.classList.remove("is-playing");
     elements.playButton.setAttribute("aria-label", "Spela");
+    syncPlaybackPosition();
     if (!elements.audio.error && state.file) setTransportStatus(`Pausad vid ${formatTime(elements.audio.currentTime)}`, "paused");
   });
   elements.audio.addEventListener("waiting", () => setTransportStatus("Väntar på ljuddata", "loading"));

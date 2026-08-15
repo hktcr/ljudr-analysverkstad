@@ -333,6 +333,11 @@ test("spektral diagnostik samplar deterministiskt utan EQ-beslut", async () => {
   assert.equal(result.windowCount, 1);
   assert.equal(result.sampledSeconds, 1);
   assert.ok(Number.isFinite(result.mainsHum50RelativeDbMedian));
+  assert.ok(Number.isFinite(result.subsonicEnergyPercentMedian));
+  assert.ok(Number.isFinite(result.contentAbove120HzPercentMedian));
+  assert.ok(Array.isArray(result.reviewRegions));
+  assert.ok(result.windows.every(window => ["low", "moderate", "elevated", "unknown"].includes(window.rumbleLikelihood)));
   assert.match(result.interpretation, /Inte full spektralanalys/);
+  assert.match(result.interpretation, /vindljud i grenar/);
   assert.doesNotMatch(JSON.stringify(result), /equaliz|auto.?eq/i);
 });

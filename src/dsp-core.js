@@ -8,7 +8,7 @@
 import { decodeSampleAt, inspectWav, parseWavHeader as parseSharedWavHeader } from "./wav.js";
 import { sha256Blob } from "./sha256.js";
 
-export const ENGINE_VERSION = "1.0.0-rc.12";
+export const ENGINE_VERSION = "1.0.0-rc.13";
 
 export const DEFAULT_PEAK_HANDLING = Object.freeze({
   enabled: false,
@@ -1321,6 +1321,85 @@ const medianFinite = values => {
   return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
 };
 
+function lowFrequencyWindowMetrics(channelSamples, sampleRate) {
+  const channels = channelSamples.filter(samples => samples.length);
+  if (!channels.length) return {
+    subsonicEnergyPercent: null,
+    lowFrequencyEnergyPercent: null,
+    contentAbove120HzPercent: null,
+    lowFrequencyStereoCorrelation: null,
+  };
+  const filtered = channels.map(samples => {
+    const below20 = new Float64Array(samples.length);
+    const below120 = new Float64Array(samples.length);
+    const alpha20 = 1 - Math.exp(-2 * Math.PI * 20 / sampleRate);
+    const alpha120 = 1 - Math.exp(-2 * Math.PI * 120 / sampleRate);
+    let low20 = 0;
+    let low120 = 0;
+    let totalEnergy = 0;
+    let subsonicEnergy = 0;
+    let lowFrequencyEnergy = 0;
+    let contentAbove120HzEnergy = 0;
+    samples.forEach((sample, index) => {
+      low20 += alpha20 * (sample - low20);
+      low120 += alpha120 * (sample - low120);
+      below20[index] = low20;
+      below120[index] = low120;
+      totalEnergy += sample * sample;
+      subsonicEnergy += low20 * low20;
+      lowFrequencyEnergy += low120 * low120;
+      const upper = sample - low120;
+      contentAbove120HzEnergy += upper * upper;
+    });
+    return { below20, below120, totalEnergy, subsonicEnergy, lowFrequencyEnergy, contentAbove120HzEnergy };
+  });
+  const totalEnergy = filtered.reduce((sum, item) => sum + item.totalEnergy, 0);
+  const percent = value => totalEnergy > 0 ? Math.min(100, Math.max(0, 100 * value / totalEnergy)) : null;
+  let lowFrequencyStereoCorrelation = null;
+  if (filtered.length === 2) {
+    const left = filtered[0].below120;
+    const right = filtered[1].below120;
+    let sumLeft = 0;
+    let sumRight = 0;
+    let sumLeftSquared = 0;
+    let sumRightSquared = 0;
+    let sumProducts = 0;
+    const count = Math.min(left.length, right.length);
+    for (let index = 0; index < count; index += 1) {
+      sumLeft += left[index];
+      sumRight += right[index];
+      sumLeftSquared += left[index] * left[index];
+      sumRightSquared += right[index] * right[index];
+      sumProducts += left[index] * right[index];
+    }
+    const covariance = sumProducts - sumLeft * sumRight / Math.max(1, count);
+    const leftVariance = sumLeftSquared - sumLeft * sumLeft / Math.max(1, count);
+    const rightVariance = sumRightSquared - sumRight * sumRight / Math.max(1, count);
+    const denominator = Math.sqrt(Math.max(0, leftVariance) * Math.max(0, rightVariance));
+    if (denominator > 0) lowFrequencyStereoCorrelation = Math.min(1, Math.max(-1, covariance / denominator));
+  }
+  return {
+    subsonicEnergyPercent: percent(filtered.reduce((sum, item) => sum + item.subsonicEnergy, 0)),
+    lowFrequencyEnergyPercent: percent(filtered.reduce((sum, item) => sum + item.lowFrequencyEnergy, 0)),
+    contentAbove120HzPercent: percent(filtered.reduce((sum, item) => sum + item.contentAbove120HzEnergy, 0)),
+    lowFrequencyStereoCorrelation,
+  };
+}
+
+function rumbleLikelihood(metrics) {
+  const low = metrics.lowFrequencyEnergyPercent;
+  const subsonic = metrics.subsonicEnergyPercent;
+  const upper = metrics.contentAbove120HzPercent;
+  if (![low, subsonic, upper].every(Number.isFinite)) return { key: "unknown", label: "Otillräcklig signal", score: 0 };
+  let score = low >= 55 ? 3 : low >= 35 ? 2 : low >= 20 ? 1 : 0;
+  score += subsonic >= 12 ? 2 : subsonic >= 4 ? 1 : 0;
+  if (upper >= 45) score -= 1;
+  if (Number.isFinite(metrics.lowFrequencyStereoCorrelation) && metrics.lowFrequencyStereoCorrelation < 0.35) score += 1;
+  if (score >= 4) return { key: "elevated", label: "Förhöjd sannolikhet", score };
+  if (score >= 2) return { key: "moderate", label: "Måttlig sannolikhet", score };
+  return { key: "low", label: "Låg sannolikhet", score };
+}
+
 export async function analyzeSpectralDiagnostics(blob, suppliedOptions = {}, onProgress = () => {}) {
   const inspected = await inspectWav(blob);
   const { format } = inspected;
@@ -1344,30 +1423,29 @@ export async function analyzeSpectralDiagnostics(blob, suppliedOptions = {}, onP
     const byteStart = inspected.data.dataOffset + frameStart * format.blockAlign;
     const bytes = new Uint8Array(await blob.slice(byteStart, byteStart + frames * format.blockAlign).arrayBuffer());
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const channelSamples = Array.from({ length: format.channels }, () => []);
     const mono = [];
     for (let frame = 0; frame < frames; frame += stride) {
-      let sum = 0;
-      let valid = 0;
+      const frameSamples = [];
       for (let channel = 0; channel < format.channels; channel += 1) {
         const sample = decodeSampleAt(view, frame * format.blockAlign + channel * bytesPerSample, format);
-        if (Number.isFinite(sample)) { sum += sample; valid += 1; }
+        frameSamples.push(sample);
       }
-      if (valid) mono.push(sum / valid);
+      if (frameSamples.every(Number.isFinite)) {
+        frameSamples.forEach((sample, channel) => channelSamples[channel].push(sample));
+        mono.push(frameSamples.reduce((sum, sample) => sum + sample, 0) / frameSamples.length);
+      }
     }
-    let low = 0;
-    let lowEnergy = 0;
-    let totalEnergy = 0;
-    const alpha = 1 - Math.exp(-2 * Math.PI * 120 / sampledRate);
-    for (const sample of mono) {
-      low += alpha * (sample - low);
-      lowEnergy += low * low;
-      totalEnergy += sample * sample;
-    }
+    const lowMetrics = lowFrequencyWindowMetrics(channelSamples, sampledRate);
+    const likelihood = rumbleLikelihood(lowMetrics);
     const harmonics = [50, 100, 150, 200].map(frequency => goertzelRelativeDb(mono, sampledRate, frequency));
     windows.push({
       startSeconds: frameStart / format.sampleRate,
       sampledSeconds: frames / format.sampleRate,
-      lowFrequencyEnergyPercent: totalEnergy > 0 ? 100 * lowEnergy / totalEnergy : null,
+      ...lowMetrics,
+      rumbleLikelihood: likelihood.key,
+      rumbleLikelihoodLabel: likelihood.label,
+      rumbleScore: likelihood.score,
       mainsHum50RelativeDb: harmonics[0],
       mainsHarmonicMaximumRelativeDb: harmonics.filter(Number.isFinite).length ? Math.max(...harmonics.filter(Number.isFinite)) : null,
     });
@@ -1375,17 +1453,34 @@ export async function analyzeSpectralDiagnostics(blob, suppliedOptions = {}, onP
     await new Promise(resolve => setTimeout(resolve, 0));
   }
   const lowValues = windows.map(item => item.lowFrequencyEnergyPercent);
+  const subsonicValues = windows.map(item => item.subsonicEnergyPercent);
+  const upperValues = windows.map(item => item.contentAbove120HzPercent);
   const humValues = windows.map(item => item.mainsHum50RelativeDb);
+  const reviewRegions = windows
+    .filter(item => ["moderate", "elevated"].includes(item.rumbleLikelihood))
+    .map(item => ({
+      startSeconds: item.startSeconds,
+      endSeconds: item.startSeconds + item.sampledSeconds,
+      likelihood: item.rumbleLikelihood,
+      likelihoodLabel: item.rumbleLikelihoodLabel,
+      lowFrequencyEnergyPercent: item.lowFrequencyEnergyPercent,
+      subsonicEnergyPercent: item.subsonicEnergyPercent,
+      contentAbove120HzPercent: item.contentAbove120HzPercent,
+      lowFrequencyStereoCorrelation: item.lowFrequencyStereoCorrelation,
+    }));
   return {
     scope: "deterministic-sampled-windows",
     windowCount: windows.length,
     sampledSeconds: windows.reduce((sum, item) => sum + item.sampledSeconds, 0),
     lowFrequencyEnergyPercentMedian: medianFinite(lowValues),
     lowFrequencyEnergyPercentMaximum: lowValues.filter(Number.isFinite).length ? Math.max(...lowValues.filter(Number.isFinite)) : null,
+    subsonicEnergyPercentMedian: medianFinite(subsonicValues),
+    contentAbove120HzPercentMedian: medianFinite(upperValues),
     mainsHum50RelativeDbMedian: medianFinite(humValues),
     mainsHum50RelativeDbMaximum: humValues.filter(Number.isFinite).length ? Math.max(...humValues.filter(Number.isFinite)) : null,
     windows,
-    interpretation: "Orienterande, deterministiskt samplad diagnostik för provlyssning. Inte full spektralanalys, felbesked eller EQ-rekommendation.",
+    reviewRegions,
+    interpretation: "Försiktig, deterministiskt samplad screening av möjlig lågfrekvent störning. Innehåll över 120 Hz vägs in för att minska risken att naturligt vindljud i grenar misstolkas. Inte full spektralanalys, källidentifiering, felbesked eller EQ-rekommendation.",
   };
 }
 

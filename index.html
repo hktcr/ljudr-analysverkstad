@@ -26,7 +26,7 @@
           </span>
           <span>
             <strong>LjudR</strong>
-            <small>Analysverkstad <span class="brand-version" id="appVersion" aria-label="Programversion">v1.0.0-rc.12</span></small>
+            <small>Analysverkstad <span class="brand-version" id="appVersion" aria-label="Programversion">v1.0.0-rc.13</span></small>
           </span>
         </a>
 
@@ -287,6 +287,13 @@
                     <span>Analysens tidslinje visas här</span>
                   </div>
                 </div>
+                <div class="diagram-transport" aria-label="Uppspelning vid analysdiagrammet">
+                  <button type="button" data-diagram-action="back" aria-label="Hoppa tio sekunder bakåt">−10 s</button>
+                  <button type="button" data-diagram-action="toggle" class="diagram-play">Spela</button>
+                  <button type="button" data-diagram-action="forward" aria-label="Hoppa tio sekunder framåt">+10 s</button>
+                  <button type="button" data-diagram-action="play-visible">Spela synlig vy</button>
+                  <output data-diagram-time>00:00.000</output>
+                </div>
                 <div class="detail-status" id="detailStatus" role="status"><span class="status-dot"></span><span>Översiktsdata</span><button class="text-button" id="cancelDetailButton" type="button" hidden>Avbryt detaljläsning</button></div>
                 <div class="time-axis" id="analysisTimeAxis" aria-hidden="true"></div>
               </article>
@@ -377,9 +384,15 @@
                     <p><strong>Valideringsstatus visas efter analys.</strong> Ett True Peak-estimat ska inte användas som leveranskrav innan metoden är verifierad mot officiellt testmaterial.</p>
                   </div>
                   <section class="spectral-diagnostics" aria-labelledby="spectralDiagnosticsTitle">
-                    <div><h3 id="spectralDiagnosticsTitle">Frivillig spektral orientering</h3><p>Samplar deterministiska fönster för lågfrekvent rumble och 50 Hz-brum. Resultatet är en granskningspunkt, inte ett felbesked eller ett EQ-förslag.</p></div>
-                    <button class="button button-secondary button-small" id="runSpectralDiagnosticsButton" type="button" disabled>Mät lågfrekvent buller och 50 Hz-brum</button>
+                    <div><h3 id="spectralDiagnosticsTitle">Screening av möjlig rumble</h3><p>Väger samman subsonisk energi, energi under 120 Hz, innehåll högre upp i spektrumet och stereobeteende. Vind i grenar ska inte automatiskt klassas som störning.</p></div>
+                    <button class="button button-secondary button-small" id="runSpectralDiagnosticsButton" type="button" disabled>Analysera möjlig rumble och 50 Hz-brum</button>
                     <dl id="spectralDiagnosticsResult"><div><dt>Status</dt><dd>Inte körd</dd></div></dl>
+                    <div class="diagnostic-regions" id="rumbleRegions" aria-live="polite"></div>
+                  </section>
+                  <section class="float-overrange-map" aria-labelledby="floatOverrangeTitle">
+                    <div><h3 id="floatOverrangeTitle">Var floatformatet bevarade toppar</h3><p>Visar samplingar över 0 dBFS som finns kvar i floatfilen. Det bevisar inte att mikrofon eller förförstärkare var oklippta.</p></div>
+                    <p class="float-overrange-summary" id="floatOverrangeSummary">Analysera en floatfil för att se resultatet.</p>
+                    <div class="float-overrange-regions" id="floatOverrangeRegions"></div>
                   </section>
                 </div>
               </details>
@@ -424,7 +437,7 @@
               <section class="inspector-section">
                 <div class="inspector-heading">
                   <div class="observation-heading-copy"><h2>Observationer</h2><span>Separat tolkande lager</span></div>
-                  <span class="count-badge" id="observationCount">0</span>
+                  <div class="observation-heading-actions"><span class="count-badge" id="observationCount">0</span><button class="text-button" id="expandObservationsButton" type="button">Expandera</button></div>
                 </div>
                 <div class="observation-list" id="observationList">
                   <div class="empty-state-small">
@@ -495,6 +508,13 @@
                   <div class="trim-handle-label trim-end-label" id="trimEndLabel">Slut 00:00.000</div>
                 </div>
                 <p class="timeline-instructions" id="trimCanvasInstructions">Fönstret är låst. Lås upp det för att dra A, B eller hela det markerade området.</p>
+                <div class="diagram-transport diagram-transport-dark" aria-label="Uppspelning vid trimdiagrammet">
+                  <button type="button" data-diagram-action="back" aria-label="Hoppa tio sekunder bakåt">−10 s</button>
+                  <button type="button" data-diagram-action="toggle" class="diagram-play">Spela</button>
+                  <button type="button" data-diagram-action="forward" aria-label="Hoppa tio sekunder framåt">+10 s</button>
+                  <button type="button" data-diagram-action="play-selection">Spela A till B</button>
+                  <output data-diagram-time>00:00.000</output>
+                </div>
                 <div class="audition-toolbar">
                   <fieldset class="segmented-control" id="previewModeControl"><legend>Provlyssning</legend><label><input type="radio" name="previewMode" value="source" checked><span>Källkontext</span></label><label><input type="radio" name="previewMode" value="export"><span>Exportförhandsvisning</span></label></fieldset>
                   <fieldset class="segmented-control" id="monitorModeControl"><legend>Monitor</legend><label><input type="radio" name="monitorMode" value="stereo" checked><span>Stereo</span></label><label><input type="radio" name="monitorMode" value="left"><span>Vänster</span></label><label><input type="radio" name="monitorMode" value="right"><span>Höger</span></label><label><input type="radio" name="monitorMode" value="mono"><span>Mono</span></label></fieldset>
@@ -790,6 +810,21 @@
           <button type="button" data-help-section="privacy">Integritet</button>
         </nav>
         <div class="help-copy" id="helpCopy"></div>
+      </div>
+    </dialog>
+
+    <dialog class="observations-dialog" id="observationsDialog" aria-labelledby="observationsDialogTitle">
+      <div class="observations-dialog-shell">
+        <div class="dialog-header">
+          <div><span class="eyebrow">Tolkande lager</span><h2 id="observationsDialogTitle">Observationer i detalj</h2><p>Mätning, säkerhet och nästa granskningssteg hålls åtskilda.</p></div>
+          <button class="icon-button" id="closeObservationsButton" type="button" aria-label="Stäng observationerna"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6.4 5 5.6 5.6L17.6 5 19 6.4 13.4 12l5.6 5.6-1.4 1.4-5.6-5.6L6.4 19 5 17.6l5.6-5.6L5 6.4 6.4 5Z"/></svg></button>
+        </div>
+        <div class="observations-explainer">
+          <div><strong>Objektiv</strong><span>Direkt beräknad ur filens signalvärden.</span></div>
+          <div><strong>Heuristisk</strong><span>Mönster som kan ha flera naturliga förklaringar.</span></div>
+          <div><strong>Åtgärd</strong><span>Förslag till kontroll eller lyssning, aldrig ett automatiskt ingrepp.</span></div>
+        </div>
+        <div class="observation-dialog-list" id="observationDialogList"></div>
       </div>
     </dialog>
 

@@ -1,5 +1,15 @@
 # Ändringslogg
 
+## 1.0.0-rc.13, 2026-08-15
+
+- lägger uppspelningskontroller direkt vid analys- och trimdiagrammen
+- visar var floatfilen har bevarat samplingar över 0 dBFS med navigerbara lyssningsregioner
+- inför försiktig screening av möjlig rumble som också väger in subsonisk energi, innehåll över 120 Hz och stereobeteende
+- märker rumble som sannolik granskningspunkt och aldrig som säkert vindfel eller automatisk åtgärd
+- ger varje rekommenderat nästa steg en direkt knapp till rätt kontroll eller granskningsvy
+- låter observationerna öppnas i en expanderad dialog med typ, regioner, begränsning och nästa kontroll
+- hindrar den sista fingerlyftningen efter tvåfingerszoom från att flytta uppspelningen
+
 ## 1.0.0-rc.12, 2026-08-15
 
 - gör uppspelaren tillgänglig på samtliga flikar efter att en fil öppnats

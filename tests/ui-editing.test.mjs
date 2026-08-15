@@ -61,6 +61,18 @@ test("trimfönstret har 20 minuter som redigerbart standardvärde", () => {
   assert.match(app, /function applyNegativePeakCeiling/);
   assert.match(app, /const reduction = Math\.min\(0, target - peak\)/);
   assert.match(html, /id="gainNumber"[^>]*min="-60"/);
+  assert.equal((html.match(/data-diagram-action="toggle"/g) || []).length, 2);
+  assert.match(html, /data-diagram-action="play-visible"/);
+  assert.match(html, /data-diagram-action="play-selection"/);
+  assert.match(app, /\$\$\('\[data-diagram-time\]'\)/);
+  assert.match(html, /id="floatOverrangeRegions"/);
+  assert.match(app, /function renderFloatOverrangeMap/);
+  assert.match(app, /floatsamplingar över 0 dBFS bevarades i filen/);
+  assert.match(html, /id="expandObservationsButton"/);
+  assert.match(html, /id="observationsDialog"/);
+  assert.match(app, /function observationCards/);
+  assert.match(app, /hadMultiplePointers/);
+  assert.match(app, /!timelineGesture\?\.moved && !hadMultiplePointers/);
 });
 
 test("toningar är valfria, flexibla och har stora iPad-reglage", () => {
