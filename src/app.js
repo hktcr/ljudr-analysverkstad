@@ -149,6 +149,7 @@ let timelineGesture = null;
 let detailTimer = 0;
 let regionTimer = 0;
 let exchangePreviewSequence = 0;
+let playbackFrame = 0;
 
 const ANALYSIS_PHASES = Object.freeze({
   header: {
@@ -231,9 +232,12 @@ const elements = {
   markerType: $("#markerType"),
   addMarker: $("#addMarkerButton"),
   audio: $("#audioPlayer"),
+  globalPlayer: $("#globalPlayer"),
   playButton: $("#playButton"),
   currentTime: $("#currentTime"),
   transportDuration: $("#transportDuration"),
+  transportSeek: $("#transportSeek"),
+  transportStatus: $("#transportStatus"),
   selectedDuration: $("#selectedDuration"),
   trimStartInput: $("#trimStartInput"),
   trimEndInput: $("#trimEndInput"),
@@ -268,6 +272,7 @@ const elements = {
   projectedLufs: $("#projectedLufs"),
   projectedPeak: $("#projectedPeak"),
   gainNotice: $("#gainNotice"),
+  peakSafetyStatus: $("#peakSafetyStatus"),
   sourceMeasureStatus: $("#sourceMeasureStatus"),
   regionMeasureStatus: $("#regionMeasureStatus"),
   verifiedMeasureStatus: $("#verifiedMeasureStatus"),
@@ -848,6 +853,13 @@ async function openAudioFile(file) {
     return;
   }
   stopPlayback();
+  elements.audio.removeAttribute("src");
+  elements.audio.load();
+  elements.globalPlayer.hidden = true;
+  elements.playButton.disabled = true;
+  elements.transportSeek.disabled = true;
+  syncPlaybackPosition(0);
+  setTransportStatus("Förbereder ljudfilen", "loading");
   analysisWorker?.terminate();
   analysisWorker = null;
   exportWorker?.terminate();
@@ -911,17 +923,24 @@ async function openAudioFile(file) {
     state.fileUrl = null;
     state.file = null;
     elements.fileStrip.hidden = true;
+    elements.globalPlayer.hidden = true;
     elements.audioInput.value = "";
     enableWorkflow(false);
     return;
   }
   elements.audio.src = state.fileUrl;
+  elements.audio.load();
   const duration = durationSeconds();
   state.trim.endSeconds = duration;
   state.trim.endFrame = toFrame(duration);
   state.trimEditor.appliedEndSeconds = duration;
   state.view.startSeconds = 0;
   state.view.endSeconds = duration;
+  elements.globalPlayer.hidden = false;
+  elements.playButton.disabled = false;
+  elements.transportSeek.disabled = false;
+  elements.transportSeek.max = String(duration);
+  setTransportStatus("Ljudfilen är redo för provlyssning");
   elements.fileTechnical.textContent = technicalDescription();
   syncTrimUi();
   renderMarkers();
@@ -1702,6 +1721,8 @@ function syncTrimUi({ emit = true } = {}) {
   elements.selectedDuration.textContent = formatTime(state.trim.endSeconds - state.trim.startSeconds);
   elements.transportDuration.textContent = formatTime(duration);
   elements.currentTime.textContent = formatTime(state.playback.currentSeconds);
+  elements.transportSeek.max = String(duration);
+  elements.transportSeek.value = String(clamp(state.playback.currentSeconds, 0, duration));
   syncFadeUi();
   syncSeriesUi();
   updateExportSummary();
@@ -1990,16 +2011,55 @@ function preserveSeries() {
 }
 
 function updateGain(value, options = {}) {
-  const gain = clamp(value, -24, 24);
+  const gain = clamp(value, -60, 24);
   state.trim.gainDb = Math.round(gain * 10) / 10;
   if (!options.seriesApply) invalidateSeriesProposal();
   elements.gainNumber.value = state.trim.gainDb.toFixed(1);
   elements.gainRange.value = String(state.trim.gainDb);
+  if (!options.peakApply && !options.seriesApply && elements.peakSafetyStatus) {
+    elements.peakSafetyStatus.textContent = "Manuell global gain används. Ingen automatisk toppanpassning görs.";
+  }
   updateProjectedMetrics();
   updateExportSummary();
-  updateMonitoringGraph();
+  refreshMonitoringGraph();
   syncSeriesUi();
   markEditChanged("gain");
+}
+
+function applyNegativePeakCeiling(targetValue) {
+  if (!state.trimEditor.applied) {
+    showToast("Tillämpa trimfönstret innan toppanpassningen beräknas.", "error");
+    return;
+  }
+  const target = finite(targetValue);
+  const decision = decisionMeasurement();
+  const peak = finite(decision.summary.truePeakEstimateDbtp ?? decision.summary.truePeakDbtp ?? decision.summary.truePeak);
+  if (decision.stage === "waiting") {
+    requestRegionAnalysis();
+    showToast("Det exakta exporturvalet beräknas. Försök igen när mätningen är klar.");
+    return;
+  }
+  if (target === null || peak === null) {
+    showToast("Analysera filen och exporturvalet innan ett topptak väljs.", "error");
+    return;
+  }
+  const reduction = Math.min(0, target - peak);
+  if (reduction >= -0.01) {
+    elements.peakSafetyStatus.textContent = `Aktuell True Peak ${formatDecimal(peak, 1)} dBTP ligger redan under ${formatDecimal(target, 1)} dBTP. Gain ändrades inte.`;
+    showToast("Ingen sänkning behövs för det valda topptaket.");
+    return;
+  }
+  const requestedGain = Math.floor((state.trim.gainDb + reduction) * 10) / 10;
+  const nextGain = Math.max(-60, requestedGain);
+  const appliedReduction = nextGain - state.trim.gainDb;
+  updateGain(nextGain, { peakApply: true });
+  const limited = requestedGain < -60;
+  elements.peakSafetyStatus.textContent = limited
+    ? `Maximal global sänkning -60 dB räcker inte till valt topptak. Bevara floatfilen och granska signalen innan PCM-export.`
+    : `${formatDecimal(appliedReduction, 1)} dB global sänkning användes för ett orienterande tak på ${formatDecimal(target, 1)} dBTP. Dynamiken ändrades inte.`;
+  showToast(limited
+    ? "Det valda topptaket kunde inte nås inom verktygets gainintervall."
+    : `Global gain sattes till ${formatDecimal(nextGain, 1)} dB. Ingen limiter användes.`, limited ? "error" : "info", 9000);
 }
 
 function updateProjectedMetrics() {
@@ -2049,25 +2109,72 @@ function updateExportSummary() {
   updateExportRecommendation();
 }
 
-async function ensureAudioGraph() {
-  if (!audioContext) {
-    const Context = window.AudioContext || window.webkitAudioContext;
-    if (!Context) return false;
-    audioContext = new Context();
-    audioSourceNode = audioContext.createMediaElementSource(elements.audio);
-    previewGainNode = audioContext.createGain();
-    monitorGainNode = audioContext.createGain();
-    channelSplitterNode = audioContext.createChannelSplitter(2);
-    channelMergerNode = audioContext.createChannelMerger(2);
-    channelGainNodes = [audioContext.createGain(), audioContext.createGain()];
-    audioSourceNode.connect(previewGainNode).connect(channelSplitterNode);
-    channelMergerNode.connect(monitorGainNode).connect(audioContext.destination);
-    configureMonitorRouting();
-    elements.audio.volume = 1;
-    updateMonitoringGraph();
+function setTransportStatus(message, stateName = "ready") {
+  if (!elements.transportStatus) return;
+  elements.transportStatus.textContent = message;
+  elements.transportStatus.dataset.state = stateName;
+}
+
+function syncPlaybackPosition(seconds = finite(elements.audio.currentTime) ?? state.playback.currentSeconds) {
+  const position = clamp(finite(seconds) ?? 0, 0, durationSeconds());
+  state.playback.currentSeconds = position;
+  elements.currentTime.textContent = formatTime(position);
+  elements.transportSeek.value = String(position);
+  scheduleCanvasRender();
+}
+
+function stopPlaybackClock() {
+  if (playbackFrame) cancelAnimationFrame(playbackFrame);
+  playbackFrame = 0;
+}
+
+function startPlaybackClock() {
+  stopPlaybackClock();
+  const tick = () => {
+    syncPlaybackPosition();
+    if (!elements.audio.paused && !elements.audio.ended) playbackFrame = requestAnimationFrame(tick);
+    else playbackFrame = 0;
+  };
+  playbackFrame = requestAnimationFrame(tick);
+}
+
+function ensureAudioGraph() {
+  try {
+    if (!audioContext) {
+      const Context = window.AudioContext || window.webkitAudioContext;
+      if (!Context) return Promise.resolve(false);
+      audioContext = new Context();
+      audioContext.addEventListener("statechange", () => {
+        if (audioContext.state === "running") {
+          if (!elements.audio.paused) setTransportStatus("Spelar", "playing");
+          return;
+        }
+        if (!elements.audio.paused) {
+          setTransportStatus("Ljudet avbröts av enheten. Återansluter.", "warning");
+          audioContext.resume().then(() => {
+            schedulePreviewEnvelope(elements.audio.currentTime);
+            setTransportStatus("Spelar", "playing");
+          }).catch(() => setTransportStatus("Tryck på spela för att återansluta ljudet.", "warning"));
+        }
+      });
+      audioSourceNode = audioContext.createMediaElementSource(elements.audio);
+      previewGainNode = audioContext.createGain();
+      monitorGainNode = audioContext.createGain();
+      channelSplitterNode = audioContext.createChannelSplitter(2);
+      channelMergerNode = audioContext.createChannelMerger(2);
+      channelGainNodes = [audioContext.createGain(), audioContext.createGain()];
+      audioSourceNode.connect(previewGainNode).connect(channelSplitterNode);
+      channelMergerNode.connect(monitorGainNode).connect(audioContext.destination);
+      configureMonitorRouting();
+      elements.audio.volume = 1;
+      updateMonitoringGraph();
+    }
+    return audioContext.state !== "running" ? audioContext.resume().then(() => true) : Promise.resolve(true);
+  } catch (error) {
+    elements.audio.volume = state.monitoring.volume;
+    setTransportStatus("Grunduppspelning används. Avancerad monitor kunde inte starta.", "warning");
+    return Promise.resolve(false);
   }
-  if (audioContext.state === "suspended") await audioContext.resume();
-  return true;
 }
 
 function configureMonitorRouting() {
@@ -2185,16 +2292,56 @@ function updateMonitoringGraph() {
   if (!audioContext) elements.audio.volume = state.monitoring.volume;
 }
 
-async function playFrom(seconds) {
+function monitoringNeedsAudioGraph() {
+  return Boolean(audioContext
+    || state.monitoring.previewMode === "export"
+    || state.monitoring.channelMode !== "stereo"
+    || state.monitoring.levelMatched
+    || state.monitoring.previewGainOverride !== null
+    || state.monitoring.previewEditOverride !== null);
+}
+
+function refreshMonitoringGraph() {
+  if (!monitoringNeedsAudioGraph()) {
+    updateMonitoringGraph();
+    return;
+  }
+  ensureAudioGraph().then(() => updateMonitoringGraph()).catch(() => {
+    setTransportStatus("Avancerad monitor kunde inte starta.", "warning");
+  });
+}
+
+async function startPlayback() {
   if (!state.file) return;
-  await ensureAudioGraph();
-  elements.audio.currentTime = clamp(seconds, 0, durationSeconds());
+  const playPromise = elements.audio.play();
+  const graphPromise = monitoringNeedsAudioGraph() ? ensureAudioGraph() : Promise.resolve(false);
   schedulePreviewEnvelope(elements.audio.currentTime);
-  elements.audio.play().catch((error) => showToast(`Uppspelningen kunde inte starta: ${error.message}`, "error"));
+  try {
+    await Promise.all([graphPromise, playPromise]);
+  } catch (error) {
+    setTransportStatus("Uppspelningen kunde inte starta på den här enheten.", "error");
+    showToast(`Uppspelningen kunde inte starta: ${error.message}`, "error", 9000);
+  }
+}
+
+function seekPlayback(seconds, { clearPreview = true } = {}) {
+  if (!state.file) return;
+  if (clearPreview) state.playback.previewStopAt = null;
+  const position = clamp(finite(seconds) ?? 0, 0, durationSeconds());
+  elements.audio.currentTime = position;
+  syncPlaybackPosition(position);
+  schedulePreviewEnvelope(position);
+  setTransportStatus(elements.audio.paused ? `Redo vid ${formatTime(position)}` : `Spelar från ${formatTime(position)}`);
+}
+
+function playFrom(seconds) {
+  seekPlayback(seconds, { clearPreview: false });
+  return startPlayback();
 }
 
 function stopPlayback() {
   elements.audio.pause();
+  stopPlaybackClock();
   state.playback.playing = false;
   state.playback.previewStopAt = null;
   elements.playButton?.classList.remove("is-playing");
@@ -2203,11 +2350,9 @@ function stopPlayback() {
 
 async function togglePlayback() {
   if (elements.audio.paused) {
-    await ensureAudioGraph();
     const current = finite(elements.audio.currentTime) ?? 0;
-    if (state.monitoring.previewMode === "export" && (current < state.trim.startSeconds || current >= state.trim.endSeconds)) elements.audio.currentTime = state.trim.startSeconds;
-    schedulePreviewEnvelope(elements.audio.currentTime);
-    elements.audio.play().catch((error) => showToast(`Uppspelningen kunde inte starta: ${error.message}`, "error"));
+    if (state.monitoring.previewMode === "export" && (current < state.trim.startSeconds || current >= state.trim.endSeconds)) seekPlayback(state.trim.startSeconds);
+    await startPlayback();
   } else {
     stopPlayback();
   }
@@ -2278,7 +2423,7 @@ function drawTimeline(canvas, trimMode = false) {
   const visibleTracks = compactExport
     ? ["waveform", "markers"]
     : Object.entries(state.view.tracks).filter(([, visible]) => visible).map(([name]) => name);
-  const weights = { waveform: compactExport ? 0.86 : trimMode ? 0.55 : 0.47, loudness: 0.25, peaks: 0.15, correlation: 0.14, markers: compactExport ? 0.14 : 0.08 };
+  const weights = { waveform: compactExport ? 0.86 : trimMode ? 0.62 : 0.54, loudness: 0.25, peaks: 0.15, correlation: 0.14, markers: compactExport ? 0.14 : 0.08 };
   const totalWeight = visibleTracks.reduce((sum, track) => sum + weights[track], 0) || 1;
   let cursorY = 0;
   const tracks = {};
@@ -2315,8 +2460,8 @@ function drawTimeline(canvas, trimMode = false) {
     }
     context.fillStyle = "rgba(255,255,255,.53)";
     context.font = "600 9px ui-sans-serif, system-ui";
-    const label = { waveform: "L / R", loudness: "LUFS", peaks: "TOPP", correlation: "KORR", markers: "MARKÖR" }[name];
-    context.fillText(label, 7, track.top + 15);
+    const label = { waveform: "", loudness: "LUFS", peaks: "TOPP", correlation: "KORR", markers: "MARKÖR" }[name];
+    if (label) context.fillText(label, 7, track.top + 15);
   });
 
   if (analysis && tracks.waveform) {
@@ -2327,13 +2472,29 @@ function drawTimeline(canvas, trimMode = false) {
     const dataStart = detailMatches ? toSeconds(detail.startFrame) : 0;
     const dataEnd = detailMatches ? toSeconds(detail.endFrame) : fullDuration;
     const track = tracks.waveform;
-    const channelCount = Math.max(1, channels.length);
-    channels.slice(0, 2).forEach((channel, channelIndex) => {
-      const center = track.top + track.height * (channelIndex + 0.5) / channelCount;
-      const half = track.height * 0.39 / channelCount;
+    const renderChannels = channels.slice(0, 2);
+    const channelCount = Math.max(1, renderChannels.length);
+    renderChannels.forEach((channel, channelIndex) => {
+      const laneTop = track.top + track.height * channelIndex / channelCount;
+      const laneHeight = track.height / channelCount;
+      const center = laneTop + laneHeight / 2;
+      const half = laneHeight * 0.39;
       const minSeries = channel.min || [];
       const maxSeries = channel.max || [];
       const color = channelIndex === 0 ? "rgba(89,151,209,.88)" : "rgba(154,126,207,.78)";
+      context.fillStyle = channelIndex === 0 ? "rgba(89,151,209,.055)" : "rgba(154,126,207,.055)";
+      context.fillRect(plotLeft, laneTop, plotWidth, laneHeight);
+      if (channelIndex > 0) {
+        context.strokeStyle = "rgba(255,255,255,.22)";
+        context.lineWidth = 1;
+        context.beginPath();
+        context.moveTo(0, laneTop);
+        context.lineTo(width, laneTop);
+        context.stroke();
+      }
+      context.fillStyle = channelIndex === 0 ? "rgba(137,196,250,.95)" : "rgba(194,164,238,.95)";
+      context.font = "800 10px ui-sans-serif, system-ui";
+      context.fillText(channelCount === 1 ? "MONO" : channelIndex === 0 ? "L" : "R", 8, laneTop + 15);
       context.strokeStyle = color;
       context.lineWidth = Math.max(0.7, plotWidth / Math.max(1, bins));
       context.beginPath();
@@ -2367,6 +2528,16 @@ function drawTimeline(canvas, trimMode = false) {
       context.lineTo(plotRight, center);
       context.stroke();
     });
+    if (!renderChannels.length) {
+      context.fillStyle = "rgba(255,255,255,.53)";
+      context.font = "800 10px ui-sans-serif, system-ui";
+      context.fillText("LJUD", 8, track.top + 15);
+      context.strokeStyle = "rgba(255,255,255,.13)";
+      context.beginPath();
+      context.moveTo(plotLeft, track.top + track.height / 2);
+      context.lineTo(plotRight, track.top + track.height / 2);
+      context.stroke();
+    }
   } else if (tracks.waveform) {
     const track = tracks.waveform;
     context.strokeStyle = "rgba(255,255,255,.13)";
@@ -4329,27 +4500,57 @@ function bindEvents() {
   });
 
   elements.playButton.addEventListener("click", togglePlayback);
-  $("#backTenButton").addEventListener("click", () => playFrom((elements.audio.currentTime || 0) - 10));
-  $("#forwardTenButton").addEventListener("click", () => playFrom((elements.audio.currentTime || 0) + 10));
-  $("#jumpStartButton").addEventListener("click", () => { elements.audio.currentTime = state.trim.startSeconds; });
-  $("#jumpEndButton").addEventListener("click", () => { elements.audio.currentTime = Math.max(state.trim.startSeconds, state.trim.endSeconds - 1 / sampleRate()); });
+  $("#backTenButton").addEventListener("click", () => seekPlayback((elements.audio.currentTime || 0) - 10));
+  $("#forwardTenButton").addEventListener("click", () => seekPlayback((elements.audio.currentTime || 0) + 10));
+  $("#jumpStartButton").addEventListener("click", () => seekPlayback(state.trim.startSeconds));
+  $("#jumpEndButton").addEventListener("click", () => seekPlayback(Math.max(state.trim.startSeconds, state.trim.endSeconds - 1 / sampleRate())));
+  elements.transportSeek.addEventListener("input", () => seekPlayback(Number(elements.transportSeek.value)));
   elements.audio.addEventListener("play", () => {
     state.playback.playing = true;
     schedulePreviewEnvelope(elements.audio.currentTime);
+    startPlaybackClock();
+    setTransportStatus(`Spelar från ${formatTime(elements.audio.currentTime)}`, "playing");
     elements.playButton.classList.add("is-playing");
     elements.playButton.setAttribute("aria-label", "Pausa");
   });
+  elements.audio.addEventListener("playing", () => {
+    startPlaybackClock();
+    setTransportStatus(`Spelar från ${formatTime(elements.audio.currentTime)}`, "playing");
+  });
   elements.audio.addEventListener("pause", () => {
+    stopPlaybackClock();
     state.playback.playing = false;
     elements.playButton.classList.remove("is-playing");
     elements.playButton.setAttribute("aria-label", "Spela");
+    if (!elements.audio.error && state.file) setTransportStatus(`Pausad vid ${formatTime(elements.audio.currentTime)}`, "paused");
+  });
+  elements.audio.addEventListener("waiting", () => setTransportStatus("Väntar på ljuddata", "loading"));
+  elements.audio.addEventListener("stalled", () => setTransportStatus("Uppspelningen väntar. Försök pausa och starta igen.", "warning"));
+  elements.audio.addEventListener("canplay", () => {
+    elements.playButton.disabled = false;
+    setTransportStatus(elements.audio.paused ? "Ljudfilen är redo för provlyssning" : "Spelar", elements.audio.paused ? "ready" : "playing");
+  });
+  elements.audio.addEventListener("ended", () => {
+    stopPlaybackClock();
+    syncPlaybackPosition(durationSeconds());
+    setTransportStatus("Filens slut", "ready");
+  });
+  elements.audio.addEventListener("error", () => {
+    stopPlaybackClock();
+    const code = elements.audio.error?.code;
+    const message = code === 4
+      ? "Den här enheten kan analysera filen men kan inte spela just denna WAV-kodning."
+      : code === 3
+        ? "Enheten kunde inte avkoda ljudet för uppspelning. Analysen kan fortfarande fungera."
+        : "Ljudfilen kunde inte förberedas för uppspelning.";
+    elements.playButton.disabled = true;
+    setTransportStatus(message, "error");
+    showToast(message, "error", 10000);
   });
   elements.audio.addEventListener("timeupdate", () => {
-    state.playback.currentSeconds = finite(elements.audio.currentTime) ?? 0;
+    syncPlaybackPosition();
     if (state.playback.previewStopAt !== null && state.playback.currentSeconds >= state.playback.previewStopAt) stopPlayback();
     else if (state.monitoring.previewMode === "export" && state.playback.previewStopAt === null && state.playback.currentSeconds >= state.trim.endSeconds) stopPlayback();
-    elements.currentTime.textContent = formatTime(state.playback.currentSeconds);
-    scheduleCanvasRender();
   });
   elements.audio.addEventListener("loadedmetadata", () => {
     if (!state.fileInfo?.durationSeconds && Number.isFinite(elements.audio.duration)) {
@@ -4357,19 +4558,26 @@ function bindEvents() {
       if (!state.trim.endSeconds) state.trim.endSeconds = elements.audio.duration;
       syncTrimUi();
     }
+    elements.transportSeek.max = String(durationSeconds());
+    elements.transportSeek.disabled = false;
+    elements.playButton.disabled = false;
+    setTransportStatus("Ljudfilen är redo för provlyssning");
   });
-  elements.audio.addEventListener("seeked", () => schedulePreviewEnvelope(elements.audio.currentTime));
+  elements.audio.addEventListener("seeked", () => {
+    syncPlaybackPosition();
+    schedulePreviewEnvelope(elements.audio.currentTime);
+  });
   elements.audio.addEventListener("ratechange", () => schedulePreviewEnvelope(elements.audio.currentTime));
   elements.monitorVolume.addEventListener("input", () => {
     state.monitoring.volume = clamp(elements.monitorVolume.value, 0, 1);
     state.dirty = true;
-    updateMonitoringGraph();
+    refreshMonitoringGraph();
     emitState("monitor-volume");
   });
   elements.levelMatch.addEventListener("change", () => {
     state.monitoring.levelMatched = elements.levelMatch.checked;
     state.dirty = true;
-    updateMonitoringGraph();
+    refreshMonitoringGraph();
     showToast(elements.levelMatch.checked ? "Utjämnad medhörning är på. Exporten påverkas inte." : "Medhörningen visar nu den faktiska nivåskillnaden.");
     emitState("monitoring-mode");
   });
@@ -4377,14 +4585,14 @@ function bindEvents() {
     state.monitoring.previewMode = input.value;
     state.dirty = true;
     syncAuditionUi();
-    updateMonitoringGraph();
+    refreshMonitoringGraph();
     emitState("preview-mode");
   }));
   $$('input[name="monitorMode"]').forEach((input) => input.addEventListener("change", () => {
     state.monitoring.channelMode = input.value;
     state.dirty = true;
     syncAuditionUi();
-    updateMonitoringGraph();
+    refreshMonitoringGraph();
     emitState("monitor-mode");
   }));
 
@@ -4441,6 +4649,11 @@ function bindEvents() {
   elements.gainNumber.addEventListener("change", () => updateGain(elements.gainNumber.value));
   elements.gainRange.addEventListener("input", () => updateGain(elements.gainRange.value));
   $("#resetGainButton").addEventListener("click", () => updateGain(0));
+  $$('[data-peak-ceiling]').forEach(button => button.addEventListener("click", () => applyNegativePeakCeiling(button.dataset.peakCeiling)));
+  $("#manualPeakGainButton").addEventListener("click", () => {
+    elements.peakSafetyStatus.textContent = "Manuell global gain används. Ingen automatisk toppanpassning görs.";
+    elements.gainNumber.focus();
+  });
   elements.calculateSeries.addEventListener("click", calculateSeriesProposal);
   elements.previewSeries.addEventListener("click", () => {
     if (finite(state.series.proposedGainDb) === null) return;
@@ -4576,7 +4789,14 @@ function bindEvents() {
   window.addEventListener("orientationchange", scheduleCanvasRender, { passive: true });
   window.addEventListener("online", checkForAppUpdate);
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") checkForAppUpdate();
+    if (document.visibilityState === "visible") {
+      checkForAppUpdate();
+      if (audioContext && !elements.audio.paused && audioContext.state !== "running") {
+        audioContext.resume().then(() => schedulePreviewEnvelope(elements.audio.currentTime)).catch(() => {
+          setTransportStatus("Tryck på spela för att återansluta ljudet.", "warning");
+        });
+      }
+    }
   });
   window.addEventListener("pagehide", () => {
     if (activeDownloadUrl) URL.revokeObjectURL(activeDownloadUrl);

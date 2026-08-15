@@ -1,5 +1,17 @@
 # Ändringslogg
 
+## 1.0.0-rc.12, 2026-08-15
+
+- gör uppspelaren tillgänglig på samtliga flikar efter att en fil öppnats
+- lägger till ett flyttbart spelhuvud som kan dras medan uppspelningen fortsätter
+- gör hopp bakåt, framåt samt till A och B omedelbart synkroniserade utan oväntad omstart
+- låter grundläggande stereouppspelning använda enhetens robusta mediaspelare och startar avancerad monitor först när den behövs
+- återansluter Web Audio när iPad försätter ljudkontexten i avbrutet eller vilande läge
+- visar tydlig status för väntan, paus, avbrott, avkodningsfel och format som enheten inte kan spela
+- visar vänster och höger kanal som separata, märkta vågformsspår med gemensamt spelhuvud och trimfönster
+- lägger till negativ, dynamikbevarande toppanpassning mot -1, -2 eller -3 dBTP samt behåller manuell global gain
+- utökar negativ global gain till -60 dB för återvinning av kraftig float overrange utan dold limiter
+
 ## 1.0.0-rc.11, 2026-08-15
 
 - gör Visa och flytta trimfönstret till en tydlig åtgärd som öppnar trimvyn och låser upp placeringen

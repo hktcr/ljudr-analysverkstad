@@ -47,6 +47,20 @@ test("trimfönstret har 20 minuter som redigerbart standardvärde", () => {
   assert.match(app, /Tillämpa trimfönstret eller återgå till det aktiva urvalet före export/);
   assert.match(css, /\.trim-editor-state\.is-unlocked/);
   assert.match(css, /\.trim-timeline-card\.is-trim-unlocked/);
+  assert.match(html, /id="globalPlayer"[\s\S]*id="transportSeek"/);
+  assert.ok(html.indexOf('id="globalPlayer"') < html.indexOf('id="mainContent"'), "spelaren ska ligga utanför flikpanelerna");
+  assert.equal((html.match(/id="audioPlayer"/g) || []).length, 1);
+  assert.match(app, /function seekPlayback\(seconds/);
+  assert.match(app, /requestAnimationFrame\(tick\)/);
+  assert.match(app, /audioContext\.state !== "running"/);
+  assert.match(app, /const playPromise = elements\.audio\.play\(\);[\s\S]*const graphPromise/);
+  assert.match(app, /addEventListener\("error"/);
+  assert.match(html, /data-peak-ceiling="-1"/);
+  assert.match(html, /data-peak-ceiling="-2"/);
+  assert.match(html, /data-peak-ceiling="-3"/);
+  assert.match(app, /function applyNegativePeakCeiling/);
+  assert.match(app, /const reduction = Math\.min\(0, target - peak\)/);
+  assert.match(html, /id="gainNumber"[^>]*min="-60"/);
 });
 
 test("toningar är valfria, flexibla och har stora iPad-reglage", () => {
@@ -142,6 +156,11 @@ test("adaptiv detalj, previewkanaler och workerjobb är operabla", () => {
   assert.match(app, /tracks\.correlation/);
   assert.match(app, /timelines\.correlation/);
   assert.match(app, /KORR/);
+  assert.match(html, /Vågform L och R, separata spår/);
+  assert.match(html, /separata spår för vänster och höger kanal/);
+  assert.match(app, /const laneTop = track\.top \+ track\.height \* channelIndex \/ channelCount/);
+  assert.match(app, /channelCount === 1 \? "MONO" : channelIndex === 0 \? "L" : "R"/);
+  assert.match(app, /context\.lineTo\(width, laneTop\)/);
   assert.match(css, /\.timeline-card\.is-timeline-expanded/);
   assert.match(css, /@media\(pointer:coarse\).*\.timeline-canvas\{touch-action:pan-y\}/);
   assert.doesNotMatch(css, /touch-action:none/);

@@ -306,7 +306,7 @@ test("export gör ingen dold toppsänkning utan blockerar det bekräftade gainv�
   assert.equal(fileName, "TMH_E008_har_MASTER.wav");
   assert.ok(verifiedOutput.summary.truePeakEstimateDbtp <= -6);
   assert.ok(Array.isArray(verifiedOutput.markersSuggested));
-  assert.equal(verifiedOutput.validation.engineVersion, "1.0.0-rc.11");
+  assert.equal(verifiedOutput.validation.engineVersion, "1.0.0-rc.12");
 
   const info = await inspectWav(output);
   const view = new DataView(await output.slice(info.data.dataOffset).arrayBuffer());

@@ -4,7 +4,7 @@ import { RELEASE } from "./release-meta.js";
 
 export const PROJECT_SCHEMA = "se.gaia.ljudr.analysis-project/2";
 export const REPORT_SCHEMA = "se.gaia.ljudr.analysis-report/2";
-export const APP_VERSION = "1.0.0-rc.11";
+export const APP_VERSION = "1.0.0-rc.12";
 export const MAX_PROJECT_BYTES = 64 * 1024 * 1024;
 
 const LEGACY_SCHEMA = "se.gaia.ljudr.analysis-project/1";
@@ -86,7 +86,7 @@ const normalizeEdit = (edit = {}, frameCount = null) => {
   if (edit.globalGainDb != null && edit.gainDb != null && Number(edit.globalGainDb) !== Number(edit.gainDb)) {
     throw new Error("globalGainDb och gainDb beskriver olika värden.");
   }
-  const globalGainDb = finite(edit.globalGainDb ?? edit.gainDb ?? 0, "globalGainDb", -24, 24);
+  const globalGainDb = finite(edit.globalGainDb ?? edit.gainDb ?? 0, "globalGainDb", -60, 24);
   const fadeInFrames = integer(edit.fadeInFrames ?? 0, "fadeInFrames", 0, endFrame - startFrame);
   const fadeOutFrames = integer(edit.fadeOutFrames ?? 0, "fadeOutFrames", 0, endFrame - startFrame);
   const profile = edit.profile || (globalGainDb !== 0 || fadeInFrames > 0 || fadeOutFrames > 0

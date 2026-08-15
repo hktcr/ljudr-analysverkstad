@@ -1,8 +1,8 @@
-# Valideringsplan för 1.0.0-rc.11
+# Valideringsplan för 1.0.0-rc.12
 
 ## Status
 
-`1.0.0-rc.11` är en offentlig valideringskandidat. Den får inte beskrivas som produktionsverifierad 1.0.
+`1.0.0-rc.12` är en offentlig valideringskandidat. Den får inte beskrivas som produktionsverifierad 1.0.
 
 Loudnessmotorn klarar hela den relevanta filbaserade mono/stereo-delen av EBU Loudness Test Set v5.0: 68 av 68 krav för 62 filer. Den klarar även samtliga 19 relevanta mono/stereo-filer i ITU-R BS.2217-2 inom +/-0,1 LKFS. EBU:s flerkanalsfall och uttryckliga live-mätarfall ligger utanför verktygets filbaserade mono/stereo-scope. Resultaten är verifiering inom dokumenterad scope, inte produktcertifiering.
 

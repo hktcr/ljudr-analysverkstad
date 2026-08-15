@@ -26,7 +26,7 @@
           </span>
           <span>
             <strong>LjudR</strong>
-            <small>Analysverkstad <span class="brand-version" id="appVersion" aria-label="Programversion">v1.0.0-rc.11</span></small>
+            <small>Analysverkstad <span class="brand-version" id="appVersion" aria-label="Programversion">v1.0.0-rc.12</span></small>
           </span>
         </a>
 
@@ -97,6 +97,26 @@
         </section>
         <button class="button button-quiet button-small" id="changeFileButton" type="button">Byt fil</button>
       </div>
+
+      <section class="global-player" id="globalPlayer" aria-label="Uppspelning" hidden>
+        <div class="transport-buttons">
+          <button class="icon-button" type="button" id="jumpStartButton" aria-label="Gå till startgränsen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h2v14H5V5Zm4 7 10-7v14L9 12Z"/></svg></button>
+          <button class="icon-button" type="button" id="backTenButton" aria-label="Hoppa tio sekunder bakåt"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5V2L7 6l5 4V7a7 7 0 1 1-6.93 8H3.05A9 9 0 1 0 12 5Zm-3 6h2v5H9v-5Zm3 0h2v5h-2v-5Z"/></svg></button>
+          <button class="play-button" type="button" id="playButton" aria-label="Spela"><svg class="play-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5 11 7-11 7V5Z"/></svg><svg class="pause-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7V5Zm6 0h4v14h-4V5Z"/></svg></button>
+          <button class="icon-button" type="button" id="forwardTenButton" aria-label="Hoppa tio sekunder framåt"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5V2l5 4-5 4V7a7 7 0 1 0 6.93 8h2.02A9 9 0 1 1 12 5Zm-3 6h2v5H9v-5Zm3 0h2v5h-2v-5Z"/></svg></button>
+          <button class="icon-button" type="button" id="jumpEndButton" aria-label="Gå till slutgränsen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 5h2v14h-2V5Zm-2 7L5 19V5l10 7Z"/></svg></button>
+        </div>
+        <div class="transport-position">
+          <label for="transportSeek" class="visually-hidden">Spelposition</label>
+          <input id="transportSeek" class="transport-seek" type="range" min="0" max="0" step="0.001" value="0" disabled>
+          <div class="transport-readout">
+            <div class="transport-time"><strong id="currentTime">00:00.000</strong><span>/</span><span id="transportDuration">00:00.000</span></div>
+            <span class="transport-status" id="transportStatus" role="status" aria-live="polite">Välj en WAV-fil</span>
+          </div>
+        </div>
+        <label class="volume-control"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4Zm11.5.5a4 4 0 0 1 0 5l1.5 1.3a6 6 0 0 0 0-7.6l-1.5 1.3Zm2.8-2.5a8 8 0 0 1 0 10l1.5 1.3a10 10 0 0 0 0-12.6L18.3 7Z"/></svg><span class="visually-hidden">Medhörningsvolym</span><input id="monitorVolume" type="range" min="0" max="1" step="0.01" value="0.8"></label>
+        <audio id="audioPlayer" preload="metadata"></audio>
+      </section>
 
       <main id="mainContent">
         <section class="mode-panel open-panel is-visible" data-panel="open" aria-labelledby="openTitle">
@@ -252,7 +272,7 @@
                   </div>
                 </div>
                 <div class="track-legend" aria-label="Spår i tidslinjen">
-                  <button class="legend-chip is-on" type="button" data-track="waveform"><i class="legend-wave"></i>Vågform</button>
+                  <button class="legend-chip is-on" type="button" data-track="waveform"><i class="legend-wave"></i>Vågform, separata spår</button>
                   <span class="channel-key channel-left"><i></i>Vänster</span>
                   <span class="channel-key channel-right"><i></i>Höger</span>
                   <button class="legend-chip is-on" type="button" data-track="loudness"><i class="legend-loudness"></i>Loudness</button>
@@ -261,7 +281,7 @@
                   <button class="legend-chip is-on" type="button" data-track="markers"><i class="legend-markers"></i>Markörer</button>
                 </div>
                 <div class="canvas-wrap">
-                  <canvas id="analysisCanvas" class="timeline-canvas" role="img" aria-label="Tidslinje för stereovågform, loudness, toppnivåer och markörer"></canvas>
+                  <canvas id="analysisCanvas" class="timeline-canvas" role="img" aria-label="Tidslinje med separata spår för vänster och höger kanal, loudness, toppnivåer och markörer"></canvas>
                   <div class="canvas-empty" id="analysisCanvasEmpty">
                     <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M4 25h4l2-7 4 14 4-22 4 30 4-23 4 16 3-8h7v-2h-8l-2 5-4-20-4 20-4-25-5 23-3-12-4 9H4v2Z"/></svg>
                     <span>Analysens tidslinje visas här</span>
@@ -463,14 +483,14 @@
                   <div class="toolbar-group"><button class="icon-button" type="button" data-zoom="out" aria-label="Zooma ut"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 11h14v2H5z"/></svg></button><button class="button button-quiet button-small" type="button" data-fit-selection>Visa och flytta trimfönstret</button><button class="button button-quiet button-small" id="fitTrimButton" type="button">Visa allt</button><button class="icon-button" type="button" data-zoom="in" aria-label="Zooma in"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></svg></button><button class="button button-secondary button-small" type="button" data-expand-timeline="trimTimelineCard" aria-pressed="false">Expandera tidslinjen</button><button class="button button-quiet button-small" id="resetTrimButton" type="button">Återställ gränser</button></div>
                 </div>
                 <div class="track-legend" aria-label="Spår i trimtidslinjen">
-                  <button class="legend-chip is-on" type="button" data-track="waveform"><i class="legend-wave"></i>Vågform L/R</button>
+                  <button class="legend-chip is-on" type="button" data-track="waveform"><i class="legend-wave"></i>Vågform L och R, separata spår</button>
                   <button class="legend-chip is-on" type="button" data-track="loudness"><i class="legend-loudness"></i>LUFS M/S</button>
                   <button class="legend-chip is-on" type="button" data-track="peaks"><i class="legend-peaks"></i>Sample peak</button>
                   <button class="legend-chip" type="button" data-track="correlation"><i class="legend-correlation"></i>Stereo och monorisk</button>
                   <button class="legend-chip is-on" type="button" data-track="markers"><i class="legend-markers"></i>Markörer</button>
                 </div>
                 <div class="canvas-wrap canvas-wrap-trim">
-                  <canvas id="trimCanvas" class="timeline-canvas" role="img" aria-label="Tidslinje med trimgränser för början och slut" aria-describedby="trimCanvasInstructions"></canvas>
+                  <canvas id="trimCanvas" class="timeline-canvas" role="img" aria-label="Tidslinje med separata stereospår och trimgränser för början och slut" aria-describedby="trimCanvasInstructions"></canvas>
                   <div class="trim-handle-label trim-start-label" id="trimStartLabel">Start 00:00.000</div>
                   <div class="trim-handle-label trim-end-label" id="trimEndLabel">Slut 00:00.000</div>
                 </div>
@@ -480,18 +500,6 @@
                   <fieldset class="segmented-control" id="monitorModeControl"><legend>Monitor</legend><label><input type="radio" name="monitorMode" value="stereo" checked><span>Stereo</span></label><label><input type="radio" name="monitorMode" value="left"><span>Vänster</span></label><label><input type="radio" name="monitorMode" value="right"><span>Höger</span></label><label><input type="radio" name="monitorMode" value="mono"><span>Mono</span></label></fieldset>
                 </div>
                 <p class="audition-status" id="auditionStatus">Källkontext: inga toningar eller nivåval hörs. Monitorval påverkar aldrig export.</p>
-                <div class="transport">
-                  <div class="transport-buttons">
-                    <button class="icon-button" type="button" id="jumpStartButton" aria-label="Gå till startgränsen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h2v14H5V5Zm4 7 10-7v14L9 12Z"/></svg></button>
-                    <button class="icon-button" type="button" id="backTenButton" aria-label="Hoppa tio sekunder bakåt"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5V2L7 6l5 4V7a7 7 0 1 1-6.93 8H3.05A9 9 0 1 0 12 5Zm-3 6h2v5H9v-5Zm3 0h2v5h-2v-5Z"/></svg></button>
-                    <button class="play-button" type="button" id="playButton" aria-label="Spela"><svg class="play-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5 11 7-11 7V5Z"/></svg><svg class="pause-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7V5Zm6 0h4v14h-4V5Z"/></svg></button>
-                    <button class="icon-button" type="button" id="forwardTenButton" aria-label="Hoppa tio sekunder framåt"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5V2l5 4-5 4V7a7 7 0 1 0 6.93 8h2.02A9 9 0 1 1 12 5Zm-3 6h2v5H9v-5Zm3 0h2v5h-2v-5Z"/></svg></button>
-                    <button class="icon-button" type="button" id="jumpEndButton" aria-label="Gå till slutgränsen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 5h2v14h-2V5Zm-2 7L5 19V5l10 7Z"/></svg></button>
-                  </div>
-                  <div class="transport-time"><strong id="currentTime">00:00.000</strong><span>/</span><span id="transportDuration">00:00.000</span></div>
-                  <label class="volume-control"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4Zm11.5.5a4 4 0 0 1 0 5l1.5 1.3a6 6 0 0 0 0-7.6l-1.5 1.3Zm2.8-2.5a8 8 0 0 1 0 10l1.5 1.3a10 10 0 0 0 0-12.6L18.3 7Z"/></svg><span class="visually-hidden">Medhörningsvolym</span><input id="monitorVolume" type="range" min="0" max="1" step="0.01" value="0.8"></label>
-                </div>
-                <audio id="audioPlayer" preload="metadata"></audio>
               </article>
 
               <article class="trim-window-card" aria-labelledby="trimWindowTitle">
@@ -585,8 +593,18 @@
               <section class="inspector-section gain-section">
                 <div class="inspector-heading"><div class="heading-with-help"><h2>Gain för exporturvalet</h2><button class="info-dot" type="button" data-help-topic="gain" aria-label="Om global gain">i</button></div><button class="text-button" id="resetGainButton" type="button">Återställ</button></div>
                 <p class="section-description">Samma nivåändring över hela det valda exporturvalet. Ingen kompressor eller limiter används.</p>
-                <div class="gain-value"><input id="gainNumber" type="number" min="-24" max="24" step="0.1" value="0.0" aria-label="Gain i decibel"><span>dB</span></div>
-                <input id="gainRange" class="accent-range" type="range" min="-24" max="24" step="0.1" value="0" aria-label="Gain i decibel">
+                <div class="gain-value"><input id="gainNumber" type="number" min="-60" max="24" step="0.1" value="0.0" aria-label="Gain i decibel"><span>dB</span></div>
+                <input id="gainRange" class="accent-range" type="range" min="-60" max="24" step="0.1" value="0" aria-label="Gain i decibel">
+                <div class="peak-safety" aria-labelledby="peakSafetyTitle">
+                  <div><strong id="peakSafetyTitle">Negativ toppanpassning</strong><small>Sänker hela urvalet bara om aktuell True Peak ligger över valt tak.</small></div>
+                  <div class="peak-safety-actions" role="group" aria-label="Välj högsta orienterande True Peak">
+                    <button type="button" data-peak-ceiling="-1">Max -1 dBTP</button>
+                    <button type="button" data-peak-ceiling="-2">Max -2 dBTP</button>
+                    <button type="button" data-peak-ceiling="-3">Max -3 dBTP</button>
+                    <button type="button" id="manualPeakGainButton">Endast manuell</button>
+                  </div>
+                  <p id="peakSafetyStatus" role="status" aria-live="polite">Ingen automatisk toppanpassning vald.</p>
+                </div>
                 <div class="projected-metrics">
                   <div><span>Orienterande LUFS-I</span><strong id="projectedLufs">oförändrad</strong></div>
                   <div><span>Orienterande True Peak</span><strong id="projectedPeak">oförändrad</strong></div>

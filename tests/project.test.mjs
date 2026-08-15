@@ -76,6 +76,14 @@ test("strikt projektvalidering stoppar storlek, intervall och fel typer", async 
   const project = await buildProject({ file, edit: { startFrame: 0, endFrame: 3 } });
   project.edit.gainDb = 100;
   await assert.rejects(readProjectFile(new File([JSON.stringify(project)], "bad.json")), /gainDb/);
+  project.edit.globalGainDb = -60;
+  project.edit.gainDb = -60;
+  project.edit.profile = "edited-wav";
+  assert.equal((await readProjectFile(new File([JSON.stringify(project)], "safe-float.json"))).edit.globalGainDb, -60);
+  project.edit.globalGainDb = -60.1;
+  project.edit.gainDb = -60.1;
+  await assert.rejects(readProjectFile(new File([JSON.stringify(project)], "too-low.json")), /globalGainDb/);
+  project.edit.globalGainDb = 0;
   project.edit.gainDb = 0;
   project.edit.globalGainDb = 1;
   project.edit.gainDb = 1;
