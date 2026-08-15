@@ -1,12 +1,12 @@
 # LjudR Analysverkstad
 
-LjudR är ett lokalt och icke destruktivt verktyg för analys och varsam redigering av fältinspelningar och ljudlandskap. Version `1.0.0-rc.13` är en offentlig valideringskandidat, inte en produktionsverifierad 1.0.
+LjudR är ett lokalt och icke destruktivt verktyg för analys och varsam redigering av fältinspelningar och ljudlandskap. Version `1.0.0-rc.14` är en offentlig valideringskandidat, inte en produktionsverifierad 1.0.
 
 ## Integritet och princip
 
 Ljudfilen behandlas lokalt i webbläsaren. Appen innehåller ingen AI, telemetri, annonskod, extern font eller tredjepartsanslutning. Originalfilen skrivs aldrig över. Projekt och rapporter innehåller mätdata och metadata men inga ljudsamplingar.
 
-Alla ändringar är uttryckliga. LjudR använder ingen automatisk nivåändring, lokal gain, kompressor, limiter, EQ, brusreducering eller omsampling. En eventuell gain gäller hela urvalet och måste bekräftas av användaren.
+Alla ändringar är uttryckliga. LjudR använder ingen automatisk nivåändring, kompressor, limiter, EQ, brusreducering eller omsampling. Gain kan gälla hela urvalet eller bestå av synliga, stereolänkade lokala kurvor som användaren skapar, provlyssnar och bekräftar. Inget förslag appliceras automatiskt.
 
 ## Sluten formatmatris för 1.0
 
@@ -31,6 +31,10 @@ RF64 och BW64 avvisas som indata. RF64/BW64-export, flerkanal, AAC, MP3, FLAC, o
 6. Exportera antingen ett sample-payload-identiskt trimutdrag eller en redigerad WAV-master.
 7. Låt appen återöppna och verifiera den faktiskt skrivna WAV-filen.
 8. Spara projekt och rapport för spårbarhet.
+
+Toppguiden efter huvudvärdena svarar i ordning på vad som mättes, vad resultatet betyder, om det finns en faktisk eller endast möjlig klippindikation och vad som händer vid export. Fyra synliga diagnoskategorier skiljer räddningsbar floatnivå, möjlig digital klippning, möjlig analog överstyrning och risk vid uppspelning eller export. Analog överstyrning redovisas uttryckligen som något filanalysen inte säkert kan avgöra. Knappar leder till högsta toppen, floatregionerna, valbar negativ global gain och en lokal toppverkstad. Lokala kurvor påverkar vänster och höger kanal lika, kan förbigås för A/B-lyssning och verifieras med en ny analys av hela exporturvalet. Ingen åtgärd appliceras automatiskt.
+
+Knappen Öppna fullständig analys visar en rullbar helskärmsgenomgång av topparter, loudness, dynamik, stereo och mono, signalintegritet, kanalvärden, viktiga tidsområden, rekommenderade nästa steg och analysens uttryckliga begränsningar.
 
 Det aktuella A/B-fönstret ligger kvar synligt genom analys, trimning och export. Fönstret är låst från början. Efter ett uttryckligt upplåsningsval kan det placeras med finger, penna, mus, knappar eller tangentbord och provlyssnas med bibehållen längd. Det låses sedan för slutlig lyssning. Först ett separat val gör A/B till aktivt trimurval och tar bort omgivande ljud vid export. Tidslinjen kan expanderas och visa vågform, loudness, sample peak, stereokorrelation och markörer som separata lager.
 
@@ -82,7 +86,7 @@ Se [valideringsplanen](docs/VALIDATION.md), [metoden](docs/METHOD.md), [gAIa-fl�
 
 ## Releaseport
 
-`1.0.0-rc.13` får publiceras som valideringskandidat. Versionsnumret `1.0.0` är förbjudet tills hela den fixerade testsuiten, EBU 68/68, ITU 19/19 och den fysiska iPad-matrisen är godkända. Matrisen omfattar en 15 till 20 minuter lång stereo float32/96 kHz-fil nära 1 GB i både Safari och installerad PWA, inklusive kopiera och klistra in flödet, export, Filer-handoff, bakgrund/återgång, quota, avbrott, OPFS-städning, offline och uppdatering.
+`1.0.0-rc.14` får publiceras som valideringskandidat. Versionsnumret `1.0.0` är förbjudet tills hela den fixerade testsuiten, EBU 68/68, ITU 19/19 och den fysiska iPad-matrisen är godkända. Matrisen omfattar en 15 till 20 minuter lång stereo float32/96 kHz-fil nära 1 GB i både Safari och installerad PWA, inklusive kopiera och klistra in flödet, export, Filer-handoff, bakgrund/återgång, quota, avbrott, OPFS-städning, offline och uppdatering.
 
 ## Lokal utveckling
 

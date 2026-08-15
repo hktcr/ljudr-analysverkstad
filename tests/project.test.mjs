@@ -34,7 +34,7 @@ test("projekt använder full filhash och innehåller inga ljudsamplingar", async
   const project = await buildProject({
     file,
     analysis: { format: { frameCount: 20 }, summary: { integratedLufs: -21.4 } },
-    edit: { startFrame: 10, endFrame: 20, globalGainDb: -1, profile: "edited-wav" },
+    edit: { startFrame: 10, endFrame: 20, globalGainDb: -1, localGainRegions: [{ id: "peak", startFrame: 11, attackEndFrame: 12, releaseStartFrame: 13, endFrame: 14, gainDb: -3 }], profile: "edited-wav" },
     metadata: { title: "Skymning", latitude: "56.123456" },
     settings: { series: { status: "applied", proposedGainDb: -1 } },
   });
@@ -43,6 +43,7 @@ test("projekt använder full filhash och innehåller inga ljudsamplingar", async
   assert.equal(project.privacy.audioIncluded, false);
   assert.equal(project.source.identity.scope, "full-file-bytes");
   assert.equal(project.source.identity.value.length, 64);
+  assert.equal(project.edit.localGainRegions[0].channelMode, "linked");
   assert.equal(project.source.preflightFingerprint.scope, "quick-preflight-only");
   assert.doesNotMatch(JSON.stringify(project), /"samples"/);
   assert.equal(project.metadata.latitude, "56.123456");

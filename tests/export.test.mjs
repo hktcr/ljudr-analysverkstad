@@ -306,7 +306,7 @@ test("export gör ingen dold toppsänkning utan blockerar det bekräftade gainv�
   assert.equal(fileName, "TMH_E008_har_MASTER.wav");
   assert.ok(verifiedOutput.summary.truePeakEstimateDbtp <= -6);
   assert.ok(Array.isArray(verifiedOutput.markersSuggested));
-  assert.equal(verifiedOutput.validation.engineVersion, "1.0.0-rc.13");
+  assert.equal(verifiedOutput.validation.engineVersion, "1.0.0-rc.14");
 
   const info = await inspectWav(output);
   const view = new DataView(await output.slice(info.data.dataOffset).arrayBuffer());
@@ -435,4 +435,30 @@ test("Extensible PCM med avvikande validBits får trimmas men inte räknas om", 
     () => exportWav(file, { globalGainDb: -1, preferOpfs: false }),
     error => error.code === "VALID_BITS_REENCODE_BLOCKED",
   );
+});
+
+test("lokal stereolänkad gainkurva skrivs i exporten och gör trimmen icke bitidentisk", async () => {
+  const file = float32Wave([0.8, -0.8, 0.8, -0.8, 0.8, -0.8], 2, 96000);
+  const { output, report } = await exportWav(file, {
+    preferOpfs: false,
+    profile: "edited-wav-master",
+    enforceTruePeakCeiling: false,
+    localGainRegions: [{
+      id: "middle",
+      startFrame: 1,
+      attackEndFrame: 1,
+      releaseStartFrame: 1,
+      endFrame: 2,
+      gainDb: -6.020599913,
+    }],
+  });
+  const info = await inspectWav(output);
+  const samples = decodeInterleaved(new Uint8Array(await output.slice(info.data.dataOffset, info.data.dataOffset + info.data.size).arrayBuffer()), info.format);
+  assert.ok(Math.abs(samples[0] - 0.8) < 1e-6);
+  assert.ok(Math.abs(samples[1] + 0.8) < 1e-6);
+  assert.ok(Math.abs(samples[2] - 0.4) < 1e-6);
+  assert.ok(Math.abs(samples[3] + 0.4) < 1e-6);
+  assert.equal(report.edit.bitExactSamplePayload, false);
+  assert.equal(report.edit.localGainRegions[0].channelMode, "linked");
+  assert.equal(report.edit.localGainPolicy, "minimum-linked-envelope");
 });

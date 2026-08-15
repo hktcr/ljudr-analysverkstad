@@ -1,6 +1,6 @@
 {
   "schema": "se.gaia.ljudr.test-inventory/1",
-  "release": "1.0.0-rc.13",
+  "release": "1.0.0-rc.14",
   "files": {
     "analysis-exchange.test.mjs": [
       "kanonisk JSON är nyckelordningsoberoende och digest stabil",
@@ -57,7 +57,14 @@
       "Parsern respekterar padding efter ett udda chunk",
       "mono PCM24 med udda data får korrekt avslutande RIFF-padding",
       "invalid float blockerar bearbetad export men får sample-identiskt trimmas",
-      "Extensible PCM med avvikande validBits får trimmas men inte räknas om"
+      "Extensible PCM med avvikande validBits får trimmas men inte räknas om",
+      "lokal stereolänkad gainkurva skrivs i exporten och gör trimmen icke bitidentisk"
+    ],
+    "local-gain.test.mjs": [
+      "lokal gain använder linjära amplitudramper och full återgång",
+      "överlapp använder starkaste sänkningen och staplas inte",
+      "toppförslag är stereolänkat, begränsat till filen och har spårbara brytpunkter",
+      "ogiltiga och dubbla regioner avvisas"
     ],
     "opfs.test.mjs": [
       "OPFS registrerar bara complete-exporter och stöder hämta och radera",
@@ -145,5 +152,5 @@
       "Ren trimning bevarar PCM32 exakt"
     ]
   },
-  "total": 110
+  "total": 115
 }

@@ -1,5 +1,18 @@
 # Ändringslogg
 
+## 1.0.0-rc.14, 2026-08-15
+
+- samlar toppinformationen i en fyrastegsguide direkt efter analysens huvudvärden
+- skiljer bevarad 32-bitars floatmarginal, True Peak för leverans och möjlig verklig klippning åt
+- visar separata statuskort för räddningsbar floatnivå, möjlig digital klippning, möjlig analog överstyrning och risk vid uppspelning eller export
+- visar Sample Peak, True Peak, floatvärden över 0 dBFS och ogiltiga floatvärden i klartext
+- förklarar att float overrange inte bevisar att mikrofon eller försteg var fria från distorsion
+- ger direkta knappar för att spela högsta toppen, visa alla floattoppar, öppna val för -1, -2 eller -3 dBTP och bevara originalnivån
+- lägger till en fullskärmsstudie med kanalvisa topptider, problemklassning och före-efter-scenarier för topp och loudness
+- lägger till en separat fullständig analysvy för topparter, loudness, dynamik, stereo, signalintegritet, kanaler, tidsområden och nästa steg
+- lägger till en lokal toppverkstad med synliga stereolänkade gainkurvor, mjuka övergångar, A/B-lyssning, ångra och verifierad omberäkning
+- applicerar ingen toppåtgärd automatiskt och använder fortfarande ingen limiter eller kompressor
+
 ## 1.0.0-rc.13, 2026-08-15
 
 - lägger uppspelningskontroller direkt vid analys- och trimdiagrammen

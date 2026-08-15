@@ -7,7 +7,7 @@ LjudR skiljer mellan signalmätning, teknisk observation och konstnärligt beslu
 ## Tre mätstadier
 
 1. **Källfil** är blockvis analys av originalets samples.
-2. **Beräknat exporturval** simulerar exakt vald trimregion efter fades, synlig bekräftad global gain och eventuell global toppmarginal, men före kvantisering och dither.
+2. **Beräknat exporturval** simulerar exakt vald trimregion efter fades, synlig bekräftad global gain och synliga stereolänkade lokala gainkurvor, men före kvantisering och dither.
 3. **Verifierad exportfil** återöppnar den faktiskt skrivna WAV-filen och kontrollerar container, invalid floats och signalmått.
 
 Ett beräknat värde får inte beskrivas som verifierat. Varje editändring invalidierar tidigare regionsanalys.
@@ -30,13 +30,15 @@ True Peak-tid redovisas med kanal och tidskonvention. FIR-filtrets gruppfördrö
 
 ## Editkedja
 
-Trimgränser lagras som heltalsbildrutor i intervallet `[startFrame,endFrame)`. Fade är avstängd från början och linjär i amplitud. Vid överlapp används den lägsta av de två envelopperna. Endast en statisk global gain finns. Preview A spelar källans valda utsnitt. Preview B spelar samma utsnitt med valda fades och effektiv global gain. Stereo, Vänster, Höger, Mono, medhörningsvolym och level match är monitorfunktioner och påverkar aldrig export eller mätvärden.
+Trimgränser lagras som heltalsbildrutor i intervallet `[startFrame,endFrame)`. Fade är avstängd från början och linjär i amplitud. Vid överlapp används den lägsta av de två envelopperna. Global gain är statisk över urvalet. Lokala toppkurvor är linjära i amplitud, stereolänkade och använder den starkaste sänkningen när de överlappar, så sänkningar staplas inte. Preview A spelar källans valda utsnitt. Preview B spelar samma utsnitt med valda fades, global gain och aktiva lokala kurvor. Stereo, Vänster, Höger, Mono, medhörningsvolym och level match är monitorfunktioner och påverkar aldrig export eller mätvärden.
+
+Sample Peak är högsta lagrade sampling. True Peak är ett översamplat estimat av toppen mellan samplingar och används som leveransorientering, inte som bevis på klippning. Float-overrange betyder att värden över 0 dBFS fortfarande är bevarade och kan sänkas före PCM-export. Verklig digital klippning kräver mer evidens än ett toppvärde: en platådetektor är endast heuristisk och måste följas av förstorad vågform och lyssning. Analog överstyrning i mikrofon, försteg eller omvandlare kan inte uteslutas från den färdiga filen och repareras inte av gain. En slutlig PCM- eller kodekexport måste verifieras i sitt faktiska format.
 
 ## Exportprofiler
 
-**Sample-payload-identiskt trimutdrag** kopierar ett obrutet sampleintervall utan fade, gain, toppmarginal, omkodning eller formatändring. Identiteten gäller sample-payload, inte hela ombyggda RIFF-filen eller samtliga metadatachunkar.
+**Sample-payload-identiskt trimutdrag** kopierar ett obrutet sampleintervall utan fade, global eller lokal gain, toppmarginal, omkodning eller formatändring. Identiteten gäller sample-payload, inte hela ombyggda RIFF-filen eller samtliga metadatachunkar.
 
-**Redigerad WAV-master** redovisar trim, fades, avsedd gain, eventuell global toppsänkning, effektiv gain, dither, invalid-float-policy samt varje bevarad, uppdaterad eller borttagen chunk. PCM som räknas om använder TPDF-dither. Formulärmetadata ligger i projekt och rapport om inte en framtida funktion uttryckligen bäddar in och verifierar den i WAV.
+**Redigerad WAV-master** redovisar trim, fades, global gain, varje lokal gainregion och dess överlappspolicy, dither, invalid-float-policy samt varje bevarad, uppdaterad eller borttagen chunk. PCM som räknas om använder TPDF-dither. Formulärmetadata ligger i projekt och rapport om inte en framtida funktion uttryckligen bäddar in och verifierar den i WAV.
 
 Efter skrivning kontrolleras header, chunkgränser, frameCount, format och dataBytes genom den gemensamma parsern. Full filhash och sample-payload-hash har olika betydelse och redovisas separat.
 

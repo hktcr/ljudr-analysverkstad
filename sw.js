@@ -1,4 +1,4 @@
-const CACHE_NAME = "ljudr-shell-v1.0.0-rc.13";
+const CACHE_NAME = "ljudr-shell-v1.0.0-rc.14";
 const SHELL = [
   "./",
   "./index.html",
@@ -8,6 +8,7 @@ const SHELL = [
   "./assets/icon-512.png",
   "./src/app.js",
   "./src/dsp-core.js",
+  "./src/local-gain.js",
   "./src/analysis-worker.js",
   "./src/wav.js",
   "./src/export-worker.js",

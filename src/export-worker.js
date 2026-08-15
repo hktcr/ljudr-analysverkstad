@@ -12,8 +12,9 @@ import {
   TRUE_PEAK_ORIENTATION
 } from "./dsp-core.js";
 import { sha256Blob } from "./sha256.js";
+import { LOCAL_GAIN_POLICY, localGainFactorAtFrame, normalizeLocalGainRegions } from "./local-gain.js";
 
-const ENGINE_VERSION = "1.0.0-rc.13";
+const ENGINE_VERSION = "1.0.0-rc.14";
 const DEFAULT_CHUNK_BYTES = 8 * 1024 * 1024;
 const MEMORY_WARNING_BYTES = 512 * 1024 * 1024;
 const GAIN_EPSILON_DB = 1e-9;
@@ -286,13 +287,14 @@ const fadeFactor = (index, total, fadeInFrames, fadeOutFrames) => {
 };
 
 async function preflightSelection(file, inspected, selection, onProgress, shouldCancel) {
-  const { startFrame, selectedFrames, fadeInFrames, fadeOutFrames, globalGainDb = 0 } = selection;
+  const { startFrame, selectedFrames, fadeInFrames, fadeOutFrames, globalGainDb = 0, localGainRegions = [] } = selection;
   const regionAnalysis = await analyzeRegion(file, {
     startFrame,
     endFrame: startFrame + selectedFrames,
     fadeInFrames,
     fadeOutFrames,
     globalGainDb,
+    localGainRegions,
     shouldCancel,
     waveformBins: 256,
   }, progress => onProgress({ ...progress, phase: "region-preflight" }));
@@ -381,11 +383,12 @@ export async function exportWav(file, options = {}, onProgress = () => {}) {
   }
   const fadeInFrames = Math.min(selectedFrames, clampFrame(options.fadeInFrames, selectedFrames));
   const fadeOutFrames = Math.min(selectedFrames, clampFrame(options.fadeOutFrames, selectedFrames));
+  const localGainRegions = normalizeLocalGainRegions(options.localGainRegions || [], inspected.frameCount);
   const fadeOverlapFrames = Math.max(0, fadeInFrames + fadeOutFrames - selectedFrames);
-  const bitExactPayload = Math.abs(globalGainDb) <= GAIN_EPSILON_DB && fadeInFrames === 0 && fadeOutFrames === 0;
+  const bitExactPayload = Math.abs(globalGainDb) <= GAIN_EPSILON_DB && fadeInFrames === 0 && fadeOutFrames === 0 && localGainRegions.length === 0;
   const profile = options.profile || (bitExactPayload ? "sample-payload-identical-trim" : "edited-wav-master");
   if (["sample-payload-identical-trim", "sample-payload-trim"].includes(profile) && !bitExactPayload) {
-    const error = new Error("Profilen Sample-payload-identiskt trimutdrag tillåter inte fade eller global gain.");
+    const error = new Error("Profilen Sample-payload-identiskt trimutdrag tillåter inte toningar, global gain eller lokala gainkurvor.");
     error.code = "PROFILE_REQUIRES_BIT_EXACT_PAYLOAD";
     throw error;
   }
@@ -400,6 +403,7 @@ export async function exportWav(file, options = {}, onProgress = () => {}) {
     fadeInFrames,
     fadeOutFrames,
     globalGainDb,
+    localGainRegions,
   }, onProgress, options.shouldCancel);
   const effectiveGainDb = cleanNearZero(globalGainDb);
   const gainLinear = dbToLinear(effectiveGainDb);
@@ -472,7 +476,10 @@ export async function exportWav(file, options = {}, onProgress = () => {}) {
       const samples = decodeInterleaved(bytes, format);
       for (let frame = 0; frame < frames; frame += 1) {
         const selectionFrame = processedFrames + frame;
-        const envelope = gainLinear * fadeFactor(selectionFrame, selectedFrames, fadeInFrames, fadeOutFrames);
+        const sourceFrameIndex = startFrame + selectionFrame;
+        const envelope = gainLinear
+          * fadeFactor(selectionFrame, selectedFrames, fadeInFrames, fadeOutFrames)
+          * localGainFactorAtFrame(localGainRegions, sourceFrameIndex);
         for (let channel = 0; channel < format.channels; channel += 1) {
           const index = frame * format.channels + channel;
           if (!Number.isFinite(samples[index])) {
@@ -615,6 +622,8 @@ export async function exportWav(file, options = {}, onProgress = () => {}) {
       fadeOutFrames,
       fadeOverlapFrames,
       fadeOverlapPolicy: FADE_OVERLAP_POLICY,
+      localGainRegions,
+      localGainPolicy: LOCAL_GAIN_POLICY,
       peakHandling: {
         enabled: enforceTruePeakCeiling,
         mode: "verify-only-no-hidden-adjustment",

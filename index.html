@@ -26,7 +26,7 @@
           </span>
           <span>
             <strong>LjudR</strong>
-            <small>Analysverkstad <span class="brand-version" id="appVersion" aria-label="Programversion">v1.0.0-rc.13</span></small>
+            <small>Analysverkstad <span class="brand-version" id="appVersion" aria-label="Programversion">v1.0.0-rc.14</span></small>
           </span>
         </a>
 
@@ -237,6 +237,7 @@
                 </div>
                 <h2 id="assessmentHeadline">Första reflektion visas efter analysen</h2>
                 <p id="assessmentSummary">Verktyget väger samman nivå, dynamik, toppmarginal och signalintegritet enligt tydliga regler.</p>
+                <button class="button button-secondary" id="openFullAnalysisButton" type="button" disabled>Öppna fullständig analys</button>
                 <section class="assessment-action-plan" id="assessmentActionPlan" hidden aria-labelledby="assessmentActionsTitle">
                   <div class="assessment-action-heading">
                     <div><strong id="assessmentActionsTitle">Föreslagna nästa steg</strong><small>Regelbaserade förslag. Inget utförs automatiskt.</small></div>
@@ -325,6 +326,37 @@
                   <small>energi vänster mot höger</small>
                 </article>
               </div>
+
+              <section class="peak-guide" id="peakGuide" aria-labelledby="peakGuideTitle">
+                <div class="peak-guide-heading">
+                  <div><span class="eyebrow">Beslutsstöd efter analys</span><h2 id="peakGuideTitle">Toppguide</h2><p>Skiljer bevarad floatmarginal, leveransmarginal och möjlig verklig klippning åt.</p></div>
+                  <span class="peak-guide-status" id="peakGuideStatus">Väntar på analys</span>
+                </div>
+                <section class="peak-category-section" aria-labelledby="peakCategoryTitle">
+                  <div class="peak-category-heading"><h3 id="peakCategoryTitle">Vilken sorts topp handlar det om?</h3><p>Kategorierna hålls isär eftersom de har olika evidens, risk och åtgärd.</p></div>
+                  <div class="peak-category-grid">
+                    <article data-category="float"><header><strong>Räddningsbar floatnivå</strong><span id="peakCategoryFloatStatus">Väntar</span></header><p id="peakCategoryFloatText">Analysera filen för att söka efter bevarade samplingar över 0 dBFS.</p></article>
+                    <article data-category="digital"><header><strong>Möjlig digital klippning</strong><span id="peakCategoryDigitalStatus">Väntar</span></header><p id="peakCategoryDigitalText">LjudR söker efter signalmönster som kan tyda på att lagrade toppar redan har kapats.</p></article>
+                    <article data-category="analog"><header><strong>Möjlig analog överstyrning</strong><span id="peakCategoryAnalogStatus">Väntar</span></header><p id="peakCategoryAnalogText">Mikrofon, försteg eller omvandlare kan ha överbelastats innan ljudet lagrades.</p></article>
+                    <article data-category="delivery"><header><strong>Risk vid uppspelning eller export</strong><span id="peakCategoryDeliveryStatus">Väntar</span></header><p id="peakCategoryDeliveryText">True Peak och format avgör om mer marginal behövs i nästa led.</p></article>
+                  </div>
+                </section>
+                <div class="peak-guide-grid">
+                  <article><span>1</span><div><strong>Vad hittades?</strong><p id="peakGuideMeasured">Analysera filen för att mäta topparna.</p></div></article>
+                  <article><span>2</span><div><strong>Vad betyder det?</strong><p id="peakGuideMeaning">Float och PCM behöver tolkas på olika sätt.</p></div></article>
+                  <article><span>3</span><div><strong>Är signalen klippt?</strong><p id="peakGuideClipping">Det kan bara bedömas efter mätning och lyssning.</p></div></article>
+                  <article><span>4</span><div><strong>Vad händer vid export?</strong><p id="peakGuideExport">Inget ljud ändras automatiskt.</p></div></article>
+                </div>
+                <div class="peak-guide-actions" aria-label="Åtgärder för toppar">
+                  <button class="button button-secondary" id="playHighestPeakButton" type="button" disabled>Spela högsta toppen</button>
+                  <button class="button button-secondary" id="showFloatPeaksButton" type="button" disabled>Visa alla floattoppar</button>
+                  <button class="button button-secondary" id="openPeakStudyButton" type="button" disabled>Studera topparna i detalj</button>
+                  <button class="button button-primary" id="openLocalPeakWorkshopButton" type="button" disabled>Öppna lokal toppverkstad</button>
+                  <button class="button button-secondary" id="openPeakSafetyButton" type="button" disabled>Global toppsänkning</button>
+                  <button class="button button-quiet" id="preservePeakOriginalButton" type="button" disabled>Bevara originalet</button>
+                </div>
+                <p class="peak-guide-note" id="peakGuideNote">Ingen limiter, kompressor eller dold toppsänkning används.</p>
+              </section>
 
               <details class="deep-measurements" id="deepMeasurements">
                 <summary>
@@ -685,7 +717,7 @@
                   <input type="radio" name="exportProfile" value="sample-payload-trim" checked>
                   <span class="radio-visual"></span>
                   <span class="profile-icon profile-blue"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4V5Zm3 3v8h2V8H7Zm4-2v12h2V6h-2Zm4 3v6h2V9h-2Z"/></svg></span>
-                  <span class="profile-copy"><span class="profile-title"><strong>Sample-payload-identiskt trimutdrag</strong></span><small>Ett sammanhängande utsnitt utan gain eller toningar. Valda samplebyte bevaras exakt.</small><span class="profile-tags"><i>WAV</i><i>Endast trim</i><i>Sample-identiskt</i></span></span>
+                  <span class="profile-copy"><span class="profile-title"><strong>Sample-payload-identiskt trimutdrag</strong></span><small>Ett sammanhängande utsnitt utan global gain, lokala toppkurvor eller toningar. Valda samplebyte bevaras exakt.</small><span class="profile-tags"><i>WAV</i><i>Endast trim</i><i>Sample-identiskt</i></span></span>
                 </label><button class="info-dot profile-info" type="button" data-help-topic="preservation-export" aria-label="Om sample-payload-identiskt trimutdrag">i</button></div>
                 <div class="profile-option-wrap"><label class="profile-option">
                   <input type="radio" name="exportProfile" value="edited-wav">
@@ -813,6 +845,16 @@
       </div>
     </dialog>
 
+    <dialog class="full-analysis-dialog" id="fullAnalysisDialog" aria-labelledby="fullAnalysisDialogTitle">
+      <div class="full-analysis-shell">
+        <div class="dialog-header">
+          <div><span class="eyebrow">Utvecklad analys</span><h2 id="fullAnalysisDialogTitle">Allt viktigt, rubrik för rubrik</h2><p>Uppmätta fakta, tolkning och nästa steg hålls tydligt åtskilda.</p></div>
+          <button class="icon-button" id="closeFullAnalysisButton" type="button" aria-label="Stäng den fullständiga analysen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6.4 5 5.6 5.6L17.6 5 19 6.4 13.4 12l5.6 5.6-1.4 1.4-5.6-5.6L6.4 19 5 17.6l5.6-5.6L5 6.4 6.4 5Z"/></svg></button>
+        </div>
+        <div class="full-analysis-content" id="fullAnalysisContent"><p>Analysera filen för att skapa den fullständiga genomgången.</p></div>
+      </div>
+    </dialog>
+
     <dialog class="observations-dialog" id="observationsDialog" aria-labelledby="observationsDialogTitle">
       <div class="observations-dialog-shell">
         <div class="dialog-header">
@@ -828,6 +870,67 @@
       </div>
     </dialog>
 
+    <dialog class="peak-study-dialog" id="peakStudyDialog" aria-labelledby="peakStudyTitle">
+      <div class="peak-study-shell">
+        <div class="dialog-header">
+          <div><span class="eyebrow">Toppstudie</span><h2 id="peakStudyTitle">Problem, evidens och förändring</h2><p>Studera uppmätta toppar och jämför uttryckliga alternativ innan du ändrar något.</p></div>
+          <button class="icon-button" id="closePeakStudyButton" type="button" aria-label="Stäng toppstudien"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6.4 5 5.6 5.6L17.6 5 19 6.4 13.4 12l5.6 5.6-1.4 1.4-5.6-5.6L6.4 19 5 17.6l5.6-5.6L5 6.4 6.4 5Z"/></svg></button>
+        </div>
+        <div class="peak-study-content">
+          <section aria-labelledby="peakEvidenceTitle"><h3 id="peakEvidenceTitle">Uppmätt evidens</h3><div class="peak-channel-grid" id="peakStudyChannels"></div></section>
+          <section aria-labelledby="peakProblemTitle"><h3 id="peakProblemTitle">Vad är ett problem?</h3><div class="peak-problem-list" id="peakStudyProblems"></div></section>
+          <section aria-labelledby="peakChangeTitle"><h3 id="peakChangeTitle">Så förändras hela urvalet</h3><p class="peak-study-intro" id="peakStudyBasis">Varje alternativ använder en enda linjär global gain. Topp och loudness flyttas lika många dB. Dynamiken mellan starkt och svagt komprimeras inte.</p><div class="peak-scenario-grid" id="peakStudyScenarios"></div></section>
+          <section class="peak-study-limit"><h3>Detta kan inte repareras här</h3><p>En topp som redan distorderades i mikrofon, försteg eller en tidigare heltalsinspelning blir inte oskadad av sänkt gain. Den lokala toppverkstaden kan skapa marginal inför nästa led, men använder inte rekonstruktion, limiter eller kompressor.</p></section>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog class="local-peak-dialog" id="localPeakWorkshopDialog" aria-labelledby="localPeakWorkshopTitle">
+      <div class="local-peak-shell">
+        <div class="dialog-header">
+          <div><span class="eyebrow">Varsam lokal redigering</span><h2 id="localPeakWorkshopTitle">Lokal toppverkstad</h2><p>Stereolänkade gainkurvor sänker bara valda händelser. Ingen limiter eller kompressor används.</p></div>
+          <button class="icon-button" id="closeLocalPeakWorkshopButton" type="button" aria-label="Stäng toppverkstaden"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6.4 5 5.6 5.6L17.6 5 19 6.4 13.4 12l5.6 5.6-1.4 1.4-5.6-5.6L6.4 19 5 17.6l5.6-5.6L5 6.4 6.4 5Z"/></svg></button>
+        </div>
+        <div class="local-peak-content">
+          <section class="local-peak-summary" aria-live="polite">
+            <div><span>Källans högsta True Peak</span><strong id="localPeakSourcePeak">saknas</strong></div>
+            <div><span>Beräknat exporturval</span><strong id="localPeakProcessedPeak">inte beräknat</strong></div>
+            <div><span>Aktiva lokala kurvor</span><strong id="localPeakRegionCount">0</strong></div>
+            <div><span>Princip</span><strong>Samma kurva i L och R</strong></div>
+          </section>
+
+          <section class="local-peak-controls" aria-labelledby="localPeakAssistTitle">
+            <div><h3 id="localPeakAssistTitle">Skapa ett granskningsförslag</h3><p>Förslaget blir en synlig kurva som kan justeras, provlyssnas och tas bort.</p></div>
+            <div class="local-peak-fields">
+              <label><span>Mål</span><select id="localPeakCeiling"><option value="-1">−1 dBTP</option><option value="-2" selected>−2 dBTP</option><option value="-3">−3 dBTP</option></select></label>
+              <label><span>Mjuk övergång</span><div><input id="localPeakTransition" type="number" min="0.01" max="5" step="0.01" value="0.20"><span>s</span></div></label>
+              <label><span>Marginal runt händelsen</span><div><input id="localPeakPadding" type="number" min="0" max="5" step="0.01" value="0.05"><span>s</span></div></label>
+              <label><span>Extra säkerhetsmarginal</span><div><input id="localPeakSafetyMargin" type="number" min="0" max="3" step="0.1" value="0.3"><span>dB</span></div></label>
+            </div>
+            <div class="local-peak-actions">
+              <button class="button button-primary" id="addHighestPeakRegionButton" type="button">Skapa runt högsta toppen</button>
+              <button class="button button-secondary" id="addAllFloatPeakRegionsButton" type="button">Skapa för alla floatregioner</button>
+              <button class="button button-secondary" id="addPeakAtPlayheadButton" type="button">Skapa vid spelhuvudet</button>
+            </div>
+            <p class="fine-print">Automatiska förslag utgår från tillgängliga toppmått och måste verifieras genom ny True Peakberäkning.</p>
+          </section>
+
+          <section class="local-peak-history" aria-label="Historik och jämförelse">
+            <button class="button button-quiet button-small" id="undoLocalPeakButton" type="button" disabled>Ångra</button>
+            <button class="button button-quiet button-small" id="redoLocalPeakButton" type="button" disabled>Gör om</button>
+            <label class="switch-row"><span><strong>Förbigå lokala kurvor</strong><small>Jämför utan att ta bort dem</small></span><input id="bypassLocalPeaksToggle" type="checkbox"><i></i></label>
+            <button class="button button-secondary button-small" id="calculateLocalPeakResultButton" type="button">Beräkna hela exporturvalet</button>
+          </section>
+
+          <section aria-labelledby="localPeakRegionsTitle">
+            <div class="local-peak-list-heading"><div><h3 id="localPeakRegionsTitle">Lokala gainkurvor</h3><p>Överlapp använder den starkaste sänkningen och staplas inte.</p></div><button class="button button-quiet button-small" id="clearLocalPeakRegionsButton" type="button" disabled>Ta bort alla</button></div>
+            <ol class="local-peak-list" id="localPeakRegionList"><li class="list-placeholder">Inga lokala gainkurvor</li></ol>
+          </section>
+          <p class="local-peak-status" id="localPeakStatus" role="status">Originalfilen är orörd.</p>
+        </div>
+      </div>
+    </dialog>
+
     <dialog class="exchange-dialog" id="analysisExchangeDialog" aria-labelledby="analysisExchangeDialogTitle">
       <form method="dialog" class="exchange-dialog-shell" id="analysisExchangeForm">
         <div class="dialog-header">
@@ -838,7 +941,7 @@
           <fieldset class="exchange-profile-picker">
             <legend>Analysstadium</legend>
             <label><input type="radio" name="exchangeStage" value="source"><span><strong>Källfil</strong><small>Originalets signal före trimning och nivåval.</small></span></label>
-            <label><input type="radio" name="exchangeStage" value="calculated-export-selection" checked><span><strong>Beräknat exporturval</strong><small>Aktuellt trimfönster efter synliga toningar och global gain, före kvantisering.</small></span></label>
+            <label><input type="radio" name="exchangeStage" value="calculated-export-selection" checked><span><strong>Beräknat exporturval</strong><small>Aktuellt trimfönster efter synliga toningar, global gain och lokala gainkurvor, före kvantisering.</small></span></label>
             <label><input type="radio" name="exchangeStage" value="verified-output"><span><strong>Verifierad WAV</strong><small>Den faktiskt skrivna och återöppnade exportfilen. Tillgänglig efter export.</small></span></label>
           </fieldset>
           <fieldset class="exchange-profile-picker">

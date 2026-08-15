@@ -1,24 +1,24 @@
-# Releasechecklista för 1.0.0-rc.13
+# Releasechecklista för 1.0.0-rc.14
 
 Status: offentlig valideringskandidat. Inte produktionsverifierad 1.0.
 
 ## Förverifiering 15 augusti 2026
 
-- [x] Fixerad testsuite: 110 av 110 tester, inventering SHA-256 `b69ce901f1173bcf6755ec7912e3e5ec56f5d83a1b02ebfd3f0005d5bfd01f52`.
+- [x] Fixerad testsuite: 115 av 115 tester, inventering SHA-256 `0afe0c718ce80697ee5ade230f1c5d6bbf3669f8a42777c23da97c498b1ba030`.
 - [x] EBU Loudness Test Set v5.0: 68 av 68 krav för 62 relevanta filer.
 - [x] ITU-R BS.2217-2: 19 av 19 relevanta filer inom +/-0,1 LKFS.
-- [x] Syntaxkontroll och `git diff --check` godkända för rc.13.
-- [x] Pagespaket innehåller 19 filer: 18 uttryckligen tillåtna resurser plus hashbundet buildmanifest.
-- [x] Samtliga 19 publika resurser ger HTTP 200 från lokal server.
+- [x] Syntaxkontroll och `git diff --check` godkända för rc.14.
+- [x] Pagespaket innehåller 20 filer: 19 uttryckligen tillåtna resurser plus hashbundet buildmanifest.
+- [x] Samtliga 20 publika resurser ger HTTP 200 från lokal server.
 - [x] Inga spårade ljudfiler, rapporter, projekt, uppenbara hemligheter eller U+2013 hittas.
 - [ ] Commit-, Actions-, artifact- och livekvitton fylls efter publicering.
 
 ## Lokal kandidat
 
 - [ ] Varje releasefil är avsiktligt inkluderad och det publicerade GitHub-trädet matchar det lokalt beräknade trädet exakt.
-- [x] Versionen `1.0.0-rc.13` är konsekvent i paket, app, workers, projekt, rapport, dokumentation, PWA-cache och validation-manifest.
-- [x] Syntaxkontroll, hela fixerade testsuiten med 110 av 110 och `git diff --check` passerar.
-- [x] EBU 68/68 och ITU 19/19 är oförändrad valideringsbas; rc.13 ändrar inte loudness- eller True Peak-beräkningen.
+- [x] Versionen `1.0.0-rc.14` är konsekvent i paket, app, workers, projekt, rapport, dokumentation, PWA-cache och validation-manifest.
+- [x] Syntaxkontroll, hela fixerade testsuiten med 115 av 115 och `git diff --check` passerar.
+- [x] EBU 68/68 och ITU 19/19 är oförändrad valideringsbas; rc.14 ändrar inte loudness- eller True Peak-beräkningen.
 - [x] Build skapar endast den uttryckliga allowlisten och `build-manifest.json`.
 - [x] Varje publik fil har SHA-256 i buildmanifestet.
 - [x] Inga ljudfiler, projekt, rapporter, credentials, hemligheter eller U+2013 finns i releasepaketet.
@@ -51,7 +51,7 @@ Status: offentlig valideringskandidat. Inte produktionsverifierad 1.0.
 - [x] Pages använder GitHub Actions.
 - [x] Appskalet använder nät först när nät finns, cache endast som reserv och `updateViaCache: none` för service workern.
 - [x] Automatisk aktivering och omladdning blockeras av osparat arbete eller pågående workerjobb.
-- [ ] Liveversionen på `https://hktcr.github.io/ljudr-analysverkstad/` visar `1.0.0-rc.13` och matchar releasecommitten.
+- [ ] Liveversionen på `https://hktcr.github.io/ljudr-analysverkstad/` visar `1.0.0-rc.14` och matchar releasecommitten.
 
 ## Live smoke
 
@@ -70,7 +70,7 @@ Status: offentlig valideringskandidat. Inte produktionsverifierad 1.0.
 
 ## RC-kvitto
 
-- Releaseversion: `1.0.0-rc.13`
+- Releaseversion: `1.0.0-rc.14`
 - Releasecommit: _fylls efter commit_
 - Tree-id: _fylls efter commit_
 - Actions run-id: _fylls efter grön körning_
@@ -78,9 +78,9 @@ Status: offentlig valideringskandidat. Inte produktionsverifierad 1.0.
 - Pages-URL: `https://hktcr.github.io/ljudr-analysverkstad/`
 - Buildmanifest SHA-256: _fylls efter bygg från releasecommit_
 - Livekontroll: _fylls efter publicering_
-- Fixerad testsuite: `110/110`, inventory SHA-256 `b69ce901f1173bcf6755ec7912e3e5ec56f5d83a1b02ebfd3f0005d5bfd01f52`
+- Fixerad testsuite: `115/115`, inventory SHA-256 `0afe0c718ce80697ee5ade230f1c5d6bbf3669f8a42777c23da97c498b1ba030`
 - EBU/ITU: `68/68 respektive 19/19`
-- Validation-manifest SHA-256: `5d39c6e5bb711ac87aacf43f146889428a8e26d9d4161e1a2ceb4cc4aef29499`
+- Validation-manifest SHA-256: `f4f766739af67b10472a9eeeb327fb11417fe0f9b88b62e963d690162758c480`
 - Status: `GO för commit och publicering som publik valideringskandidat`; deploy- och livekvitton återstår.
 
 ## Produktionsport för 1.0.0

@@ -1,8 +1,8 @@
-# Valideringsplan för 1.0.0-rc.13
+# Valideringsplan för 1.0.0-rc.14
 
 ## Status
 
-`1.0.0-rc.13` är en offentlig valideringskandidat. Den får inte beskrivas som produktionsverifierad 1.0.
+`1.0.0-rc.14` är en offentlig valideringskandidat. Den får inte beskrivas som produktionsverifierad 1.0.
 
 Loudnessmotorn klarar hela den relevanta filbaserade mono/stereo-delen av EBU Loudness Test Set v5.0: 68 av 68 krav för 62 filer. Den klarar även samtliga 19 relevanta mono/stereo-filer i ITU-R BS.2217-2 inom +/-0,1 LKFS. EBU:s flerkanalsfall och uttryckliga live-mätarfall ligger utanför verktygets filbaserade mono/stereo-scope. Resultaten är verifiering inom dokumenterad scope, inte produktcertifiering.
 
@@ -46,6 +46,9 @@ Maskinläsbar status finns i `validation-manifest.json`. Manifestet binder testi
 - trimstart större än noll provas mot urvalsrelativ markörtid, urvalslängd och bevarad maskintyp
 - redaktionell seriekontext och cue sheet valideras separat från objektiva mätmarkörer
 - mono fold-down, varaktig negativ korrelation och deterministiskt samplad spektral orientering provas utan automatisk korrigering
+- toppguiden skiljer float overrange, leveransmarginal och heuristisk klippindikation samt leder till lyssning eller uttryckliga globala gainval utan automatisk bearbetning
+- fullständig analysvy skiljer uppmätta fakta, tolkning, begränsningar och nästa kontroll samt länkar redovisade tidsområden till uppspelning
+- lokala toppkurvor är stereolänkade, använder minsta envelopp vid överlapp, ingår i medhörning, regionsanalys, projekt, rapport och export samt gör sample-payload-identisk profil otillgänglig
 - publiceringskort, verifierad masterhash, avsnittsmanifest och rapportbaserad serieöversikt har fixerade regressionstester
 
 ## Fysisk iPad-matris

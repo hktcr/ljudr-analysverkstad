@@ -7,8 +7,9 @@
 
 import { decodeSampleAt, inspectWav, parseWavHeader as parseSharedWavHeader } from "./wav.js";
 import { sha256Blob } from "./sha256.js";
+import { localGainFactorAtFrame, normalizeLocalGainRegions } from "./local-gain.js";
 
-export const ENGINE_VERSION = "1.0.0-rc.13";
+export const ENGINE_VERSION = "1.0.0-rc.14";
 
 export const DEFAULT_PEAK_HANDLING = Object.freeze({
   enabled: false,
@@ -602,6 +603,7 @@ export async function analyzeWav(blob, suppliedOptions = {}, onProgress = () => 
     throw new Error("Global gain måste vara ett ändligt värde mellan -60 och +24 dB.");
   }
   const globalGain = 10 ** (globalGainDb / 20);
+  const localGainRegions = normalizeLocalGainRegions(options.localGainRegions || [], sourceFrameCount);
   const regionFade = frame => {
     let factor = 1;
     if (fadeInFrames > 0 && frame < fadeInFrames) {
@@ -749,7 +751,8 @@ export async function analyzeWav(blob, suppliedOptions = {}, onProgress = () => 
       for (let channel = 0; channel < channels; channel += 1) {
         const byteOffset = localFrame * blockAlign + channel * bytesPerSample;
         const decoded = decodeSample(view, byteOffset, header);
-        const sample = Number.isFinite(decoded) ? decoded * globalGain * regionFade(frameIndex) : decoded;
+        const localGain = localGainFactorAtFrame(localGainRegions, analysisStartFrame + frameIndex);
+        const sample = Number.isFinite(decoded) ? decoded * globalGain * regionFade(frameIndex) * localGain : decoded;
         invalidCollectors[channel].push(frameIndex, !Number.isFinite(sample));
         samples[channel] = sample;
         const stats = channelStats[channel];
@@ -1148,6 +1151,8 @@ export async function analyzeWav(blob, suppliedOptions = {}, onProgress = () => 
       fadeInFrames,
       fadeOutFrames,
       globalGainDb,
+      localGainRegions,
+      localGainPolicy: "minimum-linked-envelope",
       preQuantization: true,
     },
     format: {
@@ -1275,6 +1280,7 @@ export async function analyzeRegion(blob, suppliedOptions = {}, onProgress = () 
     fadeInFrames: 0,
     fadeOutFrames: 0,
     globalGainDb: 0,
+    localGainRegions: [],
   }, progress => onProgress({ ...progress, stage: "source", fraction: progress.fraction * 0.45 }));
   const processed = await analyzeWav(blob, common, progress => onProgress({
     ...progress,
@@ -1287,6 +1293,8 @@ export async function analyzeRegion(blob, suppliedOptions = {}, onProgress = () 
       fadeInFrames: processed.region.fadeInFrames,
       fadeOutFrames: processed.region.fadeOutFrames,
       globalGainDb: processed.region.globalGainDb,
+      localGainRegions: processed.region.localGainRegions,
+      localGainPolicy: processed.region.localGainPolicy,
       dynamicProcessing: false,
       preQuantization: true,
     },

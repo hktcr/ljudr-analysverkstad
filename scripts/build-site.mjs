@@ -17,6 +17,7 @@ const publicFiles = [
   "assets/icon.svg",
   "src/app.js",
   "src/dsp-core.js",
+  "src/local-gain.js",
   "src/analysis-worker.js",
   "src/wav.js",
   "src/export-worker.js",
@@ -57,7 +58,7 @@ const releaseMeta = {
   commit: releaseCommit,
   builtAt,
   channel: "public-validation-candidate",
-  methodVersion: "ljudr-method/1.0-rc.13",
+  methodVersion: "ljudr-method/1.0-rc.14",
 };
 await writeFile(
   resolve(destination, "src/release-meta.js"),
