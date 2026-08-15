@@ -1,6 +1,6 @@
 {
   "schema": "se.gaia.ljudr.test-inventory/1",
-  "release": "1.0.0-rc.6",
+  "release": "1.0.0-rc.7",
   "files": {
     "analysis-exchange.test.mjs": [
       "kanonisk JSON är nyckelordningsoberoende och digest stabil",
@@ -97,6 +97,7 @@
       "utbytesytan är iPad-anpassad och har status för hjälpmedel"
     ],
     "ui-editing.test.mjs": [
+      "trimfönstret har 20 minuter som redigerbart standardvärde",
       "toningar är valfria, flexibla och har stora iPad-reglage",
       "medhörningen schemalägger samma linjära fadefunktion med AudioParam",
       "seriereferensen har tre uttryckliga steg och ingen dold toppsänkning",
@@ -130,5 +131,5 @@
       "Ren trimning bevarar PCM32 exakt"
     ]
   },
-  "total": 97
+  "total": 98
 }

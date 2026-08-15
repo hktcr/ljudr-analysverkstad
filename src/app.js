@@ -26,6 +26,7 @@ const state = {
     fadeOutSeconds: 0,
     gainDb: 0,
   },
+  trimWindowSeconds: 20 * 60,
   series: { status: "preserved", proposedGainDb: null, targetLufs: -19, rangeMinLufs: -20, rangeMaxLufs: -18, ceilingDbtp: -2 },
   monitoring: {
     volume: 0.8,
@@ -212,6 +213,8 @@ const elements = {
   trimEndInput: $("#trimEndInput"),
   trimStartLabel: $("#trimStartLabel"),
   trimEndLabel: $("#trimEndLabel"),
+  trimWindowDurationInput: $("#trimWindowDurationInput"),
+  trimWindowStatus: $("#trimWindowStatus"),
   monitorVolume: $("#monitorVolume"),
   fadeInToggle: $("#fadeInToggle"),
   fadeInNumber: $("#fadeInNumber"),
@@ -277,7 +280,12 @@ const elements = {
   exchangeArtifact: $("#exchangeArtifact"),
   exchangeArtifactDetails: $("#exchangeArtifactDetails"),
   exchangeArtifactDigest: $("#exchangeArtifactDigest"),
+  analysisExchangeText: $("#analysisExchangeText"),
+  copyAnalysisExchange: $("#copyAnalysisExchangeButton"),
   downloadAnalysisAgain: $("#downloadAnalysisAgainButton"),
+  guidanceTextInput: $("#guidanceTextInput"),
+  pasteGuidance: $("#pasteGuidanceButton"),
+  processGuidanceText: $("#processGuidanceTextButton"),
   guidanceOriginStatus: $("#guidanceOriginStatus"),
   guidanceVerification: $("#guidanceVerification"),
   guidanceList: $("#guidanceList"),
@@ -661,6 +669,7 @@ function markEditChanged(reason = "edit") {
   state.analysisExchange.preview = null;
   state.analysisExchange.lastBundle = null;
   state.analysisExchange.lastBundleBlob = null;
+  elements.analysisExchangeText.value = "";
   if (elements.exchangeArtifact) elements.exchangeArtifact.hidden = true;
   if (state.analysisExchange.guidanceStatus === "matched") {
     state.analysisExchange.guidanceStatus = "unverified";
@@ -798,7 +807,9 @@ async function openAudioFile(file) {
   state.analysisExchange.auditLog = [];
   clearGuidancePreview();
   elements.exchangeArtifact.hidden = true;
-  elements.guidanceOriginStatus.textContent = "Ingen fil importerad";
+  elements.analysisExchangeText.value = "";
+  elements.guidanceTextInput.value = "";
+  elements.guidanceOriginStatus.textContent = "Ingen text inläst";
   elements.guidanceOriginStatus.className = "guidance-origin";
   elements.guidanceVerification.textContent = "Vägledning måste matcha bundle-ID, analysdigest och den lokalt verifierade källfilen.";
   renderGuidanceSuggestions();
@@ -967,6 +978,7 @@ function startAnalysis() {
     state.analysisExchange.preview = null;
     state.analysisExchange.lastBundle = null;
     state.analysisExchange.lastBundleBlob = null;
+    elements.analysisExchangeText.value = "";
     state.analysisExchange.guidance = null;
     state.analysisExchange.guidanceStatus = "empty";
     state.analysisExchange.guidanceDecisions = {};
@@ -1428,6 +1440,55 @@ function syncTrimUi() {
   updateExportSummary();
   scheduleCanvasRender();
   emitState("trim");
+}
+
+function syncTrimWindowUi(message = "") {
+  const target = Math.max(1 / sampleRate(), finite(state.trimWindowSeconds) ?? 20 * 60);
+  state.trimWindowSeconds = target;
+  elements.trimWindowDurationInput.value = formatTime(target);
+  elements.trimWindowStatus.textContent = message || `Mållängd: ${formatTime(target)}`;
+}
+
+function updateTrimWindowDuration(value) {
+  const parsed = parseTime(value);
+  if (parsed === null || parsed <= 0) {
+    syncTrimWindowUi("Ange en längd större än noll, exempelvis 20:00.");
+    showToast("Fönsterlängden kunde inte tolkas.", "error");
+    return false;
+  }
+  state.trimWindowSeconds = parsed;
+  state.dirty = true;
+  syncTrimWindowUi();
+  emitState("trim-window-duration");
+  return true;
+}
+
+function applyTrimWindow(anchor) {
+  if (!updateTrimWindowDuration(elements.trimWindowDurationInput.value)) return;
+  const sourceDuration = durationSeconds();
+  if (sourceDuration <= 0) {
+    showToast("Ljudfilens längd är inte tillgänglig ännu.", "error");
+    return;
+  }
+  const windowLength = Math.min(state.trimWindowSeconds, sourceDuration);
+  let start = 0;
+  if (anchor === "start") {
+    start = clamp(state.trim.startSeconds, 0, Math.max(0, sourceDuration - windowLength));
+  } else if (anchor === "end") {
+    const end = clamp(state.trim.endSeconds || sourceDuration, windowLength, sourceDuration);
+    start = end - windowLength;
+  } else {
+    const center = clamp(elements.audio.currentTime || state.playback.currentSeconds, 0, sourceDuration);
+    start = clamp(center - windowLength / 2, 0, Math.max(0, sourceDuration - windowLength));
+  }
+  state.trim.startSeconds = start;
+  state.trim.endSeconds = start + windowLength;
+  syncTrimUi();
+  invalidateSeriesProposal();
+  markEditChanged("trim-window-applied");
+  syncTrimWindowUi(state.trimWindowSeconds > sourceDuration
+    ? `Källan är kortare än mållängden. Hela ${formatTime(sourceDuration)} valdes.`
+    : `Trimfönstret är ${formatTime(windowLength)} från ${formatTime(start)} till ${formatTime(start + windowLength)}.`);
 }
 
 function setBoundary(boundary, seconds) {
@@ -2122,7 +2183,9 @@ function syncAnalysisExchangeAvailability() {
   const ready = Boolean(analysisReady && state.regionAnalysis && !state.jobs.region);
   elements.openAnalysisExport.disabled = !ready;
   elements.importGuidance.disabled = !ready;
-  if (ready && !state.analysisExchange.lastBundle) elements.analysisExchangeStatus.textContent = "Källanalysen är klar. Du kan granska ett lokalt underlag eller importera vägledning.";
+  elements.pasteGuidance.disabled = !ready;
+  elements.processGuidanceText.disabled = !ready || !elements.guidanceTextInput.value.trim();
+  if (ready && !state.analysisExchange.lastBundle) elements.analysisExchangeStatus.textContent = "Källanalysen är klar. Du kan skapa kopierbar text eller klistra in vägledning.";
   else if (analysisReady && !state.regionAnalysis) elements.analysisExchangeStatus.textContent = "Väntar på Beräknat exporturval innan analysunderlaget kan skapas.";
 }
 
@@ -2241,7 +2304,7 @@ async function refreshAnalysisBundlePreview() {
     state.analysisExchange.preview = normalized;
     elements.exchangeJsonPreview.textContent = normalized.json;
     renderExchangeManifest(exchangeProfile(), normalized.bundle);
-    elements.exchangeDialogStatus.textContent = `Preview klar. ${formatBytes(new Blob([normalized.json]).size)}. Kontrollera innehållet innan filen skapas.`;
+    elements.exchangeDialogStatus.textContent = `Preview klar. ${formatBytes(new Blob([normalized.json]).size)}. Kontrollera innehållet innan texten visas för kopiering.`;
     elements.createAnalysisBundle.disabled = false;
   } catch (error) {
     if (requestSequence !== exchangePreviewSequence) return;
@@ -2272,14 +2335,31 @@ function createLocalAnalysisBundle() {
   state.analysisExchange.lastBundleBlob = blob;
   if (preview.receipt) state.analysisExchange.receipts = [preview.receipt, ...state.analysisExchange.receipts.filter((item) => item?.bundleId !== preview.receipt?.bundleId)];
   appendAnalysisExchangeAudit("export", { bundleId: preview.bundle.bundleId, analysisDigest: preview.digest });
-  downloadBlob(blob, preview.fileName);
   elements.exchangeArtifact.hidden = false;
-  elements.exchangeArtifactDetails.textContent = `${preview.fileName} · ${formatBytes(blob.size)}`;
+  elements.analysisExchangeText.value = preview.json;
+  elements.exchangeArtifactDetails.textContent = `${formatBytes(blob.size)} kopierbar JSON-text. Fil är valfri reserv.`;
   elements.exchangeArtifactDigest.textContent = `Analysdigest: ${preview.digest}`;
-  elements.analysisExchangeStatus.textContent = "Analysunderlaget är klart. Filen skapades lokalt och inget laddades upp.";
+  elements.analysisExchangeStatus.textContent = "Analysunderlaget är klart att kopiera. Inget har laddats upp eller sparats som fil.";
   elements.analysisExchangeDialog.close();
+  elements.exchangeArtifact.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "nearest" });
   state.dirty = true;
   emitState("analysis-bundle-created");
+}
+
+async function writeClipboardText(text, fallbackElement) {
+  if (!text) throw new Error("Det finns ingen text att kopiera.");
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    fallbackElement.focus();
+    fallbackElement.select();
+    if (!document.execCommand?.("copy")) throw new Error("Kopieringen blockerades. Markera texten och kopiera manuellt.");
+  }
+}
+
+async function readClipboardText() {
+  if (!navigator.clipboard?.readText) throw new Error("Webbläsaren tillåter inte automatisk inklistring. Klistra in direkt i rutan.");
+  return navigator.clipboard.readText();
 }
 
 function guidanceImporter() {
@@ -2302,20 +2382,23 @@ function normalizedGuidanceResult(result) {
   return { guidance, suggestions, matched, receipt: result?.receipt || null, reason };
 }
 
-async function importGuidanceFile(file) {
-  if (!file) return;
+async function importGuidanceText(text) {
+  const normalizedText = String(text || "").trim();
+  if (!normalizedText) {
+    showToast("Klistra in vägledningstext först.", "error");
+    return;
+  }
   clearGuidancePreview();
-  if (file.size > 2 * 1024 * 1024) {
-    showToast("Vägledningsfilen är större än 2 MB och avvisades.", "error", 8000);
+  if (new Blob([normalizedText]).size > 2 * 1024 * 1024) {
+    showToast("Vägledningstexten är större än 2 MB och avvisades.", "error", 8000);
     return;
   }
   const importer = guidanceImporter();
   if (!importer) return;
   elements.guidanceVerification.textContent = "Verifierar bundle-ID, analysdigest och lokal källidentitet";
   try {
-    const text = await file.text();
-    JSON.parse(text);
-    const result = await importer(text, {
+    JSON.parse(normalizedText);
+    const result = await importer(normalizedText, {
       bundleReceipts: state.analysisExchange.receipts,
       sourceIdentity: state.analysis?.sourceIdentity || null,
       currentAnalysisDigest: state.analysisExchange.lastBundle?.digest || null,
@@ -2336,11 +2419,25 @@ async function importGuidanceFile(file) {
   } catch (error) {
     state.analysisExchange.guidance = null;
     state.analysisExchange.guidanceStatus = "rejected";
-    elements.guidanceOriginStatus.textContent = "Fil avvisad";
+    elements.guidanceOriginStatus.textContent = "Text avvisad";
     elements.guidanceOriginStatus.className = "guidance-origin is-unverified";
-    elements.guidanceVerification.textContent = error.message || "Vägledningsfilen kunde inte valideras.";
+    elements.guidanceVerification.textContent = error.message || "Vägledningstexten kunde inte valideras.";
     renderGuidanceSuggestions();
-    showToast("Vägledningsfilen avvisades. Inga kontroller ändrades.", "error", 8000);
+    showToast("Vägledningstexten avvisades. Inga kontroller ändrades.", "error", 8000);
+  }
+}
+
+async function importGuidanceFile(file) {
+  if (!file) return;
+  if (file.size > 2 * 1024 * 1024) {
+    showToast("Vägledningsfilen är större än 2 MB och avvisades.", "error", 8000);
+    return;
+  }
+  try {
+    const text = await file.text();
+    elements.guidanceTextInput.value = text;
+    syncAnalysisExchangeAvailability();
+    await importGuidanceText(text);
   } finally {
     elements.guidanceFileInput.value = "";
   }
@@ -2525,6 +2622,7 @@ function projectEdit() {
 
 function projectSettings() {
   return {
+    trimWindowSeconds: state.trimWindowSeconds,
     monitoring: {
       volume: state.monitoring.volume,
       levelMatched: state.monitoring.levelMatched,
@@ -2638,6 +2736,7 @@ async function applyPendingProjectToFile() {
   const profileRadio = $(`input[name='exportProfile'][value='${state.exportProfile}']`);
   if (profileRadio) profileRadio.checked = true;
   state.series = { ...state.series, ...(project.settings?.series || {}) };
+  state.trimWindowSeconds = Math.max(1 / sampleRate(), finite(project.settings?.trimWindowSeconds) ?? 20 * 60);
   const savedExchange = project.settings?.analysisExchange || {};
   if (Array.isArray(savedExchange.receipts)) state.analysisExchange.receipts = savedExchange.receipts.filter((receipt) => receipt && typeof receipt === "object");
   if (Array.isArray(savedExchange.auditLog)) {
@@ -2650,12 +2749,12 @@ async function applyPendingProjectToFile() {
     }
   }
   if (savedExchange.guidance && typeof savedExchange.guidance === "object") {
-    state.analysisExchange.guidance = normalizedGuidanceResult({ guidance: savedExchange.guidance, status: "unverified", reason: "Importera vägledningsfilen igen för ny lokal verifiering." });
+    state.analysisExchange.guidance = normalizedGuidanceResult({ guidance: savedExchange.guidance, status: "unverified", reason: "Klistra in vägledningstexten igen för ny lokal verifiering." });
     state.analysisExchange.guidanceStatus = "unverified";
     state.analysisExchange.guidanceDecisions = { ...(savedExchange.guidanceDecisions || {}) };
     elements.guidanceOriginStatus.textContent = "gAIa, osignerad, kräver ny verifiering";
     elements.guidanceOriginStatus.className = "guidance-origin is-unverified";
-    elements.guidanceVerification.textContent = "Projektet innehåller tidigare vägledning. Importera originalfilen igen innan någon åtgärd kan användas.";
+    elements.guidanceVerification.textContent = "Projektet innehåller tidigare vägledning. Klistra in originaltexten igen innan någon åtgärd kan användas.";
     renderGuidanceSuggestions();
   }
   const savedMonitoring = project.settings?.monitoring || {};
@@ -2703,6 +2802,7 @@ async function applyPendingProjectToFile() {
   renderObservations();
   renderMarkers();
   syncTrimUi();
+  syncTrimWindowUi();
   syncAuditionUi();
   updateMonitoringGraph();
   if (requiresReanalysis) {
@@ -3480,6 +3580,10 @@ function bindEvents() {
     if (value === null) showToast("Sluttiden kunde inte tolkas.", "error");
     else setBoundary("end", value);
   });
+  elements.trimWindowDurationInput.addEventListener("change", () => updateTrimWindowDuration(elements.trimWindowDurationInput.value));
+  $("#applyWindowFromStartButton").addEventListener("click", () => applyTrimWindow("start"));
+  $("#applyWindowAtPlayheadButton").addEventListener("click", () => applyTrimWindow("playhead"));
+  $("#applyWindowToEndButton").addEventListener("click", () => applyTrimWindow("end"));
   $("#setStartAtPlayhead").addEventListener("click", () => setBoundary("start", elements.audio.currentTime || state.playback.currentSeconds));
   $("#setEndAtPlayhead").addEventListener("click", () => setBoundary("end", elements.audio.currentTime || state.playback.currentSeconds));
   $$("[data-nudge]").forEach((button) => button.addEventListener("click", () => {
@@ -3536,6 +3640,7 @@ function bindEvents() {
     state.analysisExchange.preview = null;
     state.analysisExchange.lastBundle = null;
     state.analysisExchange.lastBundleBlob = null;
+    elements.analysisExchangeText.value = "";
     elements.exchangeArtifact.hidden = true;
     if (state.analysisExchange.guidanceStatus === "matched") {
       state.analysisExchange.guidanceStatus = "unverified";
@@ -3575,9 +3680,27 @@ function bindEvents() {
     if (event.target.matches("input[name='exchangeProfile'], input[type='checkbox']")) refreshAnalysisBundlePreview();
   });
   elements.analysisExchangeDialog.addEventListener("click", (event) => { if (event.target === elements.analysisExchangeDialog) elements.analysisExchangeDialog.close(); });
+  elements.copyAnalysisExchange.addEventListener("click", async () => {
+    try {
+      await writeClipboardText(elements.analysisExchangeText.value, elements.analysisExchangeText);
+      showToast("Analysunderlaget har kopierats.");
+    } catch (error) { showToast(error.message, "error", 7000); }
+  });
   elements.downloadAnalysisAgain.addEventListener("click", () => {
     if (state.analysisExchange.lastBundleBlob) downloadBlob(state.analysisExchange.lastBundleBlob, state.analysisExchange.lastBundle.fileName);
   });
+  elements.guidanceTextInput.addEventListener("input", syncAnalysisExchangeAvailability);
+  elements.pasteGuidance.addEventListener("click", async () => {
+    try {
+      elements.guidanceTextInput.value = await readClipboardText();
+      syncAnalysisExchangeAvailability();
+      showToast("Texten har klistrats in. Granska den när du är redo.");
+    } catch (error) {
+      elements.guidanceTextInput.focus();
+      showToast(error.message, "error", 7000);
+    }
+  });
+  elements.processGuidanceText.addEventListener("click", () => importGuidanceText(elements.guidanceTextInput.value));
   elements.guidanceList.addEventListener("click", (event) => {
     try { handleGuidanceAction(event); } catch (error) { showToast(`Beslutet kunde inte sparas: ${error.message}`, "error", 8000); }
   });
@@ -3639,6 +3762,7 @@ async function initialize() {
   renderObservations();
   renderMarkers();
   syncTrimUi();
+  syncTrimWindowUi();
   syncSeriesUi();
   syncAuditionUi();
   setExportProfile(state.exportProfile, { dirty: false, force: true });

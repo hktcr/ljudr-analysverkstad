@@ -1,6 +1,6 @@
 # LjudR Analysverkstad
 
-LjudR är ett lokalt och icke destruktivt verktyg för analys och varsam redigering av fältinspelningar och ljudlandskap. Version `1.0.0-rc.6` är en offentlig valideringskandidat, inte en produktionsverifierad 1.0.
+LjudR är ett lokalt och icke destruktivt verktyg för analys och varsam redigering av fältinspelningar och ljudlandskap. Version `1.0.0-rc.7` är en offentlig valideringskandidat, inte en produktionsverifierad 1.0.
 
 ## Integritet och princip
 
@@ -42,7 +42,7 @@ Rapporten skiljer strikt mellan:
 
 LjudR kan skapa ett lokalt JSON-underlag enligt `se.gaia.ljudr.analysis-exchange/1`. Underlaget innehåller tekniska sammanfattningar och maskinella observationer men aldrig ljudsamplingar, waveform, spektrum, binär media eller originalfilens fulla SHA-256. Standardprofilen `Minimal` innehåller ingen kontinuerlig tidsserie och saknar filnamn, fria markörtexter och platskoordinater. Den uttryckliga profilen `Temporal diagnostik` kan lägga till grova programaggregat med minst 5 sekunder per segment och högst 720 segment. Segmenten innehåller sample peak, inte segmentbaserad True Peak, eftersom motorn saknar en verifierad True Peak-tidsserie.
 
-Exporten är alltid manuell och visas i sin helhet före hämtning. All frivillig metadata är av från början och väljs fältgrupp för fältgrupp. Exakta koordinater kräver ett uttryckligt exakt integritetsval. LjudR ansluter inte till gAIa eller någon AI-tjänst och behåller `connect-src 'none'`. Användaren kan själv föra JSON-filen till ett separat gAIa/VEP-flöde.
+Underlaget visas alltid i sin helhet före kopiering. All frivillig metadata är av från början och väljs fältgrupp för fältgrupp. Exakta koordinater kräver ett uttryckligt exakt integritetsval. LjudR ansluter inte till gAIa eller någon AI-tjänst och behåller `connect-src 'none'`. Användaren kopierar JSON-texten till gAIa och klistrar in vägledningen i verktyget. JSON-fil finns kvar som valfri reserv.
 
 Vägledning kan återimporteras enligt `se.gaia.ljudr.guidance/1`. Den binds till exakt `bundleId` och `analysisDigest`, valideras som obetrodd data och kan aldrig automatiskt ändra trim, fade, gain, profil eller export. Osignerad vägledning märks som integritetskontrollerad men inte kryptografiskt avsändarverifierad. Se [gAIa-flödet](docs/GAIA_ANALYSIS_FLOW.md).
 
@@ -78,7 +78,7 @@ Se [valideringsplanen](docs/VALIDATION.md), [metoden](docs/METHOD.md), [gAIa-fl�
 
 ## Releaseport
 
-`1.0.0-rc.6` får publiceras som valideringskandidat. Versionsnumret `1.0.0` är förbjudet tills hela den fixerade testsuiten, EBU 68/68, ITU 19/19 och den fysiska iPad-matrisen är godkända. Matrisen omfattar en 15 till 20 minuter lång stereo float32/96 kHz-fil nära 1 GB i både Safari och installerad PWA, inklusive analysunderlag och guidanceimport, export, Filer-handoff, bakgrund/återgång, quota, avbrott, OPFS-städning, offline och uppdatering.
+`1.0.0-rc.7` får publiceras som valideringskandidat. Versionsnumret `1.0.0` är förbjudet tills hela den fixerade testsuiten, EBU 68/68, ITU 19/19 och den fysiska iPad-matrisen är godkända. Matrisen omfattar en 15 till 20 minuter lång stereo float32/96 kHz-fil nära 1 GB i både Safari och installerad PWA, inklusive kopiera och klistra in flödet, export, Filer-handoff, bakgrund/återgång, quota, avbrott, OPFS-städning, offline och uppdatering.
 
 ## Lokal utveckling
 
