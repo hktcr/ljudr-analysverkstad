@@ -149,6 +149,74 @@ test("trimfönstret har 20 minuter som redigerbart standardvärde", () => {
   assert.match(app, /!timelineGesture\?\.moved && !hadMultiplePointers/);
 });
 
+test("iPadflödet har fyra arbetssteg, en huvudåtgärd och fokuserade moduler", () => {
+  const workflowNav = html.match(/<nav class="mode-nav" id="workflowNav"[\s\S]*?<\/nav>/)?.[0] || "";
+  assert.match(workflowNav, /id="workflowNav"[^>]*hidden/);
+  assert.equal((workflowNav.match(/class="mode-tab" data-mode="(?:analyze|trim|preflight|export)"/g) || []).length, 4);
+  assert.match(workflowNav, /data-mode="open"[^>]*hidden/);
+  for (const id of ["workflowActionDock", "workflowPrimaryAction", "workspaceModuleDialog", "sessionPlayButton", "sessionSafetyStatus"]) assert.match(html, new RegExp(`id="${id}"`));
+  for (const target of ["assessmentContext", "analysisTimelineCard,canvasTextAlternative", "deepMeasurements", "analysisInspector", "trimTimelineCard,trimWindowCard,trimControlGrid", "fadeModule", "gainModule,recommendationWorkbench", "trimAuditionModule,auditionStatus,monitorModule", "metadataModule", "publicationModule"]) assert.match(html, new RegExp(`data-workspace-target="${target}"`));
+  assert.match(html, /data-analysis-module="rumble"/);
+  assert.ok(html.indexOf('id="exportAudioButton"') < html.indexOf('id="metadataModule"'), "exportåtgärden ska ligga före metadata i DOM-ordningen");
+  assert.equal((html.match(/id="exportAudioButton"/g) || []).length, 1);
+  assert.match(app, /function workflowStepModel\(\)/);
+  assert.match(app, /function renderWorkflowActionDock\(\)/);
+  assert.match(app, /function openWorkspaceModule\(invoker\)/);
+  assert.match(app, /document\.createComment\(`restore-/);
+  assert.match(app, /invoker\?\.focus\?\./);
+  assert.match(css, /\.mode-nav\s*\{[^}]*grid-template-columns:\s*repeat\(4/s);
+  assert.match(css, /\[data-panel="analyze"\] \.heading-actions,[\s\S]*\.preflight-actions #preflightContinueButton \{ display: none; \}/);
+  assert.match(css, /@media \(max-width: 1100px\)[\s\S]*\.workspace-module-dialog,[\s\S]*width: 100vw;[\s\S]*height: 100dvh;/);
+  assert.match(css, /\.session-transport #sessionTime \{ display: none; \}/);
+  assert.match(css, /\.session-transport \.session-safety \{ display: block;/);
+  assert.match(app, /if \(!state\.analysis\) \{[\s\S]*Uppspelningen är låst tills toppnivån är känd/);
+  assert.match(app, /\[data-monitor-safety-mirror\]/);
+  assert.match(html, /data-module-transport-action="toggle"/);
+  const recommendationsHandler = app.match(/elements\.openRecommendations\.addEventListener[\s\S]*?\n  \}\);/)?.[0] || "";
+  const peakSafetyHandler = app.match(/elements\.openPeakSafety\.addEventListener[\s\S]*?\n  \}\);/)?.[0] || "";
+  assert.doesNotMatch(recommendationsHandler, /requestRegionAnalysis/);
+  assert.doesNotMatch(peakSafetyHandler, /requestRegionAnalysis/);
+  const projectRestore = app.match(/async function applyPendingProjectToFile\(\)[\s\S]*?\n}\n\nfunction reportInput/)?.[0] || "";
+  assert.doesNotMatch(projectRestore, /requestRegionAnalysis\(\)|startAnalysis\(\)/);
+  assert.match(projectRestore, /if \(!monitorSafetyForPreview\(\)\.ready\)/);
+  assert.match(projectRestore, /\$\$\('dialog\[open\]'\)/);
+  assert.match(projectRestore, /setMode\("analyze"\)/);
+});
+
+test("säker medhörning kräver aktuell toppanalys och takbyte ogiltigförklarar verifiering", () => {
+  assert.match(app, /analysisPlaybackSource:\s*"none"/);
+  assert.match(app, /state\.analysisPlaybackSource = "current-session";[\s\S]*?renderMonitorSafetyStatus\(\);/);
+  assert.match(app, /state\.analysisPlaybackSource = state\.analysis \? "restored-project" : "none"/);
+  assert.match(app, /function monitorSafetyForPreview\(\)[\s\S]*monitorSafetyDecision\([\s\S]*trustedSource: state\.analysisPlaybackSource === "current-session"/);
+  const playbackStart = app.match(/async function startPlayback\(\)[\s\S]*?\n}\n\nfunction seekPlayback/)?.[0] || "";
+  assert.match(playbackStart, /const playbackSafety = monitorSafetyForPreview\(\)/);
+  assert.match(playbackStart, /if \(!playbackSafety\.ready\)/);
+  const invalidator = app.match(/function invalidatePreflightAndVerification\([\s\S]*?\n}\n\nfunction markEditChanged/)?.[0] || "";
+  for (const pattern of [/state\.regionAnalysis = null/, /state\.verifiedExport = null/, /state\.lastExportReport = null/, /activeExportJob/, /state\.jobs\.export = null/, /verifiedMeasureStatus\.textContent = verifiedMessage/]) assert.match(invalidator, pattern);
+  assert.match(invalidator, /exportWorker\?\.postMessage\(\{ type: "cancel"/);
+  assert.match(invalidator, /\["running", "cancelling", "complete"\]\.includes\(state\.exportStatus\)/);
+  const ceilingHandler = app.match(/elements\.localPeakCeiling\.addEventListener\("change"[\s\S]*?\n  \}\);/)?.[0] || "";
+  assert.match(ceilingHandler, /invalidatePreflightAndVerification/);
+  assert.match(ceilingHandler, /Ogiltig efter ändrat leveranstak/);
+  const setMode = app.match(/function setMode\(mode, options = \{\}\)[\s\S]*?\n}\n\nfunction runWorkflowPrimaryAction/)?.[0] || "";
+  assert.match(setMode, /\["trim", "preflight", "export"\]\.includes\(mode\) && !monitorSafetyForPreview\(\)\.ready/);
+  assert.match(setMode, /setMode\("analyze", options\)/);
+  const playbackAvailability = app.match(/function syncPlaybackAvailability\(\)[\s\S]*?\n}/)?.[0] || "";
+  assert.match(playbackAvailability, /monitorSafetyForPreview\(\)\.ready/);
+  for (const element of ["sessionPlayButton", "playButton", "transportSeek"]) assert.match(playbackAvailability, new RegExp(`elements\\.${element}.*disabled = !ready`));
+  const playbackPosition = app.match(/function syncPlaybackPosition\([\s\S]*?\n}\n\nfunction stopPlaybackClock/)?.[0] || "";
+  const safetyRenderer = app.match(/function renderMonitorSafetyStatus\(\)[\s\S]*?\n}\n\nfunction schedulePreviewEnvelope/)?.[0] || "";
+  assert.match(playbackPosition, /syncPlaybackAvailability\(\)/);
+  assert.match(safetyRenderer, /syncPlaybackAvailability\(\)/);
+  const safetyDecision = app.match(/function monitorSafetyForPreview\(\)[\s\S]*?\n}/)?.[0] || "";
+  assert.doesNotMatch(safetyDecision, /return monitorSafetyDecision\([\s\S]*syncPlaybackAvailability/);
+  assert.doesNotMatch(app, /elements\.playButton\.disabled = !state\.analysis/);
+  assert.doesNotMatch(app, /elements\.transportSeek\.disabled = !state\.analysis/);
+  assert.match(css, /\.assessment-selects select,[\s\S]*\.help-nav button \{ min-height: 44px; \}/);
+  assert.match(css, /\.session-transport output,[\s\S]*\.monitor-safety-status \{ font-size: \.8125rem; \}/);
+  assert.match(css, /\.legend-chip,[\s\S]*\.local-peak-card-fields label,[\s\S]*\.monitor-safety-status \{ font-size: \.8125rem; \}/);
+});
+
 test("toningar är valfria, flexibla och har stora iPad-reglage", () => {
   assert.match(html, /id="fadeInToggle"/);
   assert.match(html, /id="fadeOutToggle"/);
@@ -161,6 +229,13 @@ test("toningar är valfria, flexibla och har stora iPad-reglage", () => {
   assert.match(css, /\.preset-row button\s*\{[^}]*min-height:\s*44px/s);
   assert.match(css, /\.nudge-group button\s*\{[^}]*min-height:\s*44px/s);
   assert.match(html, />−10 ms<|>\+10 ms</);
+  for (const id of ["fadeProfileModeNotice", "gainProfileModeNotice", "enableEditedProfileForFadesButton", "enableEditedProfileForGainButton"]) assert.match(html, new RegExp(`id="${id}"`));
+  assert.equal((html.match(/>Aktivera Redigerad WAV-master</g) || []).length, 2);
+  const exportProfile = app.match(/function setExportProfile\(profile, options = \{\}\)[\s\S]*?\n}\n\nfunction syncAuditionUi/)?.[0] || "";
+  assert.match(exportProfile, /fadeProfileModeNotice/);
+  assert.match(exportProfile, /gainProfileModeNotice/);
+  assert.match(app, /enableEditedProfileForFadesButton[\s\S]*setExportProfile\("edited-wav"\)/);
+  assert.match(app, /Ingen ljudändring har gjorts ännu/);
 });
 
 test("medhörningen schemalägger samma linjära fadefunktion med AudioParam", () => {
@@ -204,18 +279,21 @@ test("exporten använder endast synlig global gain och sparar serieflödet", () 
 });
 
 test("redigering ogiltigförklarar hela tidigare exportverifieringen", () => {
-  const invalidation = app.match(/function markEditChanged\([^)]*\)[\s\S]*?\n}/)?.[0] || "";
-  assert.match(invalidation, /state\.regionAnalysis = null/);
-  assert.match(invalidation, /state\.verifiedExport = null/);
-  assert.match(invalidation, /state\.lastExportReport = null/);
-  assert.match(invalidation, /state\.spectralDiagnostics = null/);
-  assert.match(invalidation, /operation: "analyze-region"/);
-  assert.match(invalidation, /operation: "spectral-diagnostics"/);
-  assert.match(invalidation, /state\.jobs\.region = null/);
-  assert.match(invalidation, /state\.jobs\.spectral = null/);
-  assert.match(invalidation, /state\.exportStatus === "complete"/);
-  assert.match(invalidation, /updateProjectedMetrics\(\)/);
-  assert.match(invalidation, /updateExportRecommendation\(\)/);
+  const sharedInvalidation = app.match(/function invalidatePreflightAndVerification\([\s\S]*?\n}\n\nfunction markEditChanged/)?.[0] || "";
+  const editInvalidation = app.match(/function markEditChanged\([^)]*\)[\s\S]*?\n}/)?.[0] || "";
+  assert.match(sharedInvalidation, /state\.regionAnalysis = null/);
+  assert.match(sharedInvalidation, /state\.verifiedExport = null/);
+  assert.match(sharedInvalidation, /state\.lastExportReport = null/);
+  assert.match(sharedInvalidation, /operation: "analyze-region"/);
+  assert.match(sharedInvalidation, /state\.jobs\.region = null/);
+  assert.match(sharedInvalidation, /\["running", "cancelling", "complete"\]\.includes\(state\.exportStatus\)/);
+  assert.match(sharedInvalidation, /state\.jobs\.export = null/);
+  assert.match(editInvalidation, /invalidatePreflightAndVerification\(\)/);
+  assert.match(editInvalidation, /state\.spectralDiagnostics = null/);
+  assert.match(editInvalidation, /operation: "spectral-diagnostics"/);
+  assert.match(editInvalidation, /state\.jobs\.spectral = null/);
+  assert.match(editInvalidation, /updateProjectedMetrics\(\)/);
+  assert.match(editInvalidation, /updateExportRecommendation\(\)/);
 
   const report = app.match(/function reportInput\(\)[\s\S]*?\n}/)?.[0] || "";
   assert.match(report, /state\.exportStatus === "complete" && Boolean\(state\.verifiedExport\)/);

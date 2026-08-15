@@ -4,6 +4,7 @@ import {
   buildLocalPeakRegion,
   localGainBreakpoints,
   localGainFactorAtFrame,
+  monitorSafetyDecision,
   normalizeLocalGainRegions,
 } from "../src/local-gain.js";
 
@@ -64,4 +65,34 @@ test("ogiltiga och dubbla regioner avvisas", () => {
     { id: "x", startFrame: 0, endFrame: 2, gainDb: -1 },
     { id: "x", startFrame: 2, endFrame: 4, gainDb: -1 },
   ], 10), /unika id/);
+});
+
+test("säker medhörning skapar exakt skyddsmarginal för höga floattoppar", () => {
+  const decision = monitorSafetyDecision({
+    analysis: { summary: { truePeakDbtp: 8.4 } },
+    trustedSource: true,
+  });
+  assert.equal(decision.ready, true);
+  assert.equal(decision.reason, "attenuated");
+  assert.ok(Math.abs(decision.safetyDb - -11.4) < 1e-12);
+  assert.ok(Math.abs(decision.projectedPeakDbtp - 8.4) < 1e-12);
+  assert.ok(Math.abs(decision.totalDb - -11.4) < 1e-12);
+});
+
+test("säker medhörning lämnar redan säkra toppar oförändrade", () => {
+  const decision = monitorSafetyDecision({
+    analysis: { summary: { truePeakEstimateDbtp: -6 } },
+    trustedSource: true,
+  });
+  assert.equal(decision.ready, true);
+  assert.equal(decision.reason, "safe");
+  assert.equal(decision.safetyDb, 0);
+  assert.equal(decision.totalDb, 0);
+});
+
+test("nulltopp och importerad analys låser uppspelningen", () => {
+  const missing = monitorSafetyDecision({ analysis: { summary: { truePeakDbtp: null, samplePeakDbfs: null } }, trustedSource: true });
+  const imported = monitorSafetyDecision({ analysis: { summary: { truePeakDbtp: -40 } }, trustedSource: false });
+  assert.deepEqual({ ready: missing.ready, reason: missing.reason, safetyDb: missing.safetyDb }, { ready: false, reason: "missing-peak", safetyDb: null });
+  assert.deepEqual({ ready: imported.ready, reason: imported.reason, safetyDb: imported.safetyDb }, { ready: false, reason: "untrusted-analysis", safetyDb: null });
 });

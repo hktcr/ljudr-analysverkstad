@@ -1,6 +1,6 @@
 import { inspectWav } from "./wav.js";
 import { RELEASE } from "./release-meta.js";
-import { MAX_LOCAL_GAIN_REGIONS, buildLocalPeakRegion, localGainBreakpoints, localGainFactorAtFrame, normalizeLocalGainRegions } from "./local-gain.js";
+import { MAX_LOCAL_GAIN_REGIONS, buildLocalPeakRegion, localGainBreakpoints, localGainFactorAtFrame, monitorSafetyDecision, normalizeLocalGainRegions } from "./local-gain.js";
 import {
   TMH_SERIES_PROFILE,
   buildEditorialContext,
@@ -21,6 +21,7 @@ const state = {
   fileInfo: null,
   analysis: null,
   analysisStatus: "idle",
+  analysisPlaybackSource: "none",
   exportStatus: "idle",
   lastExportReport: null,
   regionAnalysis: null,
@@ -157,6 +158,8 @@ let detailTimer = 0;
 let regionTimer = 0;
 let exchangePreviewSequence = 0;
 let playbackFrame = 0;
+let workspaceModuleInvoker = null;
+let workspaceModulePlaceholders = [];
 
 const ANALYSIS_PHASES = Object.freeze({
   header: {
@@ -208,6 +211,7 @@ const elements = {
   audioInput: $("#audioFileInput"),
   dropZone: $("#dropZone"),
   fileStrip: $("#fileStrip"),
+  workflowNav: $("#workflowNav"),
   fileName: $("#fileName"),
   fileTechnical: $("#fileTechnical"),
   changeFile: $("#changeFileButton"),
@@ -242,6 +246,11 @@ const elements = {
   addMarker: $("#addMarkerButton"),
   audio: $("#audioPlayer"),
   globalPlayer: $("#globalPlayer"),
+  sessionPlayButton: $("#sessionPlayButton"),
+  sessionTime: $("#sessionTime"),
+  sessionSafetyStatus: $("#sessionSafetyStatus"),
+  toggleTransport: $("#toggleTransportButton"),
+  closeTransport: $("#closeTransportButton"),
   playButton: $("#playButton"),
   currentTime: $("#currentTime"),
   transportDuration: $("#transportDuration"),
@@ -329,6 +338,15 @@ const elements = {
   openFullAnalysis: $("#openFullAnalysisButton"),
   fullAnalysisDialog: $("#fullAnalysisDialog"),
   fullAnalysisContent: $("#fullAnalysisContent"),
+  workspaceModuleDialog: $("#workspaceModuleDialog"),
+  workspaceModuleTitle: $("#workspaceModuleTitle"),
+  workspaceModuleDescription: $("#workspaceModuleDescription"),
+  workspaceModuleContent: $("#workspaceModuleContent"),
+  workflowActionDock: $("#workflowActionDock"),
+  workflowActionKicker: $("#workflowActionKicker"),
+  workflowActionHeadline: $("#workflowActionHeadline"),
+  workflowActionDetail: $("#workflowActionDetail"),
+  workflowPrimaryAction: $("#workflowPrimaryAction"),
   reviewFindings: $("#reviewFindingsButton"),
   openRecommendations: $("#openRecommendationsButton"),
   preserveFromAnalysis: $("#preserveFromAnalysisButton"),
@@ -773,18 +791,35 @@ function isCurrentJob(operation, data = {}) {
   return !data.jobId || state.jobs[operation] === data.jobId;
 }
 
-function markEditChanged(reason = "edit") {
+function invalidatePreflightAndVerification({
+  regionMessage = "Behöver beräknas på nytt",
+  verifiedMessage = "Ogiltig efter ändring",
+} = {}) {
   const activeRegionJob = state.jobs.region;
-  const activeSpectralJob = state.jobs.spectral;
   if (activeRegionJob) analysisWorker?.postMessage({ type: "cancel", jobId: activeRegionJob, operation: "analyze-region" });
-  if (activeSpectralJob) analysisWorker?.postMessage({ type: "cancel", jobId: activeSpectralJob, operation: "spectral-diagnostics" });
+  const activeExportJob = state.jobs.export;
+  if (activeExportJob) exportWorker?.postMessage({ type: "cancel", jobId: activeExportJob, operation: "export" });
   state.jobs.region = null;
-  state.jobs.spectral = null;
-  state.dirty = true;
+  state.jobs.export = null;
   state.regionAnalysis = null;
   state.regionStatus = "stale";
   state.verifiedExport = null;
   state.lastExportReport = null;
+  if (["running", "cancelling", "complete"].includes(state.exportStatus)) state.exportStatus = "idle";
+  if (elements.exportAudio) {
+    elements.exportAudio.disabled = true;
+    elements.exportAudio.textContent = "Exportera ljudfil";
+  }
+  if (elements.regionMeasureStatus) elements.regionMeasureStatus.textContent = regionMessage;
+  if (elements.verifiedMeasureStatus) elements.verifiedMeasureStatus.textContent = verifiedMessage;
+}
+
+function markEditChanged(reason = "edit") {
+  const activeSpectralJob = state.jobs.spectral;
+  if (activeSpectralJob) analysisWorker?.postMessage({ type: "cancel", jobId: activeSpectralJob, operation: "spectral-diagnostics" });
+  invalidatePreflightAndVerification();
+  state.jobs.spectral = null;
+  state.dirty = true;
   state.spectralDiagnostics = null;
   state.markers = state.markers.filter(marker => marker.origin !== "spectral-screening");
   state.analysisExchange.preview = null;
@@ -800,10 +835,9 @@ function markEditChanged(reason = "edit") {
     renderGuidanceSuggestions();
   }
   syncAnalysisExchangeAvailability();
-  if (state.exportStatus === "complete") state.exportStatus = "idle";
-  if (elements.regionMeasureStatus) elements.regionMeasureStatus.textContent = "Behöver beräknas på nytt";
-  if (elements.verifiedMeasureStatus) elements.verifiedMeasureStatus.textContent = "Ogiltig efter ändring";
   renderSpectralDiagnostics();
+  renderAnalysisModuleBoard();
+  renderFullAnalysis();
   renderMarkers();
   renderDeepMeasurements();
   updateProjectedMetrics();
@@ -854,12 +888,14 @@ function renderWorkflowStatus() {
   };
   set("#modeStatusOpen", state.file ? "Klar" : "Välj fil", state.file ? "pass" : "waiting");
   const sourceStatus = sourceAnalysisStatus();
+  const playbackSafety = monitorSafetyForPreview();
+  const effectiveSourceState = sourceStatus.state === "stop" ? "stop" : state.analysis && !playbackSafety.ready ? "review" : sourceStatus.state;
   set("#modeStatusAnalyze",
-    state.analysisStatus === "running" ? "Analys pågår" : state.analysis ? `Analys klar, ${sourceStatus.state === "pass" ? "inga stoppfynd" : sourceStatus.state === "stop" ? "stoppfynd finns" : "granskning krävs"}` : "Inte analyserad",
-    state.analysisStatus === "running" ? "running" : state.analysis ? sourceStatus.state : "waiting");
+    state.analysisStatus === "running" ? "Analys pågår" : state.analysis ? !playbackSafety.ready ? "Ny källanalys krävs för medhörning" : `Analys klar, ${sourceStatus.state === "pass" ? "inga stoppfynd" : sourceStatus.state === "stop" ? "stoppfynd finns" : "granskning krävs"}` : "Inte analyserad",
+    state.analysisStatus === "running" ? "running" : state.analysis ? effectiveSourceState : "waiting");
   set("#modeStatusTrim",
-    !state.analysis ? "Väntar" : "Redigera urval",
-    !state.analysis ? "waiting" : "review");
+    !state.analysis || !playbackSafety.ready ? "Väntar på säker källanalys" : "Redigera urval",
+    !state.analysis || !playbackSafety.ready ? "waiting" : "review");
   const preflightStatus = preflightAnalysisStatus();
   set("#modeStatusPreflight",
     preflightStatus.label,
@@ -867,18 +903,119 @@ function renderWorkflowStatus() {
   set("#modeStatusExport",
     state.exportStatus === "running" ? "Pågår" : state.verifiedExport ? "Verifierad" : state.analysis ? "Inte exporterad" : "Väntar",
     state.exportStatus === "running" ? "running" : state.verifiedExport ? "pass" : state.analysis ? "review" : "waiting");
+  document.body.classList.toggle("has-session", Boolean(state.file));
+  document.body.dataset.mode = state.mode;
+  if (elements.workflowNav) elements.workflowNav.hidden = !state.file;
+  $$('.mode-tab[data-mode="trim"], .mode-tab[data-mode="preflight"], .mode-tab[data-mode="export"]').forEach((tab) => {
+    tab.disabled = !state.file || !playbackSafety.ready;
+  });
+  syncPlaybackAvailability();
+  const analysisPanel = $('[data-panel="analyze"]');
+  analysisPanel?.classList.toggle("has-analysis", Boolean(state.analysis));
+  renderCompactModuleSummaries();
+  renderWorkflowActionDock();
+}
+
+function workflowStepModel() {
+  const sourceStatus = sourceAnalysisStatus();
+  const preflight = preflightAnalysisStatus();
+  const playbackSafety = monitorSafetyForPreview();
+  if (!state.file || state.mode === "open") return { hidden: true, state: "waiting", action: "none", kicker: "Källfil", headline: "Välj en WAV-fil", detail: "Arbetsflödet börjar när en lokal källfil har öppnats.", label: "Väntar", disabled: true };
+  if (state.mode === "analyze") {
+    if (state.analysisStatus === "running") return { state: "running", action: "cancel-analysis", kicker: "Steg 1 av 4 · Källanalys", headline: "Analysen pågår", detail: "Filen mäts blockvis på denna enhet. Du kan avbryta mellan två läsblock.", label: "Avbryt analys", disabled: false };
+    if (!state.analysis) return { state: "review", action: "analyze", kicker: "Steg 1 av 4 · Källanalys", headline: "Förstå källfilen först", detail: "Mät signalintegritet, toppar, loudness, dynamik och stereo innan du redigerar.", label: "Starta källanalys", disabled: false };
+    if (!playbackSafety.ready) return { state: "review", action: "analyze", kicker: "Steg 1 av 4 · Källanalys", headline: "En ny säker källanalys krävs", detail: playbackSafety.reason === "untrusted-analysis" ? "Projektets sparade analys visas som underlag men används inte för medhörningssäkerhet. Kör analysen på denna enhet." : "Ingen ändlig toppnivå kunde verifieras. Kör om analysen innan uppspelning.", label: "Kör ny källanalys", disabled: false };
+    if (sourceStatus.state === "stop") return { state: "stop", action: "open-integrity", kicker: "Steg 1 av 4 · Källanalys", headline: "Blockerande fynd i källan", detail: sourceStatus.detail, label: "Öppna signalintegritet", disabled: false };
+    return { state: sourceStatus.state, action: "to-trim", kicker: "Steg 1 av 4 · Källanalys", headline: sourceStatus.state === "pass" ? "Källanalysen är klar" : "Analysen behöver mänsklig granskning", detail: "Alla mätvärden och begränsningar finns i modulerna. Fortsätt när du är redo att lyssna och redigera.", label: "Fortsätt till granska och redigera", disabled: false };
+  }
+  if (state.mode === "trim") {
+    if (!state.analysis || !playbackSafety.ready) return { state: "waiting", action: "to-analyze", kicker: "Steg 2 av 4 · Granska och redigera", headline: "Säker källanalys saknas", detail: "Kör en ny källanalys innan du lyssnar eller fattar nivå- och toppbeslut.", label: "Gå till källanalys", disabled: false };
+    if (!state.trimEditor.applied) return { state: "review", action: state.trimEditor.unlocked ? "lock-trim" : "apply-trim", kicker: "Steg 2 av 4 · Granska och redigera", headline: state.trimEditor.unlocked ? "Trimfönstret är upplåst" : "Ett nytt A/B väntar", detail: state.trimEditor.unlocked ? "Lås fönstret efter placering och provlyssning." : "Tillämpa urvalet eller återgå innan du lämnar steget.", label: state.trimEditor.unlocked ? "Lås trimfönstret" : "Tillämpa A/B", disabled: false };
+    const freshPreflight = Boolean(state.regionAnalysis && state.regionStatus === "complete");
+    const editOutcome = freshPreflight ? preflight.state : "review";
+    const editHeadline = !freshPreflight
+      ? "Kontrollera det aktuella exporturvalet"
+      : preflight.state === "pass"
+        ? "Redigeringen är omräknad"
+        : preflight.state === "stop"
+          ? "Exporturvalet kräver åtgärd"
+          : "Exporturvalet behöver granskas";
+    return { state: editOutcome, action: "to-preflight", kicker: "Steg 2 av 4 · Granska och redigera", headline: editHeadline, detail: "Trimning, toningar, global gain och lokala kurvor visas i separata moduler.", label: freshPreflight ? "Öppna exporturvalsanalysen" : "Analysera exporturval", disabled: false };
+  }
+  if (state.mode === "preflight") {
+    if (state.regionStatus === "running") return { state: "running", action: "cancel-region", kicker: "Steg 3 av 4 · Förkontroll", headline: "Exporturvalet analyseras", detail: "Hela urvalet räknas om efter alla synliga ändringar.", label: "Avbryt förkontroll", disabled: false };
+    const hasProcessed = Boolean(state.regionAnalysis?.processed?.summary || state.regionAnalysis?.summary);
+    if (!hasProcessed) return { state: "review", action: "run-preflight", kicker: "Steg 3 av 4 · Förkontroll", headline: "En färsk förkontroll krävs", detail: preflight.detail, label: "Analysera aktuellt exporturval", disabled: !state.analysis };
+    if (preflight.state === "pass") return { state: "pass", action: "to-export", kicker: "Steg 3 av 4 · Förkontroll", headline: "Förkontrollen är klar", detail: preflight.detail, label: "Fortsätt till export", disabled: false };
+    if (preflight.state !== "stop") return { state: preflight.state, action: "to-export", kicker: "Steg 3 av 4 · Förkontroll", headline: preflight.label, detail: preflight.detail, label: "Fortsätt till exportöversikt", disabled: false };
+    return { state: "stop", action: "to-trim", kicker: "Steg 3 av 4 · Förkontroll", headline: preflight.label, detail: preflight.detail, label: "Tillbaka till redigering", disabled: false };
+  }
+  if (state.mode === "export") {
+    if (!state.regionAnalysis || state.regionStatus !== "complete" || preflight.state === "stop") return { state: "stop", action: "to-preflight", kicker: "Steg 4 av 4 · Export", headline: "Exporten är inte redo", detail: "Kör en färsk förkontroll av exakt aktuellt exporturval.", label: "Tillbaka till förkontroll", disabled: false };
+    if (state.exportStatus === "running") return { state: "running", action: "cancel-export", kicker: "Steg 4 av 4 · Export", headline: "WAV-filen skrivs och verifieras", detail: "Avbryt endast om du vill kasta den partiella arbetsfilen.", label: "Avbryt export", disabled: false };
+    if (state.verifiedExport) return { state: "pass", action: "export-report", kicker: "Steg 4 av 4 · Verifierad WAV", headline: "Den skrivna filen är verifierad", detail: "Spara rapporten och genomför den redaktionella publiceringskontrollen.", label: "Skapa verifieringsrapport", disabled: false };
+    return { state: preflight.state, action: "export", kicker: "Steg 4 av 4 · Export", headline: "Redo att skriva och återöppna WAV", detail: "Samma topptak används i förkontroll, export och verifiering.", label: "Exportera och verifiera WAV", disabled: false };
+  }
+  return { hidden: true, state: "waiting", action: "none", kicker: "Arbetsflöde", headline: "Väntar", detail: "", label: "Väntar", disabled: true };
+}
+
+function renderWorkflowActionDock() {
+  if (!elements.workflowActionDock || !elements.workflowPrimaryAction) return;
+  const model = workflowStepModel();
+  elements.workflowActionDock.hidden = Boolean(model.hidden);
+  elements.workflowActionDock.dataset.state = model.state;
+  elements.workflowActionKicker.textContent = model.kicker;
+  elements.workflowActionHeadline.textContent = model.headline;
+  elements.workflowActionDetail.textContent = model.detail;
+  elements.workflowPrimaryAction.textContent = model.label;
+  elements.workflowPrimaryAction.dataset.action = model.action;
+  elements.workflowPrimaryAction.disabled = Boolean(model.disabled);
+}
+
+function renderCompactModuleSummaries() {
+  const set = (selector, value) => { const node = $(selector); if (node) node.textContent = value; };
+  const duration = Math.max(0, state.trim.endSeconds - state.trim.startSeconds);
+  const preflight = preflightAnalysisStatus();
+  const unreviewed = state.markers.filter(marker => marker.reviewStatus === "unreviewed").length;
+  const rumble = state.jobs.spectral ? "Screening pågår" : state.spectralDiagnostics ? `${Number(state.spectralDiagnostics.windowCount || 0)} fönster · ${Number(state.spectralDiagnostics.reviewRegions?.length || 0)} lyssningspunkter` : "Screening inte körd";
+  set("#analysisContextSummary", `${assessmentProfiles[state.assessment.recordingType]?.label || "Annan inspelning"} · ${state.assessment.purpose === "distribution" ? "publicering" : "original eller arkiv"}`);
+  set("#analysisRumbleSummary", rumble);
+  set("#analysisReviewSummary", !state.analysis ? "Väntar på analys" : unreviewed ? `${unreviewed} markörer återstår` : "Alla registrerade markörer bedömda");
+  set("#editRangeSummary", `${formatTime(state.trim.startSeconds)} till ${formatTime(state.trim.endSeconds)}`);
+  set("#editDurationSummary", formatTime(duration));
+  set("#editPreflightSummary", preflight.label);
+  set("#editOverviewStatus", !state.trimEditor.applied ? "Ett nytt trimförslag väntar på bekräftelse. Övriga signaländringar är låsta." : state.regionAnalysis ? "Det aktuella exporturvalet är omräknat. En ny ändring gör resultatet inaktuellt." : "Originalet är orört. Varje ljudändring visas uttryckligen och måste förkontrolleras.");
+  set("#editTrimModuleSummary", `${state.trimEditor.unlocked ? "Upplåst" : state.trimEditor.applied ? "Låst" : "Väntar på tillämpning"} · ${formatTime(duration)}`);
+  set("#editFadeModuleSummary", state.trim.fadeInSeconds || state.trim.fadeOutSeconds ? `In ${formatDecimal(state.trim.fadeInSeconds, 2)} s · Ut ${formatDecimal(state.trim.fadeOutSeconds, 2)} s` : "Av");
+  set("#editGainModuleSummary", `${state.trim.gainDb >= 0 ? "+" : ""}${formatDecimal(state.trim.gainDb, 1)} dB · hela urvalet`);
+  set("#editPeakModuleSummary", state.localPeaks.regions.length ? `${state.localPeaks.regions.length} stereolänkade kurvor${state.localPeaks.bypass ? " · förbigångna" : ""}` : "Inga lokala kurvor");
+  const monitorLabel = { stereo: "stereo", left: "vänster", right: "höger", mono: "mono" }[state.monitoring.channelMode] || "stereo";
+  set("#editMonitorModuleSummary", `${state.monitoring.previewMode === "export" ? "Exportförhandsvisning" : "Källkontext"} · ${monitorLabel}`);
+  set("#exportModuleSelectionSummary", `${formatTime(state.trim.startSeconds)} till ${formatTime(state.trim.endSeconds)}`);
+  const metadataCount = Object.values(state.metadata).filter(value => String(value || "").trim()).length;
+  set("#exportModuleMetadataSummary", metadataCount ? `${metadataCount} fält med innehåll` : "Frivilliga fält");
+  set("#exportModulePublicationSummary", elements.publicationStatus?.textContent || "Granskning krävs");
+  set("#exportModuleStorageSummary", state.storedExports.length ? `${state.storedExports.length} lokala arbetsfiler` : "Inga lokala arbetsfiler");
+  set("#exportModuleCapabilitySummary", elements.capabilityStatus?.textContent || "Kontrollerar");
 }
 
 function setMode(mode, options = {}) {
   if (!["open", "analyze", "trim", "preflight", "export"].includes(mode)) return;
-  if (!state.trimEditor.applied && mode !== "trim") {
-    showToast("Lås trimfönstret och tillämpa det, eller återgå till det aktiva urvalet, innan du lämnar trimsteget.", "error", 7000);
-    return;
-  }
   if (mode !== "open" && !state.file) {
     showToast("Välj först en ljudfil.");
     return;
   }
+  if (["trim", "preflight", "export"].includes(mode) && !monitorSafetyForPreview().ready) {
+    showToast("Kör en ny källanalys på denna enhet innan du lyssnar, redigerar eller exporterar.", "error", 8000);
+    setMode("analyze", options);
+    return;
+  }
+  if (!state.trimEditor.applied && mode !== "trim" && mode !== "analyze") {
+    showToast("Lås trimfönstret och tillämpa det, eller återgå till det aktiva urvalet, innan du lämnar trimsteget.", "error", 7000);
+    return;
+  }
+  if (elements.workspaceModuleDialog?.open) closeWorkspaceModule();
+  if (elements.globalPlayer?.classList.contains("is-expanded")) setTransportExpanded(false);
   state.mode = mode;
   $$("[data-panel]").forEach((panel) => panel.classList.toggle("is-visible", panel.dataset.panel === mode));
   const order = ["open", "analyze", "trim", "preflight", "export"];
@@ -895,8 +1032,88 @@ function setMode(mode, options = {}) {
   if (mode === "export") updateExportSummary();
   if (!options.silent) {
     window.scrollTo({ top: 0, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+    requestAnimationFrame(() => {
+      const heading = $(`[data-panel="${mode}"] h1`);
+      if (heading) {
+        heading.tabIndex = -1;
+        heading.focus({ preventScroll: true });
+      }
+    });
   }
   emitState("mode");
+}
+
+function runWorkflowPrimaryAction() {
+  const action = elements.workflowPrimaryAction?.dataset.action;
+  if (!action || action === "none") return;
+  if (action === "analyze") elements.analyzeButton.click();
+  if (action === "cancel-analysis") elements.cancelAnalysis.click();
+  if (action === "open-integrity") openFullAnalysisAt("integrity");
+  if (action === "to-analyze") setMode("analyze");
+  if (action === "to-trim") setMode("trim");
+  if (action === "lock-trim") elements.toggleTrimEditor.click();
+  if (action === "apply-trim") elements.applyTrimSelection.click();
+  if (action === "to-preflight") setMode("preflight");
+  if (action === "run-preflight") $("#runPreflightButton")?.click();
+  if (action === "cancel-region") elements.cancelRegion.click();
+  if (action === "to-export") setMode("export");
+  if (action === "export") elements.exportAudio.click();
+  if (action === "cancel-export") elements.cancelExport.click();
+  if (action === "export-report") elements.exportReport.click();
+}
+
+function restoreWorkspaceModule() {
+  for (const entry of workspaceModulePlaceholders) {
+    entry.node.classList.remove("is-module-open");
+    entry.placeholder.replaceWith(entry.node);
+  }
+  workspaceModulePlaceholders = [];
+  elements.workspaceModuleContent?.replaceChildren();
+  scheduleCanvasRender();
+  const invoker = workspaceModuleInvoker;
+  workspaceModuleInvoker = null;
+  invoker?.focus?.({ preventScroll: true });
+}
+
+function closeWorkspaceModule() {
+  if (!elements.workspaceModuleDialog) return;
+  if (elements.workspaceModuleDialog.open && typeof elements.workspaceModuleDialog.close === "function") elements.workspaceModuleDialog.close();
+  else restoreWorkspaceModule();
+}
+
+function openWorkspaceModule(invoker) {
+  if (!elements.workspaceModuleDialog || !elements.workspaceModuleContent || !invoker) return;
+  const targetIds = String(invoker.dataset.workspaceTarget || "").split(",").map(value => value.trim()).filter(Boolean);
+  const targets = targetIds.map(id => document.getElementById(id)).filter(Boolean);
+  if (!targets.length) return;
+  if (elements.workspaceModuleDialog.open) closeWorkspaceModule();
+  workspaceModuleInvoker = invoker;
+  elements.workspaceModuleTitle.textContent = invoker.dataset.workspaceTitle || "Arbetsmodul";
+  elements.workspaceModuleDescription.textContent = invoker.dataset.workspaceDescription || "";
+  workspaceModulePlaceholders = targets.map(node => {
+    const placeholder = document.createComment(`restore-${node.id || "module"}`);
+    node.before(placeholder);
+    node.classList.add("is-module-open");
+    if (node instanceof HTMLDetailsElement) node.open = true;
+    elements.workspaceModuleContent.append(node);
+    return { node, placeholder };
+  });
+  if (typeof elements.workspaceModuleDialog.showModal === "function") elements.workspaceModuleDialog.showModal();
+  else elements.workspaceModuleDialog.setAttribute("open", "");
+  requestAnimationFrame(() => {
+    elements.workspaceModuleTitle.tabIndex = -1;
+    elements.workspaceModuleTitle.focus({ preventScroll: true });
+    scheduleCanvasRender();
+  });
+}
+
+function setTransportExpanded(expanded) {
+  if (!elements.globalPlayer || !elements.toggleTransport) return;
+  elements.globalPlayer.classList.toggle("is-expanded", expanded);
+  elements.toggleTransport.setAttribute("aria-expanded", String(expanded));
+  document.body.classList.toggle("transport-open", expanded);
+  if (expanded) requestAnimationFrame(() => elements.playButton.focus({ preventScroll: true }));
+  else elements.toggleTransport.focus({ preventScroll: true });
 }
 
 function enableWorkflow(enabled) {
@@ -958,6 +1175,7 @@ async function openAudioFile(file) {
   state.fileUrl = URL.createObjectURL(file);
   state.fileInfo = null;
   state.analysis = null;
+  state.analysisPlaybackSource = "none";
   state.regionAnalysis = null;
   state.regionStatus = "idle";
   state.verifiedExport = null;
@@ -1026,10 +1244,10 @@ async function openAudioFile(file) {
   state.view.startSeconds = 0;
   state.view.endSeconds = duration;
   elements.globalPlayer.hidden = false;
-  elements.playButton.disabled = false;
-  elements.transportSeek.disabled = false;
+  elements.playButton.disabled = true;
+  elements.transportSeek.disabled = true;
   elements.transportSeek.max = String(duration);
-  setTransportStatus("Ljudfilen är redo för provlyssning");
+  setTransportStatus("Analysera källfilen före säker medhörning", "warning");
   elements.fileTechnical.textContent = technicalDescription();
   syncTrimUi();
   renderMarkers();
@@ -1149,6 +1367,7 @@ function finishAnalysisJob(message) {
   elements.cancelAnalysis.hidden = true;
   elements.cancelAnalysis.disabled = false;
   updateAnalysisProgress(0, message, false, "cancelled");
+  emitState("analysis-cancelled");
 }
 
 function ensureAnalysisWorker() {
@@ -1210,6 +1429,7 @@ function applyAnalysisResult(result) {
   }
   state.analysis = result;
   state.analysisStatus = "complete";
+  state.analysisPlaybackSource = "current-session";
   elements.cancelAnalysis.hidden = true;
   elements.cancelAnalysis.disabled = false;
   if (elements.sourceMeasureStatus) elements.sourceMeasureStatus.textContent = "Objektiv källanalys klar";
@@ -1229,6 +1449,14 @@ function applyAnalysisResult(result) {
   state.view.endSeconds = duration;
   elements.fileTechnical.textContent = technicalDescription();
   elements.analysisCanvasEmpty.hidden = true;
+  const playbackSafety = monitorSafetyForPreview();
+  renderMonitorSafetyStatus();
+  syncPlaybackAvailability();
+  setTransportStatus(playbackSafety.ready
+    ? playbackSafety.safetyDb < -0.01
+      ? `Säker medhörning är redo med ${formatDecimal(Math.abs(playbackSafety.safetyDb), 1)} dB skydd i lyssningen`
+      : "Säker medhörning är redo utan extra sänkning"
+    : "Toppnivån kunde inte verifieras. Uppspelningen är låst.", playbackSafety.ready ? "ready" : "warning");
   elements.analyzeButton.disabled = false;
   elements.analyzeButton.textContent = "Analysera igen";
   updateAnalysisProgress(1, "Analysen är klar", false, "complete");
@@ -1263,7 +1491,9 @@ function applyAnalysisResult(result) {
   renderPublicationCard();
   scheduleCanvasRender();
   updateCapabilities(true, state.capabilities.export);
-  requestRegionAnalysis();
+  state.regionAnalysis = null;
+  state.regionStatus = "stale";
+  renderPreflightPanel();
   requestWaveformDetail();
   state.jobs.analysis = null;
   state.dirty = true;
@@ -1326,6 +1556,8 @@ function requestSpectralDiagnostics() {
   state.jobs.spectral = jobId;
   elements.runSpectralDiagnostics.disabled = true;
   elements.spectralDiagnosticsResult.innerHTML = "<div><dt>Status</dt><dd>Förbereder lokal sampling</dd></div>";
+  renderAnalysisModuleBoard();
+  emitState("spectral-diagnostics-started");
   analysisWorker.postMessage({ type: "spectral-diagnostics", jobId, file: state.file, options: { ...regionOptions(), windowCount: 48 } });
 }
 
@@ -1351,6 +1583,8 @@ function applySpectralDiagnosticsResult(result) {
   });
   elements.runSpectralDiagnostics.disabled = false;
   renderSpectralDiagnostics();
+  renderAnalysisModuleBoard();
+  renderFullAnalysis();
   renderMarkers();
   emitState("spectral-diagnostics-complete");
 }
@@ -1540,7 +1774,7 @@ function renderAnalysisModuleBoard() {
   const fullButton = $("#openFullAnalysisBoardButton");
   if (fullButton) fullButton.disabled = !state.analysis;
   if (!state.analysis) {
-    ["integrity", "peaks", "loudness", "dynamics", "stereo", "review"].forEach(name => setAnalysisModule(name, "waiting", "Analysen har inte körts ännu"));
+    ["integrity", "peaks", "loudness", "dynamics", "stereo", "rumble", "review"].forEach(name => setAnalysisModule(name, "waiting", "Analysen har inte körts ännu"));
     return;
   }
   const summary = state.analysis.summary || {};
@@ -1571,6 +1805,13 @@ function renderAnalysisModuleBoard() {
 
   if (riskRegions > 0) setAnalysisModule("stereo", "review", `${riskRegions} regioner behöver monolyssnas`);
   else setAnalysisModule("stereo", "pass", `Ingen varaktig monorisk hittades. Kanalbalans ${analysisMetric(summary.channelBalanceDb, "dB", 1)}`);
+
+  if (state.jobs.spectral) setAnalysisModule("rumble", "info", "Samplad rumble- och 50 Hz-screening pågår");
+  else if (!state.spectralDiagnostics) setAnalysisModule("rumble", "info", "Screeningen är inte körd. Ett uteblivet fynd kan aldrig frikänna hela filen");
+  else {
+    const rumbleReviews = Number(state.spectralDiagnostics.reviewRegions?.length || 0);
+    setAnalysisModule("rumble", rumbleReviews ? "review" : "info", rumbleReviews ? `${rumbleReviews} samplade områden behöver lyssnas på` : "Inga fynd i de samplade fönstren. Områden mellan fönstren är inte testade");
+  }
 
   if (unreviewed > 0) setAnalysisModule("review", "review", `${unreviewed} markörer återstår att bedöma och lyssna på`);
   else setAnalysisModule("review", "pass", "Pass för markörkontrollen. Alla registrerade markörer är bedömda");
@@ -1641,6 +1882,9 @@ function renderFullAnalysis() {
   const nonFinite = finite(summary.nonFiniteSamples) ?? 0;
   const isFloat = /float/i.test(`${format.encoding || ""} ${state.fileInfo?.encoding || ""}`);
   const possibleFlatTop = observationIds.has("flat-top");
+  const spectral = state.spectralDiagnostics;
+  const spectralCoverage = spectral && durationSeconds() > 0 ? (finite(spectral.sampledSeconds) ?? 0) / durationSeconds() * 100 : null;
+  const spectralReviews = Number(spectral?.reviewRegions?.length || 0);
   const target = clamp(finite(elements.localPeakCeiling?.value) ?? state.series.ceilingDbtp ?? -2, -60, 0);
   const reduction = truePeak === null ? null : Math.min(0, target - truePeak);
   const loudnessAssessment = assessLoudnessContext(integrated);
@@ -1655,7 +1899,7 @@ function renderFullAnalysis() {
     ? `För ${target} dBTP behövs cirka ${formatDecimal(Math.abs(reduction), 2)} dB sänkning om hela urvalet ändras. Använd hellre lokala stereolänkade gainkurvor när det bara gäller enstaka händelser, och beräkna sedan hela exporturvalet.`
     : "Det finns redan minst 2 dB orienterande toppmarginal. Bevara nivån om lyssningen inte visar ett annat problem.";
   elements.fullAnalysisContent.innerHTML = `
-    <nav class="full-analysis-nav" aria-label="Avsnitt i analysen"><button type="button" data-analysis-section="overview">Helhet</button><button type="button" data-analysis-section="peaks">Toppar</button><button type="button" data-analysis-section="loudness">Ljudstyrka</button><button type="button" data-analysis-section="dynamics">Dynamik</button><button type="button" data-analysis-section="stereo">Stereo och mono</button><button type="button" data-analysis-section="integrity">Signalintegritet</button><button type="button" data-analysis-section="review">Granskning</button></nav>
+    <nav class="full-analysis-nav" aria-label="Avsnitt i analysen"><button type="button" data-analysis-section="overview">Helhet</button><button type="button" data-analysis-section="peaks">Toppar</button><button type="button" data-analysis-section="loudness">Ljudstyrka</button><button type="button" data-analysis-section="dynamics">Dynamik</button><button type="button" data-analysis-section="stereo">Stereo och mono</button><button type="button" data-analysis-section="integrity">Signalintegritet</button><button type="button" data-analysis-section="rumble">Rumble</button><button type="button" data-analysis-section="review">Granskning</button></nav>
     <section class="full-analysis-lead" id="analysis-section-overview"><span class="analysis-verdict" data-state="${integrity.state}">${MODULE_STATUS[integrity.state]?.icon || "i"} ${escapeHtml(integrity.label)}</span><h3 tabindex="-1">Helhetsbedömning av källfilen</h3><p>${escapeHtml(loudnessState)}. True Peak är ${analysisMetric(truePeak, "dBTP", 2)} och källan ${isFloat ? "är float" : "är heltals-PCM"}. ${overrange > 0 ? `${Number(overrange).toLocaleString("sv-SE")} samplingar ligger över 0 dBFS men är bevarade i floatfilen.` : "Ingen float-overrange har uppmätts."}</p></section>
     <section id="analysis-section-peaks"><h3 tabindex="-1">Olika typer av toppar och klippning</h3><p class="section-intro">Liknande siffror kan beskriva helt olika fenomen. Därför redovisas de separat.</p><div class="peak-type-table" role="table">
       <article><strong>Sample Peak</strong><span>${analysisMetric(samplePeak, "dBFS", 2)}</span><p>Högsta lagrade sampling. Den visar inte vad som kan uppstå mellan samplingarna och bevisar inte ensam klippning.</p></article>
@@ -1669,6 +1913,7 @@ function renderFullAnalysis() {
     <section id="analysis-section-dynamics"><h3 tabindex="-1">Dynamik</h3><dl class="analysis-facts"><div><dt>Loudness Range</dt><dd>${analysisMetric(lra, "LU", 1)}</dd></div><div><dt>PLR</dt><dd>${analysisMetric(plr, "LU", 1)}</dd></div><div><dt>RMS</dt><dd>${analysisMetric(summary.rmsDbfs, "dBFS", 1)}</dd></div><div><dt>Crest factor</dt><dd>${analysisMetric(summary.crestFactorDb, "dB", 1)}</dd></div></dl><p>Värdena beskriver nivåspridning och transientmarginal. De har ingen universell godkänd eller underkänd nivå och avgör inte ensamma om dynamiken känns naturlig.</p></section>
     <section id="analysis-section-stereo"><h3 tabindex="-1">Stereo och mono</h3><dl class="analysis-facts"><div><dt>Stereokorrelation</dt><dd>${analysisMetric(summary.stereoCorrelation, "", 2)}</dd></div><div><dt>Kanalbalans</dt><dd>${analysisMetric(summary.channelBalanceDb, "dB", 1)}</dd></div><div><dt>Mono energiskillnad</dt><dd>${analysisMetric(mono.energyDeltaDb, "dB", 1)}</dd></div><div><dt>Negativ korrelation</dt><dd>${analysisMetric(mono.negativeCorrelationPercent, "%", 1)}</dd></div></dl><p>Negativ korrelation i korta regioner är en granskningssignal, inte automatiskt ett fel. Provlyssna i mono.</p></section>
     <section id="analysis-section-integrity"><h3 tabindex="-1">Signalintegritet</h3><dl class="analysis-facts"><div><dt>Icke ändliga värden</dt><dd>${Number(nonFinite).toLocaleString("sv-SE")}</dd></div><div><dt>Platåindikationer</dt><dd>${possibleFlatTop ? "Minst en heuristisk indikation" : "Ingen hittad av aktuellt test"}</dd></div><div><dt>Float-overrange</dt><dd>${Number(overrange).toLocaleString("sv-SE")}</dd></div><div><dt>Testets begränsning</dt><dd>Analog överstyrning kan inte uteslutas</dd></div></dl></section>
+    <section id="analysis-section-rumble"><h3 tabindex="-1">Rumble, lågfrekvens och 50 Hz</h3>${spectral ? `<dl class="analysis-facts"><div><dt>Faktisk sampling</dt><dd>${Number(spectral.windowCount || 0)} fönster · ${analysisMetric(spectral.sampledSeconds, "s", 1)}</dd></div><div><dt>Täckning av filen</dt><dd>${spectralCoverage === null ? "saknas" : `${formatDecimal(spectralCoverage, 1)} %`}</dd></div><div><dt>Lyssningspunkter</dt><dd>${spectralReviews}</dd></div><div><dt>50 Hz, högsta relativa nivå</dt><dd>${analysisMetric(spectral.mainsHum50RelativeDbMaximum, "dB", 1)}</dd></div></dl><p>${escapeHtml(spectral.interpretation || "Samplad screening för mänsklig granskning.")} Ett uteblivet fynd gäller endast de samplade fönstren. Vind, hav, trafik och andra naturliga lågfrekventa ljud är inte automatiskt störningar.</p>` : `<p>Screeningen är inte körd. Den samplar ett begränsat antal fönster och identifierar inte ljudkällan. Ett uteblivet fynd kan därför aldrig frikänna hela filen.</p>`}<div class="full-analysis-actions"><button class="button button-secondary" type="button" data-full-action="rumble-workspace">Öppna mätvärden och rumble</button></div></section>
     <section><h3>Kanaler</h3><div class="analysis-table-wrap"><table><thead><tr><th>Kanal</th><th>Sample Peak</th><th>True Peak</th><th>RMS</th><th>Overrange</th></tr></thead><tbody>${channelRows}</tbody></table></div></section>
     <section id="analysis-section-review"><h3 tabindex="-1">Viktiga tidsområden och mänsklig granskning</h3><h4>Tekniska fynd</h4><ol class="full-analysis-regions">${markerRows(technicalMarkers, "Inga tekniska markörer finns att visa.")}</ol><h4>Redaktionella och integritetsrelaterade fynd</h4><ol class="full-analysis-regions">${markerRows(editorialMarkers, "Inga egna redaktionella eller integritetsrelaterade markörer finns.")}</ol></section>
     <section><h3>Rekommenderade nästa steg</h3><ol><li>${escapeHtml(nextPeakStep)}</li><li>Provlyssna de högsta topparna kanal för kanal och i stereo. Växla sedan till mono för att kontrollera fasrelaterade förändringar.</li><li>Beräkna det aktuella exporturvalet efter varje nivåändring. Verifiera den färdiga filen efter export.</li><li>Ingen limiter, kompressor eller dold nivåändring ska användas utan ett uttryckligt val.</li></ol></section>
@@ -2927,12 +3172,27 @@ function syncPlaybackPosition(seconds = finite(elements.audio.currentTime) ?? st
   const position = clamp(finite(seconds) ?? 0, 0, durationSeconds());
   state.playback.currentSeconds = position;
   elements.currentTime.textContent = formatTime(position);
+  if (elements.sessionTime) elements.sessionTime.textContent = formatTime(position);
+  if (elements.sessionPlayButton) {
+    const paused = elements.audio.paused;
+    elements.sessionPlayButton.setAttribute("aria-label", paused ? "Spela" : "Pausa");
+    const copy = $("span", elements.sessionPlayButton);
+    if (copy) copy.textContent = paused ? "Spela" : "Pausa";
+    const path = $("path", elements.sessionPlayButton);
+    if (path) path.setAttribute("d", paused ? "m8 5 11 7-11 7V5Z" : "M7 5h4v14H7V5Zm6 0h4v14h-4V5Z");
+  }
   elements.transportSeek.value = String(position);
   $$('[data-diagram-time]').forEach(output => { output.textContent = formatTime(position); });
+  $$('[data-module-transport-time]').forEach(output => { output.textContent = formatTime(position); });
   $$('[data-diagram-action="toggle"]').forEach(button => {
     button.textContent = elements.audio.paused ? "Spela" : "Pausa";
     button.setAttribute("aria-label", elements.audio.paused ? "Spela" : "Pausa");
   });
+  $$('[data-module-transport-action="toggle"]').forEach(button => {
+    button.textContent = elements.audio.paused ? "Spela" : "Pausa";
+    button.setAttribute("aria-label", elements.audio.paused ? "Spela" : "Pausa");
+  });
+  syncPlaybackAvailability();
   scheduleCanvasRender();
 }
 
@@ -3072,12 +3332,23 @@ function previewEnvelopeBreakpoints(geometry = fadeGeometry()) {
 }
 
 function monitorSafetyForPreview() {
-  const sourcePeak = finite(state.analysis?.summary?.truePeakEstimateDbtp ?? state.analysis?.summary?.truePeakDbtp ?? state.analysis?.summary?.samplePeakDbfs);
   const sourceMode = state.monitoring.previewMode === "source";
   const editDb = sourceMode || state.monitoring.levelMatched ? 0 : (finite(state.monitoring.previewGainOverride) ?? state.trim.gainDb);
-  const projectedPeak = sourcePeak === null ? null : sourcePeak + editDb;
-  const safetyDb = projectedPeak === null ? 0 : Math.min(0, -3 - projectedPeak);
-  return { editDb, safetyDb, totalDb: editDb + safetyDb, projectedPeak };
+  return monitorSafetyDecision({
+    analysis: state.analysis,
+    trustedSource: state.analysisPlaybackSource === "current-session",
+    editDb,
+    headroomDb: -3,
+  });
+}
+
+function syncPlaybackAvailability() {
+  const ready = Boolean(state.file) && monitorSafetyForPreview().ready && !elements.audio.error;
+  if (elements.sessionPlayButton) elements.sessionPlayButton.disabled = !ready;
+  if (elements.playButton) elements.playButton.disabled = !ready;
+  if (elements.transportSeek) elements.transportSeek.disabled = !ready;
+  $$('[data-module-transport-action="toggle"]').forEach(button => { button.disabled = !ready; });
+  return ready;
 }
 
 function renderMonitorSafetyStatus() {
@@ -3086,6 +3357,11 @@ function renderMonitorSafetyStatus() {
   if (!state.analysis) {
     elements.monitorSafetyStatus.textContent = "Säker medhörning: väntar på toppanalys";
     elements.monitorSafetyStatus.dataset.state = "waiting";
+  } else if (!safety.ready) {
+    elements.monitorSafetyStatus.textContent = safety.reason === "untrusted-analysis"
+      ? "Säker medhörning: ny källanalys krävs efter projektimport"
+      : "Säker medhörning: toppnivån kan inte avgöras, uppspelning låst";
+    elements.monitorSafetyStatus.dataset.state = "waiting";
   } else if (safety.safetyDb < -0.01) {
     elements.monitorSafetyStatus.textContent = `Säker medhörning: sänkt ${formatDecimal(Math.abs(safety.safetyDb), 1)} dB endast i lyssningen`;
     elements.monitorSafetyStatus.dataset.state = "active";
@@ -3093,6 +3369,16 @@ function renderMonitorSafetyStatus() {
     elements.monitorSafetyStatus.textContent = "Säker medhörning: ingen extra sänkning behövs";
     elements.monitorSafetyStatus.dataset.state = "pass";
   }
+  if (elements.sessionSafetyStatus) {
+    elements.sessionSafetyStatus.textContent = elements.monitorSafetyStatus.textContent.replace("Säker medhörning: ", "");
+    elements.sessionSafetyStatus.dataset.state = elements.monitorSafetyStatus.dataset.state;
+    elements.sessionSafetyStatus.title = elements.monitorSafetyStatus.textContent;
+  }
+  $$('[data-monitor-safety-mirror]').forEach((output) => {
+    output.textContent = elements.monitorSafetyStatus.textContent;
+    output.dataset.state = elements.monitorSafetyStatus.dataset.state;
+  });
+  syncPlaybackAvailability();
 }
 
 function schedulePreviewEnvelope(mediaSeconds = finite(elements.audio.currentTime) ?? state.trim.startSeconds) {
@@ -3156,8 +3442,19 @@ function refreshMonitoringGraph() {
 
 async function startPlayback() {
   if (!state.file) return;
+  const playbackSafety = monitorSafetyForPreview();
+  if (!playbackSafety.ready) {
+    const message = playbackSafety.reason === "untrusted-analysis"
+      ? "Kör en ny källanalys. Sparade projektvärden används inte för att dimensionera säker medhörning."
+      : playbackSafety.reason === "missing-peak"
+        ? "Analysen saknar en ändlig toppnivå. Uppspelningen är låst eftersom säker monitortrim inte kan beräknas."
+        : "Analysera källfilen först. Uppspelningen är låst tills toppnivån är känd och säker medhörning kan beräknas.";
+    setTransportStatus(message, "warning");
+    showToast(message, "info", 8000);
+    return;
+  }
   try {
-    const safetyRequired = monitorSafetyForPreview().safetyDb < -0.01;
+    const safetyRequired = playbackSafety.safetyDb < -0.01;
     let graphReady = false;
     if (monitoringNeedsAudioGraph()) {
       graphReady = await ensureAudioGraph();
@@ -4261,6 +4558,7 @@ async function readProject(file) {
     if (project?.privacy?.audioIncluded !== false) throw new Error("Projektets integritetsmarkering saknas.");
     state.pendingProject = project;
     state.analysis = null;
+    state.analysisPlaybackSource = "none";
     state.markers = Array.isArray(project.markers) ? project.markers : [];
     applyMetadata(project.metadata);
     if (state.file) await applyPendingProjectToFile();
@@ -4294,6 +4592,7 @@ async function applyPendingProjectToFile() {
     return;
   }
   state.analysis = requiresReanalysis ? null : (project.analysis || state.analysis);
+  state.analysisPlaybackSource = state.analysis ? "restored-project" : "none";
   state.markers = Array.isArray(project.markers) ? project.markers : state.markers;
   const edit = project.edit || {};
   if (finite(edit.startFrame) !== null) state.trim.startSeconds = toSeconds(edit.startFrame);
@@ -4396,10 +4695,20 @@ async function applyPendingProjectToFile() {
   syncTrimWindowUi();
   syncAuditionUi();
   updateMonitoringGraph();
-  if (state.analysis) requestRegionAnalysis();
+  if (state.analysis) {
+    elements.playButton.disabled = true;
+    elements.transportSeek.disabled = true;
+    setTransportStatus("Projektets analys visas som underlag. Kör en ny källanalys före säker medhörning.", "warning");
+  }
+  if (!monitorSafetyForPreview().ready) {
+    $$('dialog[open]').forEach((dialog) => {
+      if (typeof dialog.close === "function") dialog.close();
+      else dialog.removeAttribute("open");
+    });
+    setMode("analyze");
+  }
   if (requiresReanalysis) {
-    showToast("Det äldre projektet saknar full säker hash. Metadata och redigering har återställts, men mätningen körs om lokalt.", "info", 9000);
-    startAnalysis();
+    showToast("Det äldre projektet saknar full säker hash. Metadata och redigering har återställts. Starta källanalysen uttryckligen innan du fortsätter.", "info", 9000);
   } else showToast("Projektet och källfilen matchar. Arbetet har återställts.");
   emitState("project-opened");
 }
@@ -4784,10 +5093,17 @@ function setExportProfile(profile, options = {}) {
   }
   state.exportProfile = profile;
   const edited = profile === "edited-wav";
+  const transformBlocked = validBitsTransformBlocked();
   [elements.fadeInToggle, elements.fadeOutToggle, elements.gainNumber, elements.gainRange].forEach((control) => { if (control) control.disabled = !edited; });
   $$("[data-fade-preset]").forEach((button) => { button.disabled = !edited || button.closest("[aria-disabled='true']"); });
   $(".fade-section")?.classList.toggle("is-profile-disabled", !edited);
   $(".gain-section")?.classList.toggle("is-profile-disabled", !edited);
+  [$("#fadeProfileModeNotice"), $("#gainProfileModeNotice")].forEach((notice) => { if (notice) notice.hidden = edited; });
+  [$("#enableEditedProfileForFadesButton"), $("#enableEditedProfileForGainButton")].forEach((button) => {
+    if (!button) return;
+    button.disabled = transformBlocked;
+    button.title = transformBlocked ? "Källans validBits-format tillåter inte omräkning." : "";
+  });
   if (!edited && hasEdits) {
     elements.exportAudio.disabled = true;
     showToast("Återställ gain, lokala toppkurvor och toningar för ett sample-payload-identiskt trimutdrag, eller välj Redigerad WAV-master.", "error", 8000);
@@ -5188,6 +5504,25 @@ function bindEvents() {
     }
   });
   $$(".mode-tab").forEach((tab) => tab.addEventListener("click", () => setMode(tab.dataset.mode)));
+  elements.workflowPrimaryAction?.addEventListener("click", runWorkflowPrimaryAction);
+  $$('[data-workspace-target]').forEach((button) => button.addEventListener("click", () => openWorkspaceModule(button)));
+  $$('[data-open-special="local-peaks"]').forEach((button) => button.addEventListener("click", () => elements.openLocalPeakWorkshop.click()));
+  $("#closeWorkspaceModuleButton")?.addEventListener("click", closeWorkspaceModule);
+  elements.workspaceModuleDialog?.addEventListener("close", restoreWorkspaceModule);
+  elements.workspaceModuleDialog?.addEventListener("click", (event) => {
+    if (event.target === elements.workspaceModuleDialog) closeWorkspaceModule();
+  });
+  elements.sessionPlayButton?.addEventListener("click", () => elements.playButton.click());
+  $$('[data-module-transport-action]').forEach((button) => button.addEventListener("click", () => {
+    const action = button.dataset.moduleTransportAction;
+    if (action === "start") seekPlayback(state.trim.startSeconds);
+    if (action === "back") seekPlayback((elements.audio.currentTime || 0) - 10);
+    if (action === "toggle") togglePlayback();
+    if (action === "forward") seekPlayback((elements.audio.currentTime || 0) + 10);
+    if (action === "end") seekPlayback(Math.max(state.trim.startSeconds, state.trim.endSeconds - 1 / sampleRate()));
+  }));
+  elements.toggleTransport?.addEventListener("click", () => setTransportExpanded(!elements.globalPlayer.classList.contains("is-expanded")));
+  elements.closeTransport?.addEventListener("click", () => setTransportExpanded(false));
   $("#runPreflightButton").addEventListener("click", requestRegionAnalysis);
   $("#preflightBackButton").addEventListener("click", () => setMode("trim"));
   $("#preflightContinueButton").addEventListener("click", () => setMode("export"));
@@ -5239,12 +5574,12 @@ function bindEvents() {
       button.setAttribute("aria-pressed", String(active));
     });
     renderMarkers();
-    elements.markerList.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "center" });
+    openWorkspaceModule($('[data-workspace-target="analysisInspector"]'));
+    requestAnimationFrame(() => elements.markerList.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "center" }));
   });
   elements.openRecommendations.addEventListener("click", () => {
     setMode("trim");
-    requestRegionAnalysis();
-    window.setTimeout(() => $("#recommendationWorkbench")?.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" }), 120);
+    window.setTimeout(() => openWorkspaceModule($('[data-workspace-target="gainModule,recommendationWorkbench"]')), 120);
   });
   elements.preserveFromAnalysis.addEventListener("click", () => {
     preserveSeries();
@@ -5256,8 +5591,8 @@ function bindEvents() {
     playReviewRegion(Math.max(0, highest.seconds - 0.5), Math.min(durationSeconds(), highest.seconds + 0.5));
   });
   elements.showFloatPeaks.addEventListener("click", () => {
-    $("#deepMeasurements").open = true;
-    $("#floatOverrangeTitle")?.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+    openWorkspaceModule($('[data-workspace-target="deepMeasurements"]'));
+    requestAnimationFrame(() => $("#floatOverrangeTitle")?.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" }));
   });
   elements.openPeakStudy.addEventListener("click", () => {
     renderPeakStudy();
@@ -5308,6 +5643,11 @@ function bindEvents() {
       if (actionButton.dataset.fullAction === "peak-workshop") elements.openLocalPeakWorkshop.click();
       if (actionButton.dataset.fullAction === "peak-study") elements.openPeakStudy.click();
       if (actionButton.dataset.fullAction === "float-regions") elements.showFloatPeaks.click();
+      if (actionButton.dataset.fullAction === "rumble-workspace") {
+        const tool = $('[data-workspace-target="deepMeasurements"]');
+        openWorkspaceModule(tool);
+        requestAnimationFrame(() => $("#spectralDiagnosticsTitle")?.scrollIntoView({ block: "start", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }));
+      }
       return;
     }
     const markerButton = event.target.closest("[data-full-analysis-marker]");
@@ -5323,6 +5663,7 @@ function bindEvents() {
       elements.fullAnalysisDialog.close();
       setMode("analyze");
       requestAnimationFrame(() => {
+        openWorkspaceModule($('[data-workspace-target="analysisInspector"]'));
         const row = elements.markerList.querySelector(`[data-marker-id="${CSS.escape(markerId)}"]`);
         row?.scrollIntoView({ block: "center", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
         row?.querySelector("[data-marker-review]")?.focus({ preventScroll: true });
@@ -5349,9 +5690,10 @@ function bindEvents() {
   elements.addPeakAtPlayhead.addEventListener("click", addLocalPeakAtPlayhead);
   elements.localPeakCeiling.addEventListener("change", () => {
     state.series.ceilingDbtp = clamp(finite(elements.localPeakCeiling.value) ?? -2, -60, 0);
-    state.regionAnalysis = null;
-    state.regionStatus = "stale";
-    state.verifiedExport = null;
+    invalidatePreflightAndVerification({
+      regionMessage: "Behöver beräknas på nytt efter ändrat leveranstak",
+      verifiedMessage: "Ogiltig efter ändrat leveranstak",
+    });
     state.dirty = true;
     renderPreflightPanel();
     updateExportSummary();
@@ -5376,8 +5718,10 @@ function bindEvents() {
   });
   elements.openPeakSafety.addEventListener("click", () => {
     setMode("trim");
-    requestRegionAnalysis();
-    window.setTimeout(() => $("#peakSafetyTitle")?.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" }), 120);
+    window.setTimeout(() => {
+      openWorkspaceModule($('[data-workspace-target="gainModule,recommendationWorkbench"]'));
+      requestAnimationFrame(() => $("#peakSafetyTitle")?.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" }));
+    }, 120);
   });
   elements.preservePeakOriginal.addEventListener("click", () => {
     preserveSeries();
@@ -5646,8 +5990,8 @@ function bindEvents() {
   elements.audio.addEventListener("waiting", () => setTransportStatus("Väntar på ljuddata", "loading"));
   elements.audio.addEventListener("stalled", () => setTransportStatus("Uppspelningen väntar. Försök pausa och starta igen.", "warning"));
   elements.audio.addEventListener("canplay", () => {
-    elements.playButton.disabled = false;
-    setTransportStatus(elements.audio.paused ? "Ljudfilen är redo för provlyssning" : "Spelar", elements.audio.paused ? "ready" : "playing");
+    const ready = syncPlaybackAvailability();
+    setTransportStatus(ready ? (elements.audio.paused ? "Ljudfilen är redo för provlyssning" : "Spelar") : "Analysera källfilen före säker medhörning", ready ? (elements.audio.paused ? "ready" : "playing") : "warning");
   });
   elements.audio.addEventListener("ended", () => {
     stopPlaybackClock();
@@ -5678,9 +6022,8 @@ function bindEvents() {
       syncTrimUi();
     }
     elements.transportSeek.max = String(durationSeconds());
-    elements.transportSeek.disabled = false;
-    elements.playButton.disabled = false;
-    setTransportStatus("Ljudfilen är redo för provlyssning");
+    const ready = syncPlaybackAvailability();
+    setTransportStatus(ready ? "Ljudfilen är redo för provlyssning" : "Analysera källfilen före säker medhörning", ready ? "ready" : "warning");
   });
   elements.audio.addEventListener("seeked", () => {
     syncPlaybackPosition();
@@ -5768,6 +6111,12 @@ function bindEvents() {
   elements.gainNumber.addEventListener("change", () => updateGain(elements.gainNumber.value));
   elements.gainRange.addEventListener("input", () => updateGain(elements.gainRange.value));
   $("#resetGainButton").addEventListener("click", () => updateGain(0));
+  [$("#enableEditedProfileForFadesButton"), $("#enableEditedProfileForGainButton")].forEach((button) => button?.addEventListener("click", () => {
+    const editedRadio = $("input[name='exportProfile'][value='edited-wav']");
+    if (editedRadio) editedRadio.checked = true;
+    setExportProfile("edited-wav");
+    showToast("Redigerad WAV-master är aktiverad. Ingen ljudändring har gjorts ännu.");
+  }));
   $$('[data-peak-ceiling]').forEach(button => button.addEventListener("click", () => applyNegativePeakCeiling(button.dataset.peakCeiling)));
   $("#manualPeakGainButton").addEventListener("click", () => {
     elements.peakSafetyStatus.textContent = "Manuell global gain används. Ingen automatisk toppanpassning görs.";

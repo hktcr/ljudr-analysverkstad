@@ -26,7 +26,7 @@
           </span>
           <span>
             <strong>LjudR</strong>
-            <small>Analysverkstad <span class="brand-version" id="appVersion" aria-label="Programversion">v1.0.0-rc.14</span></small>
+            <small>Analysverkstad <span class="brand-version" id="appVersion" aria-label="Programversion">v1.0.0-rc.15</span></small>
           </span>
         </a>
 
@@ -45,8 +45,8 @@
         </div>
       </header>
 
-      <nav class="mode-nav" aria-label="Arbetsflöde">
-        <button type="button" class="mode-tab is-active is-prestage" data-mode="open" aria-current="step">
+      <nav class="mode-nav" id="workflowNav" aria-label="Arbetsflöde" hidden>
+        <button type="button" class="mode-tab is-active is-prestage" data-mode="open" aria-current="step" hidden>
           <span class="step-number">Fil</span><span><strong>Källfil</strong><small id="modeStatusOpen">Välj fil</small></span>
         </button>
         <span class="step-line" aria-hidden="true"></span>
@@ -99,10 +99,20 @@
             <button class="button button-quiet button-small" id="trimHudOpen" type="button">Öppna</button>
           </div>
         </section>
+        <div class="session-transport" aria-label="Kompakt transport">
+          <button class="session-play-button" id="sessionPlayButton" type="button" disabled aria-label="Spela">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5 11 7-11 7V5Z"/></svg>
+            <span>Spela</span>
+          </button>
+          <output id="sessionTime">00:00.000</output>
+          <output class="session-safety" id="sessionSafetyStatus" role="status">Säker medhörning väntar</output>
+          <button class="button button-quiet button-small" id="toggleTransportButton" type="button" aria-expanded="false" aria-controls="globalPlayer">Full transport</button>
+        </div>
         <button class="button button-quiet button-small" id="changeFileButton" type="button">Byt fil</button>
       </div>
 
       <section class="global-player" id="globalPlayer" aria-label="Uppspelning" hidden>
+        <button class="icon-button transport-close" type="button" id="closeTransportButton" aria-label="Stäng full transport">×</button>
         <div class="transport-buttons">
           <button class="icon-button" type="button" id="jumpStartButton" aria-label="Gå till startgränsen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h2v14H5V5Zm4 7 10-7v14L9 12Z"/></svg></button>
           <button class="icon-button" type="button" id="backTenButton" aria-label="Hoppa tio sekunder bakåt"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5V2L7 6l5 4V7a7 7 0 1 1-6.93 8H3.05A9 9 0 1 0 12 5Zm-3 6h2v5H9v-5Zm3 0h2v5h-2v-5Z"/></svg></button>
@@ -205,7 +215,7 @@
                 <small>Håll gärna skärmen aktiv och stanna kvar i fliken. Du kan avbryta mellan två läsblock.</small>
               </div>
 
-              <section class="assessment-context" aria-labelledby="assessmentContextTitle">
+              <section class="assessment-context" id="assessmentContext" aria-labelledby="assessmentContextTitle">
                 <div class="assessment-context-copy">
                   <span class="objective-badge">Regelbaserad vägledning</span>
                   <div>
@@ -250,7 +260,7 @@
                   <ol class="assessment-actions" id="assessmentActions"></ol>
                   <div class="assessment-action-controls">
                     <button class="button button-secondary button-small" id="reviewFindingsButton" type="button">Granska fynd och markörer</button>
-                    <button class="button button-primary button-small" id="openRecommendationsButton" type="button">Öppna åtgärdsverkstaden</button>
+                    <button class="button button-secondary button-small" id="openRecommendationsButton" type="button">Öppna åtgärdsverkstaden</button>
                     <button class="button button-quiet button-small" id="preserveFromAnalysisButton" type="button">Bevara oförändrat</button>
                   </div>
                 </section>
@@ -259,7 +269,7 @@
               <section class="analysis-module-board" id="analysisModuleBoard" aria-labelledby="analysisModuleBoardTitle">
                 <div class="module-board-heading">
                   <div><span class="eyebrow">Snabböversikt</span><h2 id="analysisModuleBoardTitle">Vad behöver din uppmärksamhet?</h2><p>Varje status bygger på ett avgränsat test. Öppna en modul för mätvärden, förklaring och nästa steg.</p></div>
-                  <button class="button button-primary" id="openFullAnalysisBoardButton" type="button" disabled>Expandera hela analysen</button>
+                  <button class="button button-secondary" id="openFullAnalysisBoardButton" type="button" disabled>Expandera hela analysen</button>
                 </div>
                 <div class="analysis-module-grid">
                   <button class="analysis-module-card" type="button" data-analysis-module="integrity" data-state="waiting" disabled><span class="module-status"><i aria-hidden="true">○</i><strong>Inte analyserad</strong></span><span><b>Fil och signalintegritet</b><small>Filstruktur och ogiltiga signalvärden</small></span><em>Detaljer</em></button>
@@ -267,7 +277,19 @@
                   <button class="analysis-module-card" type="button" data-analysis-module="loudness" data-state="waiting" disabled><span class="module-status"><i aria-hidden="true">○</i><strong>Inte analyserad</strong></span><span><b>Ljudstyrka</b><small>LUFS och vald arbetsorientering</small></span><em>Detaljer</em></button>
                   <button class="analysis-module-card" type="button" data-analysis-module="dynamics" data-state="waiting" disabled><span class="module-status"><i aria-hidden="true">○</i><strong>Inte analyserad</strong></span><span><b>Dynamik</b><small>LRA, PLR och transientmarginal</small></span><em>Detaljer</em></button>
                   <button class="analysis-module-card" type="button" data-analysis-module="stereo" data-state="waiting" disabled><span class="module-status"><i aria-hidden="true">○</i><strong>Inte analyserad</strong></span><span><b>Stereo och mono</b><small>Balans, korrelation och monorisk</small></span><em>Detaljer</em></button>
+                  <button class="analysis-module-card" type="button" data-analysis-module="rumble" data-state="waiting" disabled><span class="module-status"><i aria-hidden="true">○</i><strong>Inte analyserad</strong></span><span><b>Rumble och störningar</b><small>Samplad lågfrekvensscreening och 50 Hz</small></span><em>Detaljer</em></button>
                   <button class="analysis-module-card" type="button" data-analysis-module="review" data-state="waiting" disabled><span class="module-status"><i aria-hidden="true">○</i><strong>Inte analyserad</strong></span><span><b>Mänsklig granskning</b><small>Markörer, lyssning och redaktionella frågor</small></span><em>Detaljer</em></button>
+                </div>
+              </section>
+
+              <section class="step-module-board analysis-tool-board" aria-labelledby="analysisToolsTitle">
+                <div class="step-module-heading"><div><span class="eyebrow">Arbetsverktyg</span><h2 id="analysisToolsTitle">Öppna bara det du behöver</h2></div><p>Tidslinje, djupmätning och granskningskö öppnas i en lugn helskärmsyta.</p></div>
+                <div class="step-module-grid">
+                  <button class="step-module-card" type="button" data-workspace-target="assessmentContext" data-workspace-title="Bedömningskontext" data-workspace-description="Välj inspelningstyp och användning. Valet ändrar bara tolkningen, aldrig mätdata eller ljud."><span class="module-symbol" aria-hidden="true">◎</span><span><strong>Bedömningskontext</strong><small id="analysisContextSummary">Lågmält soundscape · publicering</small></span><em>Öppna</em></button>
+                  <button class="step-module-card" type="button" data-workspace-target="analysisTimelineCard,canvasTextAlternative" data-workspace-title="Tidslinje och lyssning" data-workspace-description="Vågform, loudness, toppar, stereo och markörer i en fokuserad arbetsyta."><span class="module-symbol" aria-hidden="true">⌁</span><span><strong>Tidslinje och lyssning</strong><small>Studera och spela valda områden</small></span><em>Öppna</em></button>
+                  <button class="step-module-card" type="button" data-workspace-target="deepMeasurements" data-workspace-title="Mätvärden, rumble och float" data-workspace-description="Objektiva värden, mätmetod, samplad rumble- och 50 Hz-screening samt floatregioner."><span class="module-symbol" aria-hidden="true">ƒ</span><span><strong>Mätvärden och rumble</strong><small id="analysisRumbleSummary">Screening inte körd</small></span><em>Öppna</em></button>
+                  <button class="step-module-card" type="button" data-workspace-target="analysisInspector" data-workspace-title="Observationer och markörer" data-workspace-description="Lyssna, filtrera och bedöm tekniska, redaktionella och integritetsrelaterade granskningspunkter."><span class="module-symbol" aria-hidden="true">!</span><span><strong>Granskningskö</strong><small id="analysisReviewSummary">Väntar på analys</small></span><em>Öppna</em></button>
+                  <button class="step-module-card" type="button" data-workspace-target="analysisExchange" data-workspace-title="Analysunderlag för gAIa" data-workspace-description="Frivilligt textutbyte utan ljud. Inget kopieras eller tillämpas automatiskt."><span class="module-symbol" aria-hidden="true">{ }</span><span><strong>Analysutbyte</strong><small>JSON, digest och integritetsval</small></span><em>Öppna</em></button>
                 </div>
               </section>
 
@@ -277,7 +299,7 @@
                 <article class="chain-card"><span>3</span><div><strong>Verifierad exportfil</strong><small id="verifiedMeasureStatus">Skapas först efter WAV-export</small></div></article>
               </section>
 
-              <article class="timeline-card" id="analysisTimelineCard">
+              <article class="timeline-card module-detail-target" id="analysisTimelineCard">
                 <div class="card-toolbar">
                   <div>
                     <h2>Översikt</h2>
@@ -318,7 +340,7 @@
                 <div class="time-axis" id="analysisTimeAxis" aria-hidden="true"></div>
               </article>
 
-              <details class="canvas-text-alternative" id="canvasTextAlternative">
+              <details class="canvas-text-alternative module-detail-target" id="canvasTextAlternative">
                 <summary>Textmotsvarighet till tidslinjen</summary>
                 <div id="canvasTextContent"><p>Analysera filen för en navigerbar textöversikt.</p></div>
               </details>
@@ -377,7 +399,7 @@
                 <p class="peak-guide-note" id="peakGuideNote">Ingen limiter, kompressor eller dold toppsänkning används.</p>
               </section>
 
-              <details class="deep-measurements" id="deepMeasurements">
+              <details class="deep-measurements module-detail-target" id="deepMeasurements">
                 <summary>
                   <span class="deep-summary-copy">
                     <span class="objective-badge">Objektiva mätningar</span>
@@ -448,7 +470,7 @@
                 </div>
               </details>
 
-              <section class="analysis-exchange" id="analysisExchange" aria-labelledby="analysisExchangeTitle">
+              <section class="analysis-exchange module-detail-target" id="analysisExchange" aria-labelledby="analysisExchangeTitle">
                 <div class="analysis-exchange-heading">
                   <div><span class="eyebrow">Frivilligt lokalt utbyte</span><h2 id="analysisExchangeTitle">Analysunderlag för gAIa</h2><p>Skapa granskad JSON-text utan ljud och kopiera den direkt till gAIa. Appen ansluter inte till gAIa och laddar aldrig upp något automatiskt.</p></div>
                   <span class="status-pill" id="exchangeCapabilityStatus">Kontrollerar</span>
@@ -484,7 +506,7 @@
               </section>
             </div>
 
-            <aside class="inspector" aria-label="Analysinspektör">
+            <aside class="inspector module-detail-target" id="analysisInspector" aria-label="Analysinspektör">
               <section class="inspector-section">
                 <div class="inspector-heading">
                   <div class="observation-heading-copy"><h2>Observationer</h2><span>Separat tolkande lager</span></div>
@@ -530,7 +552,23 @@
                 <span class="read-only-pill"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h12v16H6V4Zm2 2v12h8V6H8Z"/></svg>Originalet påverkas inte</span>
               </div>
 
-              <article class="timeline-card trim-timeline-card" id="trimTimelineCard">
+              <section class="edit-overview" aria-labelledby="editOverviewTitle">
+                <div class="edit-overview-copy"><span class="eyebrow">Aktuellt exporturval</span><h2 id="editOverviewTitle">Välj en modul att arbeta i</h2><p id="editOverviewStatus">Hela källfilen är vald. Inga ljudvärden ändras utan ett uttryckligt val.</p></div>
+                <dl class="edit-overview-facts"><div><dt>A till B</dt><dd id="editRangeSummary">00:00.000 till 00:00.000</dd></div><div><dt>Längd</dt><dd id="editDurationSummary">00:00.000</dd></div><div><dt>Förkontroll</dt><dd id="editPreflightSummary">Inte körd</dd></div></dl>
+              </section>
+
+              <section class="step-module-board" aria-labelledby="editModulesTitle">
+                <div class="step-module-heading"><div><span class="eyebrow">Redigeringsmoduler</span><h2 id="editModulesTitle">En uppgift i taget</h2></div><p>Varje modul öppnas i helskärm. Alla ändringar är synliga, reversibla och gör förkontrollen inaktuell.</p></div>
+                <div class="step-module-grid edit-module-grid">
+                  <button class="step-module-card" type="button" data-workspace-target="trimTimelineCard,trimWindowCard,trimControlGrid" data-workspace-title="Trimning och exakt A/B" data-workspace-description="Lås upp, placera, provlyssna och tillämpa trimfönstret med samplingsprecisa gränser."><span class="module-symbol" aria-hidden="true">A·B</span><span><strong>Trimning</strong><small id="editTrimModuleSummary">Låst, hela källfilen</small></span><em>Öppna</em></button>
+                  <button class="step-module-card" type="button" data-workspace-target="fadeModule" data-workspace-title="Linjära kanttoningar" data-workspace-description="Ställ in uttryckliga in- och uttoningar och provlyssna gränserna."><span class="module-symbol" aria-hidden="true">◿</span><span><strong>Toningar</strong><small id="editFadeModuleSummary">Av</small></span><em>Öppna</em></button>
+                  <button class="step-module-card" type="button" data-workspace-target="gainModule,recommendationWorkbench" data-workspace-title="Global gain och nivåorientering" data-workspace-description="Höj eller sänk hela exporturvalet linjärt. Ingen kompressor eller limiter används."><span class="module-symbol" aria-hidden="true">dB</span><span><strong>Gain för hela urvalet</strong><small id="editGainModuleSummary">0,0 dB</small></span><em>Öppna</em></button>
+                  <button class="step-module-card" type="button" data-open-special="local-peaks"><span class="module-symbol" aria-hidden="true">⌃</span><span><strong>Lokal toppverkstad</strong><small id="editPeakModuleSummary">Inga lokala kurvor</small></span><em>Öppna</em></button>
+                  <button class="step-module-card" type="button" data-workspace-target="trimAuditionModule,auditionStatus,monitorModule" data-workspace-title="Jämför lyssning" data-workspace-description="Växla källa/export, faktisk eller nivåmatchad lyssning samt stereo, vänster, höger och mono."><span class="module-symbol" aria-hidden="true">◉</span><span><strong>Provlyssning</strong><small id="editMonitorModuleSummary">Källkontext, stereo</small></span><em>Öppna</em></button>
+                </div>
+              </section>
+
+              <article class="timeline-card trim-timeline-card module-detail-target" id="trimTimelineCard">
                 <section class="trim-editor-mode" id="trimEditorMode" aria-labelledby="trimEditorModeTitle">
                   <div class="trim-editor-mode-copy">
                     <span class="trim-editor-state is-locked" id="trimEditorState">Låst och aktivt</span>
@@ -566,14 +604,14 @@
                   <button type="button" data-diagram-action="play-selection">Spela A till B</button>
                   <output data-diagram-time>00:00.000</output>
                 </div>
-                <div class="audition-toolbar">
+                <div class="audition-toolbar" id="trimAuditionModule">
                   <fieldset class="segmented-control" id="previewModeControl"><legend>Provlyssning</legend><label><input type="radio" name="previewMode" value="source" checked><span>Källkontext</span></label><label><input type="radio" name="previewMode" value="export"><span>Exportförhandsvisning</span></label></fieldset>
                   <fieldset class="segmented-control" id="monitorModeControl"><legend>Monitor</legend><label><input type="radio" name="monitorMode" value="stereo" checked><span>Stereo</span></label><label><input type="radio" name="monitorMode" value="left"><span>Vänster</span></label><label><input type="radio" name="monitorMode" value="right"><span>Höger</span></label><label><input type="radio" name="monitorMode" value="mono"><span>Mono</span></label></fieldset>
                 </div>
                 <p class="audition-status" id="auditionStatus">Källkontext: inga toningar eller nivåval hörs. Monitorval påverkar aldrig export.</p>
               </article>
 
-              <article class="trim-window-card" aria-labelledby="trimWindowTitle">
+              <article class="trim-window-card module-detail-target" id="trimWindowCard" aria-labelledby="trimWindowTitle">
                 <div class="trim-window-copy">
                   <span class="eyebrow">Mållängd</span>
                   <h2 id="trimWindowTitle">Placera ett exakt trimfönster</h2>
@@ -599,7 +637,7 @@
                 </div>
               </article>
 
-              <div class="trim-control-grid">
+              <div class="trim-control-grid module-detail-target" id="trimControlGrid">
                 <article class="control-card">
                   <div class="control-card-heading"><span class="boundary-chip boundary-start">A</span><div><h2>Startgräns</h2><p>Samplingen vid startgränsen tas med</p></div></div>
                   <label class="time-input-label">Tid<input id="trimStartInput" class="time-input" type="text" inputmode="decimal" value="00:00.000" aria-label="Starttid"></label>
@@ -625,9 +663,10 @@
             </div>
 
             <aside class="inspector" aria-label="Trimningsinställningar">
-              <section class="inspector-section fade-section">
+              <section class="inspector-section fade-section module-detail-target" id="fadeModule">
                 <div class="inspector-heading"><h2>Linjära toningar</h2><button class="info-dot" type="button" data-help-topic="fades" aria-label="Om linjära toningar">i</button></div>
                 <p class="section-description">Av är förvalt. Medhörning och export använder samma linjära amplitudkurva.</p>
+                <div class="profile-mode-notice" id="fadeProfileModeNotice"><p>Toningar kräver profilen Redigerad WAV-master. Profilbytet ändrar inte ljudet förrän du själv slår på en toning.</p><button class="button button-secondary button-full" id="enableEditedProfileForFadesButton" type="button">Aktivera Redigerad WAV-master</button></div>
 
                 <div class="fade-editor">
                   <div class="fade-control" id="fadeInEditor">
@@ -661,9 +700,10 @@
                 <p class="fine-print fade-note" id="fadeOverlapNotice">Toningarna påverkar bara det valda utsnittets ytterkanter.</p>
               </section>
 
-              <section class="inspector-section gain-section">
+              <section class="inspector-section gain-section module-detail-target" id="gainModule">
                 <div class="inspector-heading"><div class="heading-with-help"><h2>Gain för exporturvalet</h2><button class="info-dot" type="button" data-help-topic="gain" aria-label="Om global gain">i</button></div><button class="text-button" id="resetGainButton" type="button">Återställ</button></div>
                 <p class="section-description">Samma nivåändring över hela det valda exporturvalet. Ingen kompressor eller limiter används.</p>
+                <div class="profile-mode-notice" id="gainProfileModeNotice"><p>Global gain kräver profilen Redigerad WAV-master. Profilbytet ändrar inte ljudnivån förrän du själv väljer ett gainvärde.</p><button class="button button-secondary button-full" id="enableEditedProfileForGainButton" type="button">Aktivera Redigerad WAV-master</button></div>
                 <div class="gain-value"><input id="gainNumber" type="number" min="-60" max="24" step="0.1" value="0.0" aria-label="Gain i decibel"><span>dB</span></div>
                 <input id="gainRange" class="accent-range" type="range" min="-60" max="24" step="0.1" value="0" aria-label="Gain i decibel">
                 <div class="peak-safety" aria-labelledby="peakSafetyTitle">
@@ -683,7 +723,7 @@
                 <div class="neutral-notice" id="gainNotice" hidden></div>
               </section>
 
-              <section class="inspector-section series-section" id="recommendationWorkbench">
+              <section class="inspector-section series-section module-detail-target" id="recommendationWorkbench">
                 <div class="inspector-heading">
                   <div><div class="heading-with-help"><h2>Twenty Minutes Here</h2><button class="info-dot" type="button" data-help-topic="series-reference" aria-label="Om seriens frivilliga nivåreferens">i</button></div><span class="method-badge">Frivillig seriereferens</span></div>
                 </div>
@@ -698,8 +738,16 @@
                 <p class="fine-print"><strong>Ingen dold toppsänkning.</strong> Om -19 LUFS-I inte ryms under -2 dBTP föreslås lägre gain. Redan klippt ljud repareras inte.</p>
               </section>
 
-              <section class="inspector-section">
+              <section class="inspector-section module-detail-target" id="monitorModule">
                 <div class="inspector-heading"><h2>Jämför lyssning</h2><button class="info-dot" type="button" data-help-topic="monitoring" aria-label="Om utjämnad medhörning">i</button></div>
+                <div class="module-transport" aria-label="Uppspelning i provlyssningsmodulen">
+                  <button type="button" data-module-transport-action="start">Till A</button>
+                  <button type="button" data-module-transport-action="back">-10 s</button>
+                  <button type="button" data-module-transport-action="toggle">Spela</button>
+                  <button type="button" data-module-transport-action="forward">+10 s</button>
+                  <button type="button" data-module-transport-action="end">Till B</button>
+                  <output data-module-transport-time>00:00.000</output>
+                </div>
                 <label class="switch-row"><span><strong>Utjämnad medhörning</strong><small>Jämför klang utan nivåskillnaden</small></span><input type="checkbox" id="levelMatchToggle"><i aria-hidden="true"></i></label>
                 <p class="fine-print">Medhörningsvolymen och utjämnad lyssning påverkar aldrig exportfilen.</p>
               </section>
@@ -737,6 +785,22 @@
                 <div><span class="eyebrow">Steg 4</span><h1 id="exportTitle">Exportera och verifiera</h1><p>Granska vad som ändras, skriv filen och låt verktyget återöppna och mäta den faktiska WAV-filen.</p></div>
               </div>
 
+              <section class="export-action-panel export-primary-card">
+                <div class="export-recommendation" id="exportRecommendation">
+                  <div><strong>Exportkontroll</strong><button class="info-dot" type="button" data-help-topic="export-safety" aria-label="Om exportkontrollen">i</button></div>
+                  <p id="exportRecommendationText">Analysera filen för en rekommendation före export.</p>
+                </div>
+                <button class="button button-primary button-large button-full" id="exportAudioButton" type="button">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 3h2v10.2l3.6-3.6L18 11l-6 6-6-6 1.4-1.4 3.6 3.6V3ZM5 19h14v2H5v-2Z"/></svg>
+                  Exportera och verifiera WAV
+                </button>
+                <div class="secondary-export-actions">
+                  <button class="button button-quiet" id="exportReportButton" type="button">Skapa rapport</button>
+                  <button class="button button-quiet" id="exportJsonButton" type="button">Exportera JSON</button>
+                </div>
+                <p>Filen skapas lokalt. På stora inspelningar kan exporten ta flera minuter.</p>
+              </section>
+
               <article class="export-summary-card">
                 <div class="export-summary-heading"><span class="export-file-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h8l4 4v16H6V2Zm8 2.8V8h3.2L14 4.8ZM9 12v2h6v-2H9Zm0 4v2h6v-2H9Z"/></svg></span><div><span>Valt utsnitt</span><strong id="exportFileName">Ingen fil vald</strong></div></div>
                 <dl class="export-facts">
@@ -748,7 +812,7 @@
                 </dl>
               </article>
 
-              <article class="export-selection-card" aria-labelledby="exportSelectionTitle">
+              <article class="export-selection-card module-detail-target" id="exportSelectionModule" aria-labelledby="exportSelectionTitle">
                 <div class="card-toolbar"><div><h2 id="exportSelectionTitle">Källöversikt och exporturval</h2><span id="exportSelectionMapping">Källan är ännu inte vald</span></div><button class="button button-quiet button-small" type="button" data-mode-link="trim">Ändra trimfönster</button></div>
                 <div class="canvas-wrap export-canvas-wrap"><canvas id="exportTrimCanvas" class="timeline-canvas" role="img" aria-label="Källöversikt med markerat exporturval"></canvas></div>
               </article>
@@ -771,18 +835,29 @@
 
               <p class="scope-note"><strong>Separata codecformat och direktpublicering ligger utanför verktyget.</strong> Spotify for Creators kan ta emot den verifierade WAV-mastern direkt. Använd Ferrite när avsnittet behöver interna klipp, montage eller separat codec-export.</p>
 
+              <section class="step-module-board" aria-labelledby="exportModulesTitle">
+                <div class="step-module-heading"><div><span class="eyebrow">Fördjupning och dokumentation</span><h2 id="exportModulesTitle">Öppna vid behov</h2></div><p>Exportens huvudåtgärd ligger överst. Metadata, publiceringskontroll och rapportarkiv konkurrerar inte med den.</p></div>
+                <div class="step-module-grid export-module-grid">
+                  <button class="step-module-card" type="button" data-workspace-target="exportSelectionModule" data-workspace-title="Källa och exporturval" data-workspace-description="Kontrollera visuellt hur det valda urvalet ligger i källfilen."><span class="module-symbol" aria-hidden="true">A·B</span><span><strong>Urvalsöversikt</strong><small id="exportModuleSelectionSummary">Aktuellt A/B</small></span><em>Öppna</em></button>
+                  <button class="step-module-card" type="button" data-workspace-target="metadataModule" data-workspace-title="Metadata" data-workspace-description="Dokumentera titel, session, plats, utrustning, miljö, skapare och licens."><span class="module-symbol" aria-hidden="true">Aa</span><span><strong>Metadata</strong><small id="exportModuleMetadataSummary">Frivilliga fält</small></span><em>Öppna</em></button>
+                  <button class="step-module-card" type="button" data-workspace-target="publicationModule" data-workspace-title="Publiceringskontroll" data-workspace-description="Tekniska och manuella kontroller för en genomlyssnad master."><span class="module-symbol" aria-hidden="true">✓</span><span><strong>Publiceringskort</strong><small id="exportModulePublicationSummary">Granskning krävs</small></span><em>Öppna</em></button>
+                  <button class="step-module-card" type="button" data-workspace-target="storedExportsModule,seriesOverviewModule" data-workspace-title="Arbetsfiler och serieöversikt" data-workspace-description="Hämta lokala arbetsfiler och jämför verifierade rapporter utan normalisering."><span class="module-symbol" aria-hidden="true">▤</span><span><strong>Arbetsfiler och serie</strong><small id="exportModuleStorageSummary">Inga lokala arbetsfiler</small></span><em>Öppna</em></button>
+                  <button class="step-module-card" type="button" data-workspace-target="capabilityModule" data-workspace-title="Teknisk status" data-workspace-description="Kontrollera analysmotor, exportmotor, projektstöd och lokal storfilslagring."><span class="module-symbol" aria-hidden="true">i</span><span><strong>Teknisk status</strong><small id="exportModuleCapabilitySummary">Kontrollerar</small></span><em>Öppna</em></button>
+                </div>
+              </section>
+
               <div class="export-progress" id="exportProgress" hidden aria-live="polite">
                 <div class="progress-copy"><strong id="exportProgressLabel">Förbereder export</strong><span id="exportProgressPercent">0 %</span></div>
                 <div class="progress-track"><i id="exportProgressFill"></i></div>
                 <button class="button button-secondary button-small" id="cancelExportButton" type="button">Avbryt export</button>
               </div>
 
-              <section class="stored-exports" aria-labelledby="storedExportsTitle">
+              <section class="stored-exports module-detail-target" id="storedExportsModule" aria-labelledby="storedExportsTitle">
                 <div class="stored-exports-heading"><div><h2 id="storedExportsTitle">Lokala arbetsfiler</h2><p>Färdiga filer behålls lokalt eftersom webbläsaren inte kan bekräfta att Filer tog emot dem.</p></div><button class="button button-quiet button-small" id="clearStoredExportsButton" type="button">Rensa alla</button></div>
                 <ul id="storedExportsList"><li class="list-placeholder">Inga lokala arbetsfiler</li></ul>
               </section>
 
-              <section class="podcast-publication-card" aria-labelledby="publicationCardTitle">
+              <section class="podcast-publication-card module-detail-target" id="publicationModule" aria-labelledby="publicationCardTitle">
                 <div class="section-heading compact-heading"><div><span class="eyebrow">Twenty Minutes Here</span><h2 id="publicationCardTitle">Publiceringskort</h2><p>Mjuka spärrar för en verifierad och genomlyssnad master. En motiverad avvikelse kan dokumenteras.</p></div><span class="status-pill" id="publicationStatus">Granskning krävs</span></div>
                 <div class="publication-auto-checks" id="publicationAutoChecks"></div>
                 <fieldset class="publication-manual-checks">
@@ -798,7 +873,7 @@
                 <button class="button button-primary" id="exportEpisodeHandoffButton" type="button" disabled>Exportera avsnittspaket</button>
               </section>
 
-              <section class="series-overview" aria-labelledby="seriesOverviewTitle">
+              <section class="series-overview module-detail-target" id="seriesOverviewModule" aria-labelledby="seriesOverviewTitle">
                 <div class="section-heading compact-heading"><div><span class="eyebrow">Seriekonsekvens</span><h2 id="seriesOverviewTitle">Jämför verifierade avsnitt</h2><p>Läs in tidigare JSON-rapporter och jämför median och spridning. Ingen normalisering görs.</p></div></div>
                 <input id="seriesReportsInput" type="file" accept="application/json,.json" multiple hidden>
                 <button class="button button-secondary" id="openSeriesReportsButton" type="button">Läs in rapporter</button>
@@ -807,7 +882,7 @@
             </div>
 
             <aside class="inspector" aria-label="Metadata och exportåtgärder">
-              <section class="inspector-section metadata-section">
+              <section class="inspector-section metadata-section module-detail-target" id="metadataModule">
                 <div class="inspector-heading"><h2>Metadata</h2><button class="text-button" type="button" id="toggleMetadataButton" aria-expanded="true">Dölj</button></div>
                 <form id="metadataForm">
                   <label class="field-label">Titel<input name="title" type="text" placeholder="Exempel: Cows at dusk"></label>
@@ -840,30 +915,20 @@
                 </form>
               </section>
 
-              <section class="inspector-section capability-section">
+              <section class="inspector-section capability-section module-detail-target" id="capabilityModule">
                 <div class="inspector-heading"><div class="heading-with-help"><h2>Teknisk status</h2><button class="info-dot" type="button" data-help-topic="export-status" aria-label="Om teknisk exportstatus">i</button></div><span class="status-pill" id="capabilityStatus">Kontrollerar</span></div>
                 <ul id="capabilityList"><li><span>Analysmotor</span><strong>Kontrollerar</strong></li><li><span>WAV-export</span><strong>Kontrollerar</strong></li><li><span>Projektfil</span><strong>Inbyggd reserv</strong></li></ul>
               </section>
 
-              <section class="export-action-panel">
-                <div class="export-recommendation" id="exportRecommendation">
-                  <div><strong>Exportkontroll</strong><button class="info-dot" type="button" data-help-topic="export-safety" aria-label="Om exportkontrollen">i</button></div>
-                  <p id="exportRecommendationText">Analysera filen för en rekommendation före export.</p>
-                </div>
-                <button class="button button-primary button-large button-full" id="exportAudioButton" type="button">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 3h2v10.2l3.6-3.6L18 11l-6 6-6-6 1.4-1.4 3.6 3.6V3ZM5 19h14v2H5v-2Z"/></svg>
-                  Exportera ljudfil
-                </button>
-                <div class="secondary-export-actions">
-                  <button class="button button-quiet" id="exportReportButton" type="button">Skapa rapport</button>
-                  <button class="button button-quiet" id="exportJsonButton" type="button">Exportera JSON</button>
-                </div>
-                <p>Filen skapas lokalt. På stora inspelningar kan exporten ta flera minuter.</p>
-              </section>
             </aside>
           </div>
         </section>
       </main>
+
+      <aside class="workflow-action-dock" id="workflowActionDock" hidden data-state="waiting" aria-live="polite">
+        <div class="workflow-action-copy"><span id="workflowActionKicker">Nästa åtgärd</span><strong id="workflowActionHeadline">Välj en WAV-fil</strong><small id="workflowActionDetail">Arbetsflödet börjar när en källfil har öppnats.</small></div>
+        <button class="button button-primary" id="workflowPrimaryAction" type="button" disabled>Väntar</button>
+      </aside>
     </div>
 
     <div class="toast-region" id="toastRegion" aria-live="polite" aria-atomic="true"></div>
@@ -891,9 +956,21 @@
       <div class="full-analysis-shell">
         <div class="dialog-header">
           <div><span class="eyebrow">Utvecklad analys</span><h2 id="fullAnalysisDialogTitle">Allt viktigt, rubrik för rubrik</h2><p>Uppmätta fakta, tolkning och nästa steg hålls tydligt åtskilda.</p></div>
+          <output class="dialog-safety-status" data-monitor-safety-mirror role="status">Säker medhörning väntar på toppanalys</output>
           <button class="icon-button" id="closeFullAnalysisButton" type="button" aria-label="Stäng den fullständiga analysen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6.4 5 5.6 5.6L17.6 5 19 6.4 13.4 12l5.6 5.6-1.4 1.4-5.6-5.6L6.4 19 5 17.6l5.6-5.6L5 6.4 6.4 5Z"/></svg></button>
         </div>
         <div class="full-analysis-content" id="fullAnalysisContent"><p>Analysera filen för att skapa den fullständiga genomgången.</p></div>
+      </div>
+    </dialog>
+
+    <dialog class="workspace-module-dialog" id="workspaceModuleDialog" aria-labelledby="workspaceModuleTitle">
+      <div class="workspace-module-shell">
+        <div class="dialog-header workspace-module-header">
+          <div><span class="eyebrow">Fokuserad modul</span><h2 id="workspaceModuleTitle">Arbetsmodul</h2><p id="workspaceModuleDescription"></p></div>
+          <output class="dialog-safety-status" data-monitor-safety-mirror role="status">Säker medhörning väntar på toppanalys</output>
+          <button class="icon-button" id="closeWorkspaceModuleButton" type="button" aria-label="Stäng modulen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6.4 5 5.6 5.6L17.6 5 19 6.4 13.4 12l5.6 5.6-1.4 1.4-5.6-5.6L6.4 19 5 17.6l5.6-5.6L5 6.4 6.4 5Z"/></svg></button>
+        </div>
+        <div class="workspace-module-content" id="workspaceModuleContent"></div>
       </div>
     </dialog>
 
@@ -931,6 +1008,7 @@
       <div class="local-peak-shell">
         <div class="dialog-header">
           <div><span class="eyebrow">Varsam lokal redigering</span><h2 id="localPeakWorkshopTitle">Lokal toppverkstad</h2><p>Stereolänkade gainkurvor sänker bara valda händelser. Ingen limiter eller kompressor används.</p></div>
+          <output class="dialog-safety-status" data-monitor-safety-mirror role="status">Säker medhörning väntar på toppanalys</output>
           <button class="icon-button" id="closeLocalPeakWorkshopButton" type="button" aria-label="Stäng toppverkstaden"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6.4 5 5.6 5.6L17.6 5 19 6.4 13.4 12l5.6 5.6-1.4 1.4-5.6-5.6L6.4 19 5 17.6l5.6-5.6L5 6.4 6.4 5Z"/></svg></button>
         </div>
         <div class="local-peak-content">

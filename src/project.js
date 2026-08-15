@@ -5,7 +5,7 @@ import { normalizeLocalGainRegions } from "./local-gain.js";
 
 export const PROJECT_SCHEMA = "se.gaia.ljudr.analysis-project/2";
 export const REPORT_SCHEMA = "se.gaia.ljudr.analysis-report/2";
-export const APP_VERSION = "1.0.0-rc.14";
+export const APP_VERSION = "1.0.0-rc.15";
 export const MAX_PROJECT_BYTES = 64 * 1024 * 1024;
 
 const LEGACY_SCHEMA = "se.gaia.ljudr.analysis-project/1";

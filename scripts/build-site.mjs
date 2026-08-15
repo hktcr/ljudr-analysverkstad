@@ -58,7 +58,7 @@ const releaseMeta = {
   commit: releaseCommit,
   builtAt,
   channel: "public-validation-candidate",
-  methodVersion: "ljudr-method/1.0-rc.14",
+  methodVersion: "ljudr-method/1.0-rc.15",
 };
 await writeFile(
   resolve(destination, "src/release-meta.js"),

@@ -1,7 +1,7 @@
 export const RELEASE = Object.freeze({
-  version: "1.0.0-rc.14",
+  version: "1.0.0-rc.15",
   commit: "local-working-tree",
   builtAt: null,
   channel: "public-validation-candidate",
-  methodVersion: "ljudr-method/1.0-rc.14",
+  methodVersion: "ljudr-method/1.0-rc.15",
 });

@@ -9,7 +9,7 @@ import { decodeSampleAt, inspectWav, parseWavHeader as parseSharedWavHeader } fr
 import { sha256Blob } from "./sha256.js";
 import { localGainFactorAtFrame, normalizeLocalGainRegions } from "./local-gain.js";
 
-export const ENGINE_VERSION = "1.0.0-rc.14";
+export const ENGINE_VERSION = "1.0.0-rc.15";
 
 export const DEFAULT_PEAK_HANDLING = Object.freeze({
   enabled: false,

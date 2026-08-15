@@ -17,6 +17,32 @@ const finite = (value, label, minimum, maximum) => {
   return number;
 };
 
+export function monitorSafetyDecision({ analysis = null, trustedSource = false, editDb = 0, headroomDb = -3 } = {}) {
+  const summary = analysis?.summary || {};
+  const sourcePeak = [
+    summary.truePeakEstimateDbtp,
+    summary.truePeakDbtp,
+    summary.truePeak,
+    summary.samplePeakDbfs,
+  ].map(value => value === null || value === undefined || value === "" ? Number.NaN : Number(value)).find(Number.isFinite) ?? null;
+  const safeEditDb = Number.isFinite(Number(editDb)) ? Number(editDb) : 0;
+  const safeHeadroomDb = Number.isFinite(Number(headroomDb)) ? Number(headroomDb) : -3;
+  if (!analysis) return { ready: false, reason: "not-analyzed", sourcePeakDbtp: null, projectedPeakDbtp: null, editDb: safeEditDb, safetyDb: null, totalDb: 0 };
+  if (!trustedSource) return { ready: false, reason: "untrusted-analysis", sourcePeakDbtp: sourcePeak, projectedPeakDbtp: null, editDb: safeEditDb, safetyDb: null, totalDb: 0 };
+  if (sourcePeak === null) return { ready: false, reason: "missing-peak", sourcePeakDbtp: null, projectedPeakDbtp: null, editDb: safeEditDb, safetyDb: null, totalDb: 0 };
+  const projectedPeakDbtp = sourcePeak + safeEditDb;
+  const safetyDb = Math.min(0, safeHeadroomDb - projectedPeakDbtp);
+  return {
+    ready: true,
+    reason: safetyDb < 0 ? "attenuated" : "safe",
+    sourcePeakDbtp: sourcePeak,
+    projectedPeakDbtp,
+    editDb: safeEditDb,
+    safetyDb,
+    totalDb: safeEditDb + safetyDb,
+  };
+}
+
 export function normalizeLocalGainRegion(value, index = 0, frameCount = Number.MAX_SAFE_INTEGER) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`Lokal gainregion ${index + 1} är ogiltig.`);
   const startFrame = integer(value.startFrame, "Startbildruta", 0, frameCount);
@@ -112,4 +138,3 @@ export function buildLocalPeakRegion({
     targetDbtp,
   }, 0, frameCount);
 }
-

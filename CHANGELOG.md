@@ -1,5 +1,24 @@
 # Ändringslogg
 
+## 1.0.0-rc.15, 2026-08-16
+
+- bygger om iPad-flödet till fyra tydliga arbetssteg efter filval: Källanalys, Granska och redigera, Analysera exporturval samt Exportera och verifiera
+- visar exakt en situationsanpassad huvudåtgärd per steg och håller den tillgänglig i en fast åtgärdsrad
+- ersätter täta permanenta arbetsytor med kompakta besluts- och verktygsmoduler som öppnar befintliga kontroller i en gemensam helskärmsyta
+- behåller trimning, kanttoningar, global gain, lokal toppverkstad, jämförande lyssning, rumble, markörer, gAIa-utbyte, metadata och rapporter utan parallella tillstånd eller dubbla kontroller
+- flyttar den verkliga exportknappen före metadata och sekundära exportverktyg i både visuell ordning och dokumentordning
+- visar en kompakt sessionsrad med uppspelning, aktuell tid och säker medhörningsstatus utan att den skymmer arbetsinnehållet
+- gör den fullständiga transporten valfritt expanderbar och bevarar stereo-, kanal- och monolyssning i provlyssningsmodulen
+- kräver genomförd källanalys före uppspelning så att floatmaterial med okänd topp inte kan starta utan beräknad säker monitortrim
+- litar endast på en toppanalys som skapats i den aktuella sessionen för säker medhörning och kräver ny analys efter projektimport
+- ogiltigförklarar både förkontroll och tidigare verifierad WAV när det gemensamma leveranstaket ändras
+- tar bort automatiskt startade käll- och exporturvalsanalyser vid projektåterställning och när en verkstad öppnas
+- låter alla dyra analyser starta genom en uttrycklig knapp med tydligt signalsteg och gör varje relevant redigering förkontrollen inaktuell
+- lägger till en separat rumble- och störningsmodul med faktisk screeningstatus och full förklaring bakom Expandera
+- anpassar iPad stående och liggande med två respektive tre modulkolumner, minst 44 px tryckytor, minst 13 px beslutstext och helskärmsmoduler med fokusåterställning
+- leder alltid tillbaka ett återställt projekt till en ny säker källanalys innan lyssning, redigering eller export kan fortsätta
+- låter Toningar och Global gain uttryckligen aktivera Redigerad WAV-master i sin egen modul utan att profilbytet i sig ändrar ljudet
+
 ## 1.0.0-rc.14, 2026-08-15
 
 - gör huvudnavigeringen till en lugn fyrastegsöversikt med synlig status för varje steg

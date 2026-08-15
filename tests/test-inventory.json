@@ -1,6 +1,6 @@
 {
   "schema": "se.gaia.ljudr.test-inventory/1",
-  "release": "1.0.0-rc.14",
+  "release": "1.0.0-rc.15",
   "files": {
     "analysis-exchange.test.mjs": [
       "kanonisk JSON är nyckelordningsoberoende och digest stabil",
@@ -64,7 +64,10 @@
       "lokal gain använder linjära amplitudramper och full återgång",
       "överlapp använder starkaste sänkningen och staplas inte",
       "toppförslag är stereolänkat, begränsat till filen och har spårbara brytpunkter",
-      "ogiltiga och dubbla regioner avvisas"
+      "ogiltiga och dubbla regioner avvisas",
+      "säker medhörning skapar exakt skyddsmarginal för höga floattoppar",
+      "säker medhörning lämnar redan säkra toppar oförändrade",
+      "nulltopp och importerad analys låser uppspelningen"
     ],
     "opfs.test.mjs": [
       "OPFS registrerar bara complete-exporter och stöder hämta och radera",
@@ -118,6 +121,8 @@
     ],
     "ui-editing.test.mjs": [
       "trimfönstret har 20 minuter som redigerbart standardvärde",
+      "iPadflödet har fyra arbetssteg, en huvudåtgärd och fokuserade moduler",
+      "säker medhörning kräver aktuell toppanalys och takbyte ogiltigförklarar verifiering",
       "toningar är valfria, flexibla och har stora iPad-reglage",
       "medhörningen schemalägger samma linjära fadefunktion med AudioParam",
       "seriereferensen har tre uttryckliga steg och ingen dold toppsänkning",
@@ -152,5 +157,5 @@
       "Ren trimning bevarar PCM32 exakt"
     ]
   },
-  "total": 115
+  "total": 120
 }
