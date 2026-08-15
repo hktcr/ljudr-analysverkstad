@@ -1,4 +1,4 @@
-const CACHE_NAME = "ljudr-shell-v1.0.0-rc.7";
+const CACHE_NAME = "ljudr-shell-v1.0.0-rc.8";
 const SHELL = [
   "./",
   "./index.html",
@@ -15,6 +15,7 @@ const SHELL = [
   "./src/sha256.js",
   "./src/release-meta.js",
   "./src/analysis-exchange.js",
+  "./src/podcast-workflow.js",
   "./validation-manifest.json"
 ];
 

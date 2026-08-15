@@ -1,30 +1,30 @@
-# Releasechecklista för 1.0.0-rc.7
+# Releasechecklista för 1.0.0-rc.8
 
 Status: offentlig valideringskandidat. Inte produktionsverifierad 1.0.
 
 ## Förverifiering 15 augusti 2026
 
-- [x] Fixerad testsuite: 98 av 98 tester, inventering SHA-256 `6b0af009a60b0fc3c7c687e66eb24c4c7885ae6a234b19c3fd70f84dfcb0def9`.
+- [x] Fixerad testsuite: 110 av 110 tester, inventering SHA-256 `10c3e40fe13e284d43406a8e17d38a58a8182cd326f377cb34423828284daae0`.
 - [x] EBU Loudness Test Set v5.0: 68 av 68 krav för 62 relevanta filer.
 - [x] ITU-R BS.2217-2: 19 av 19 relevanta filer inom +/-0,1 LKFS.
-- [x] Syntaxkontroll och `git diff --check` godkända för rc.7.
-- [x] Pagespaket innehåller 18 filer: 17 uttryckligen tillåtna resurser plus hashbundet buildmanifest.
-- [x] Samtliga 18 publika resurser ger HTTP 200 från lokal server.
+- [x] Syntaxkontroll och `git diff --check` godkända för rc.8.
+- [x] Pagespaket innehåller 19 filer: 18 uttryckligen tillåtna resurser plus hashbundet buildmanifest.
+- [x] Samtliga 19 publika resurser ger HTTP 200 från lokal server.
 - [x] Inga spårade ljudfiler, rapporter, projekt, uppenbara hemligheter eller U+2013 hittas.
 - [ ] Commit-, Actions-, artifact- och livekvitton fylls efter publicering.
 
 ## Lokal kandidat
 
 - [ ] Varje releasefil är avsiktligt inkluderad och det publicerade GitHub-trädet matchar det lokalt beräknade trädet exakt.
-- [x] Versionen `1.0.0-rc.7` är konsekvent i paket, app, workers, projekt, rapport, dokumentation, PWA-cache och validation-manifest.
-- [x] Syntaxkontroll, hela fixerade testsuiten med 98 av 98 och `git diff --check` passerar.
-- [x] EBU visar 68/68 och ITU visar 19/19 för exakt releasekod.
+- [x] Versionen `1.0.0-rc.8` är konsekvent i paket, app, workers, projekt, rapport, dokumentation, PWA-cache och validation-manifest.
+- [x] Syntaxkontroll, hela fixerade testsuiten med 110 av 110 och `git diff --check` passerar.
+- [x] EBU 68/68 och ITU 19/19 är oförändrad valideringsbas; rc.8 ändrar inte loudness- eller True Peak-beräkningen.
 - [x] Build skapar endast den uttryckliga allowlisten och `build-manifest.json`.
 - [x] Varje publik fil har SHA-256 i buildmanifestet.
 - [x] Inga ljudfiler, projekt, rapporter, credentials, hemligheter eller U+2013 finns i releasepaketet.
 - [x] Alla publicerade sökvägar är ASCII.
 - [x] Privacy, metod, formatmatris och kända begränsningar motsvarar koden.
-- [x] Schema 1 för exchange och guidance motsvarar dokumenterade fält, gränser och digestregler.
+- [x] Exchange schema 2 och guidance schema 1 motsvarar dokumenterade fält, gränser och digestregler.
 
 ## Säkerhet och integritet
 
@@ -51,7 +51,7 @@ Status: offentlig valideringskandidat. Inte produktionsverifierad 1.0.
 - [x] Pages använder GitHub Actions.
 - [x] Appskalet använder nät först när nät finns, cache endast som reserv och `updateViaCache: none` för service workern.
 - [x] Automatisk aktivering och omladdning blockeras av osparat arbete eller pågående workerjobb.
-- [ ] Liveversionen på `https://hktcr.github.io/ljudr-analysverkstad/` visar `1.0.0-rc.7` och matchar releasecommitten.
+- [ ] Liveversionen på `https://hktcr.github.io/ljudr-analysverkstad/` visar `1.0.0-rc.8` och matchar releasecommitten.
 
 ## Live smoke
 
@@ -70,7 +70,7 @@ Status: offentlig valideringskandidat. Inte produktionsverifierad 1.0.
 
 ## RC-kvitto
 
-- Releaseversion: `1.0.0-rc.7`
+- Releaseversion: `1.0.0-rc.8`
 - Releasecommit: _fylls efter commit_
 - Tree-id: _fylls efter commit_
 - Actions run-id: _fylls efter grön körning_
@@ -78,9 +78,9 @@ Status: offentlig valideringskandidat. Inte produktionsverifierad 1.0.
 - Pages-URL: `https://hktcr.github.io/ljudr-analysverkstad/`
 - Buildmanifest SHA-256: _fylls efter bygg från releasecommit_
 - Livekontroll: _fylls efter publicering_
-- Fixerad testsuite: `98/98`, inventory SHA-256 `6b0af009a60b0fc3c7c687e66eb24c4c7885ae6a234b19c3fd70f84dfcb0def9`
+- Fixerad testsuite: `110/110`, inventory SHA-256 `10c3e40fe13e284d43406a8e17d38a58a8182cd326f377cb34423828284daae0`
 - EBU/ITU: `68/68 respektive 19/19`
-- Validation-manifest SHA-256: `fc6e8f2152bd331ed29e8f3e51437008a29d969c99125a074e9202055b2423c7`
+- Validation-manifest SHA-256: `b3184bc5af9162df3307dc54af3276376c0dd5b76ce699c269e1b17a4805229c`
 - Status: `GO för commit och publicering som publik valideringskandidat`; deploy- och livekvitton återstår.
 
 ## Produktionsport för 1.0.0

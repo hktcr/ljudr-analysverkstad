@@ -26,7 +26,7 @@
           </span>
           <span>
             <strong>LjudR</strong>
-            <small>Analysverkstad <span class="brand-version" id="appVersion" aria-label="Programversion">v1.0.0-rc.7</span></small>
+            <small>Analysverkstad <span class="brand-version" id="appVersion" aria-label="Programversion">v1.0.0-rc.8</span></small>
           </span>
         </a>
 
@@ -322,6 +322,9 @@
                         <div><dt><span>Korrelation</span><button class="info-dot" type="button" data-help-topic="correlation" aria-label="Om stereokorrelation">i</button></dt><dd id="deepCorrelation">saknas</dd></div>
                         <div><dt><span>Kanalbalans L/R</span><button class="info-dot" type="button" data-help-topic="stereo" aria-label="Om kanalbalans">i</button></dt><dd id="deepChannelBalance">saknas</dd></div>
                         <div><dt><span>Mid/Side-förhållande</span><button class="info-dot" type="button" data-help-topic="mid-side" aria-label="Om Mid Side-förhållande">i</button></dt><dd id="deepMidSide">saknas</dd></div>
+                        <div><dt><span>Mono fold-down, nivådelta</span><button class="info-dot" type="button" data-help-topic="correlation" aria-label="Om mono fold-downs nivådelta">i</button></dt><dd id="deepMonoDelta">saknas</dd></div>
+                        <div><dt><span>Mono fold-down, sample peak</span><button class="info-dot" type="button" data-help-topic="correlation" aria-label="Om mono fold-downs sample peak">i</button></dt><dd id="deepMonoPeak">saknas</dd></div>
+                        <div><dt><span>Negativ korrelation</span><button class="info-dot" type="button" data-help-topic="correlation" aria-label="Om varaktigt negativ stereokorrelation">i</button></dt><dd id="deepNegativeCorrelation">saknas</dd></div>
                       </dl>
                     </section>
                     <section class="measurement-group">
@@ -338,6 +341,11 @@
                     <span class="validation-dot" aria-hidden="true"></span>
                     <p><strong>Valideringsstatus visas efter analys.</strong> Ett True Peak-estimat ska inte användas som leveranskrav innan metoden är verifierad mot officiellt testmaterial.</p>
                   </div>
+                  <section class="spectral-diagnostics" aria-labelledby="spectralDiagnosticsTitle">
+                    <div><h3 id="spectralDiagnosticsTitle">Frivillig spektral orientering</h3><p>Samplar deterministiska fönster för lågfrekvent rumble och 50 Hz-brum. Resultatet är en granskningspunkt, inte ett felbesked eller ett EQ-förslag.</p></div>
+                    <button class="button button-secondary button-small" id="runSpectralDiagnosticsButton" type="button" disabled>Mät rumble och nätbrum</button>
+                    <dl id="spectralDiagnosticsResult"><div><dt>Status</dt><dd>Inte körd</dd></div></dl>
+                  </section>
                 </div>
               </details>
 
@@ -401,7 +409,7 @@
                 </div>
                 <div class="marker-compose" id="markerCompose" hidden>
                   <label>Beskrivning<input type="text" id="markerText" maxlength="120" placeholder="Exempel: ko råmar nära mikrofonen"></label>
-                  <label>Typ<select id="markerType"><option value="descriptive">Beskrivande</option><option value="technical">Teknisk</option><option value="user">Egen</option></select></label>
+                  <label>Typ<select id="markerType"><option value="descriptive">Beskrivande</option><option value="technical">Teknisk</option><option value="privacy">Röst eller integritet</option><option value="keep">Behåll</option><option value="remove">Överväg att ta bort</option><option value="chapter">Ljudhändelse eller kapitel</option><option value="user">Egen</option></select></label>
                   <div class="inline-actions"><button class="button button-primary button-small" id="confirmMarkerButton" type="button">Spara</button><button class="button button-quiet button-small" id="cancelMarkerButton" type="button">Avbryt</button></div>
                 </div>
                 <ol class="marker-list" id="markerList"><li class="list-placeholder">Inga markörer ännu</li></ol>
@@ -601,7 +609,7 @@
                 </label><button class="info-dot profile-info" type="button" data-help-topic="distribution-export" aria-label="Om redigerad WAV-master">i</button></div>
               </fieldset>
 
-              <p class="scope-note"><strong>Distributionsformat ligger utanför 1.0.</strong> AAC, MP3, FLAC och Spotify-publicering görs inte här. Ta WAV-mastern vidare till Ferrite.</p>
+              <p class="scope-note"><strong>Distributionsformat ligger utanför 1.0.</strong> Spotify for Creators kan ta emot den verifierade WAV-mastern direkt. Använd Ferrite när avsnittet behöver interna klipp, montage eller separat codec-export.</p>
 
               <div class="export-progress" id="exportProgress" hidden aria-live="polite">
                 <div class="progress-copy"><strong id="exportProgressLabel">Förbereder export</strong><span id="exportProgressPercent">0 %</span></div>
@@ -612,6 +620,29 @@
               <section class="stored-exports" aria-labelledby="storedExportsTitle">
                 <div class="stored-exports-heading"><div><h2 id="storedExportsTitle">Lokala arbetsfiler</h2><p>Färdiga filer behålls lokalt eftersom webbläsaren inte kan bekräfta att Filer tog emot dem.</p></div><button class="button button-quiet button-small" id="clearStoredExportsButton" type="button">Rensa alla</button></div>
                 <ul id="storedExportsList"><li class="list-placeholder">Inga lokala arbetsfiler</li></ul>
+              </section>
+
+              <section class="podcast-publication-card" aria-labelledby="publicationCardTitle">
+                <div class="section-heading compact-heading"><div><span class="eyebrow">Twenty Minutes Here</span><h2 id="publicationCardTitle">Publiceringskort</h2><p>Mjuka spärrar för en verifierad och genomlyssnad master. En motiverad avvikelse kan dokumenteras.</p></div><span class="status-pill" id="publicationStatus">Granskning krävs</span></div>
+                <div class="publication-auto-checks" id="publicationAutoChecks"></div>
+                <fieldset class="publication-manual-checks">
+                  <legend>Manuell genomlyssning</legend>
+                  <label><input type="checkbox" name="publicationCheck" value="fullListen">Hela exporten genomlyssnad</label>
+                  <label><input type="checkbox" name="publicationCheck" value="boundaries">Början och slutet kontrollerade</label>
+                  <label><input type="checkbox" name="publicationCheck" value="stereo">Stereo provlyssnat</label>
+                  <label><input type="checkbox" name="publicationCheck" value="mono">Mono provlyssnat</label>
+                  <label><input type="checkbox" name="publicationCheck" value="privacy">Röster, privat information och platsdata bedömda</label>
+                  <label><input type="checkbox" name="publicationCheck" value="archiveSaved">Projekt, rapport och master sparade i avsnittsarkivet</label>
+                </fieldset>
+                <label class="field-label">Motiverad avvikelse<textarea id="publicationExceptionNote" rows="2" placeholder="Lämnas tom när alla kontroller är klara"></textarea></label>
+                <button class="button button-primary" id="exportEpisodeHandoffButton" type="button" disabled>Exportera avsnittspaket</button>
+              </section>
+
+              <section class="series-overview" aria-labelledby="seriesOverviewTitle">
+                <div class="section-heading compact-heading"><div><span class="eyebrow">Seriekonsekvens</span><h2 id="seriesOverviewTitle">Jämför verifierade avsnitt</h2><p>Läs in tidigare JSON-rapporter och jämför median och spridning. Ingen normalisering görs.</p></div></div>
+                <input id="seriesReportsInput" type="file" accept="application/json,.json" multiple hidden>
+                <button class="button button-secondary" id="openSeriesReportsButton" type="button">Läs in rapporter</button>
+                <div id="seriesOverviewResult" class="series-overview-result"><p>Inga tidigare rapporter inlästa.</p></div>
               </section>
             </div>
 
@@ -704,6 +735,12 @@
         </div>
         <div class="exchange-dialog-content">
           <fieldset class="exchange-profile-picker">
+            <legend>Analysstadium</legend>
+            <label><input type="radio" name="exchangeStage" value="source"><span><strong>Källfil</strong><small>Originalets signal före trimning och nivåval.</small></span></label>
+            <label><input type="radio" name="exchangeStage" value="calculated-export-selection" checked><span><strong>Beräknat exporturval</strong><small>Aktuellt trimfönster efter synliga fades och global gain, före kvantisering.</small></span></label>
+            <label><input type="radio" name="exchangeStage" value="verified-output"><span><strong>Verifierad WAV</strong><small>Den faktiskt skrivna och återöppnade exportfilen. Tillgänglig efter export.</small></span></label>
+          </fieldset>
+          <fieldset class="exchange-profile-picker">
             <legend>Dataprofil</legend>
             <label><input type="radio" name="exchangeProfile" value="minimal" checked><span><strong>Minimal</strong><small>Sammanfattande mått, maskinella observationer och markörer. Ingen kontinuerlig tidsserie, waveform, RMS-array eller samples.</small></span></label>
             <label><input type="radio" name="exchangeProfile" value="temporal-diagnostics"><span><strong>Temporal diagnostik</strong><small>Grova 5-sekundersaggregat för programnivå och stereokorrelation, högst 720 segment. Aldrig waveform, L/R-nivåserier, RMS, råa samples eller ljud.</small></span></label>
@@ -716,6 +753,7 @@
             <label><input type="checkbox" name="includeLocation"><span>Plats och koordinater enligt valt integritetsläge</span></label>
             <label><input type="checkbox" name="includeNotes"><span>Taggar, miljö, anteckningar och relaterad länk</span></label>
             <label><input type="checkbox" name="includeCreator"><span>Skapare, utrustning och licens</span></label>
+            <label><input type="checkbox" name="includeEditorialCueSheet"><span>Integritetsgranskat redaktionellt cue sheet med egna markörtexter</span></label>
           </fieldset>
           <section class="exchange-manifest" aria-labelledby="exchangeManifestTitle"><h3 id="exchangeManifestTitle">Detta kommer med</h3><ul id="exchangeManifestList"></ul></section>
           <details class="exchange-json-preview" open><summary>Exakt JSON-preview</summary><pre id="exchangeJsonPreview" tabindex="0">Välj profil för att skapa preview.</pre></details>

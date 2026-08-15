@@ -147,6 +147,10 @@ test("metadata kräver separat opt-in och Minimal läcker ingen fri markörtext"
   assert.equal(visible.analysis.metadata.sourceFileName, "secret.wav");
   assert.equal(visible.analysis.metadata.identity.title, "Titel");
   assert.doesNotMatch(visible.analysis.markers[0].summary, /Hemligt/);
+  const redactedCoordinates = buildAnalysisBundle({ analysis: input, metadata: { coordinates: { latitude: 59.329323499, longitude: 18.0685808 } }, privacy: "redacted", privacySelection: { includeLocation: true } }, { bundleId: "423e4567-e89b-42d3-a456-426614174000", createdAt: "2026-08-15T12:00:00Z" });
+  assert.deepEqual(redactedCoordinates.analysis.metadata.location.coordinates, { latitude: 59.33, longitude: 18.07, precision: "redacted" });
+  const exactCoordinates = buildAnalysisBundle({ analysis: input, metadata: { coordinates: { latitude: 59.329323499, longitude: 18.0685808 } }, privacy: "exact", privacySelection: { includeLocation: true } }, { bundleId: "523e4567-e89b-42d3-a456-426614174000", createdAt: "2026-08-15T12:00:00Z" });
+  assert.equal(exactCoordinates.analysis.metadata.location.coordinates.latitude, 59.329323499);
 });
 
 test("långa tidslinjer får högst 720 deterministiska segment med 5 s multipel", () => {
@@ -198,4 +202,30 @@ test("strict schema avvisar okända och feltypade nested scalarer efter omdigest
   second.analysis.evidence[0].extra = true;
   second.analysisDigest = digestCanonical({ schema: second.schema, bundleId: second.bundleId, profile: second.profile, privacy: second.privacy, createdAt: second.createdAt, analysis: second.analysis });
   assert.throws(() => validateAnalysisBundle(second), error => error.code === "INVALID_ANALYSIS_BUNDLE");
+});
+
+test("trimmat signalsteg använder urvalsrelativ tidsaxel och bevarar maskintyp", () => {
+  const source = analysis();
+  source.format.durationSeconds = 10;
+  source.format.frameCount = 480000;
+  source.region = { ...source.region, startFrame: 144000, endFrame: 240000, selectedFrames: 96000 };
+  source.markersSuggested = [
+    { machineKind: "negative-stereo-correlation", text: "Appformad markör", severity: "review", startSeconds: 0.5, endSeconds: 1.5, objective: true },
+    { machineKind: "outside-selection", severity: "review", startSeconds: 4, endSeconds: 4.2, objective: true },
+  ];
+  const bundle = buildAnalysisBundle({ analysis: analysis(), selectedAnalysis: source, signalStage: "calculated-export-selection", markers: source.markersSuggested }, { bundleId: uuid, createdAt: "2026-08-15T12:00:00Z" });
+  assert.equal(bundle.analysis.signalStage, "calculated-export-selection");
+  assert.equal(bundle.analysis.format.durationSeconds, 2);
+  assert.equal(bundle.analysis.markers.length, 1);
+  assert.equal(bundle.analysis.markers[0].type, "negative-stereo-correlation");
+  assert.deepEqual([bundle.analysis.markers[0].startSeconds, bundle.analysis.markers[0].endSeconds], [1, 2]);
+});
+
+test("redaktionell kontext och cue sheet hålls åtskilda från objektiva markörer", () => {
+  const context = { classification: "editorial", seriesProfileId: "twenty-minutes-here", seriesProfileVersion: "1", purpose: "distribution", targetDurationSeconds: 1200, durationToleranceSeconds: 0.001, loudnessOrientation: { targetLufs: -19, rangeMinLufs: -20, rangeMaxLufs: -18, rationale: "Intern orientering" }, truePeakOrientationDbtp: -2, continuityPolicy: "Bevara", questions: ["Lyssna?"] };
+  const cue = [{ id: "cue-1", type: "privacy", startSeconds: 1, endSeconds: 2, text: "Granska rösten", reviewStatus: "unreviewed", classification: "editorial" }];
+  const bundle = buildAnalysisBundle({ analysis: analysis(), editorialContext: context, editorialCueSheet: cue }, { bundleId: uuid, createdAt: "2026-08-15T12:00:00Z" });
+  assert.equal(bundle.analysis.editorialContext.classification, "editorial");
+  assert.equal(bundle.analysis.editorialCueSheet[0].text, "Granska rösten");
+  assert.doesNotMatch(bundle.analysis.markers[0].summary, /rösten/i);
 });

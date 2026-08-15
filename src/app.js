@@ -1,5 +1,14 @@
 import { inspectWav } from "./wav.js";
 import { RELEASE } from "./release-meta.js";
+import {
+  TMH_SERIES_PROFILE,
+  buildEditorialContext,
+  buildEditorialCueSheet,
+  buildEpisodeHandoff,
+  publicationStatus,
+  selectAnalysisStage,
+  summarizeSeriesReports,
+} from "./podcast-workflow.js";
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
@@ -14,6 +23,7 @@ const state = {
   exportStatus: "idle",
   lastExportReport: null,
   regionAnalysis: null,
+  regionStatus: "idle",
   verifiedExport: null,
   exportProfile: "sample-payload-trim",
   dirty: false,
@@ -27,7 +37,13 @@ const state = {
     gainDb: 0,
   },
   trimWindowSeconds: 20 * 60,
-  series: { status: "preserved", proposedGainDb: null, targetLufs: -19, rangeMinLufs: -20, rangeMaxLufs: -18, ceilingDbtp: -2 },
+  series: { status: "preserved", proposedGainDb: null, profileId: TMH_SERIES_PROFILE.id, profileVersion: TMH_SERIES_PROFILE.version, targetLufs: TMH_SERIES_PROFILE.targetLufs, rangeMinLufs: TMH_SERIES_PROFILE.rangeMinLufs, rangeMaxLufs: TMH_SERIES_PROFILE.rangeMaxLufs, ceilingDbtp: TMH_SERIES_PROFILE.truePeakOrientationDbtp },
+  spectralDiagnostics: null,
+  publication: {
+    manual: { fullListen: false, boundaries: false, stereo: false, mono: false, privacy: false, archiveSaved: false },
+    exceptionNote: "",
+  },
+  seriesOverview: null,
   monitoring: {
     volume: 0.8,
     levelMatched: false,
@@ -59,7 +75,7 @@ const state = {
   },
   markerFilter: "all",
   markers: [],
-  jobs: { analysis: null, region: null, detail: null, export: null, storage: null },
+  jobs: { analysis: null, region: null, detail: null, spectral: null, export: null, storage: null },
   storedExports: [],
   analysisExchange: {
     preview: null,
@@ -251,6 +267,15 @@ const elements = {
   cancelExport: $("#cancelExportButton"),
   storedExportsList: $("#storedExportsList"),
   clearStoredExports: $("#clearStoredExportsButton"),
+  runSpectralDiagnostics: $("#runSpectralDiagnosticsButton"),
+  spectralDiagnosticsResult: $("#spectralDiagnosticsResult"),
+  publicationStatus: $("#publicationStatus"),
+  publicationAutoChecks: $("#publicationAutoChecks"),
+  publicationExceptionNote: $("#publicationExceptionNote"),
+  exportEpisodeHandoff: $("#exportEpisodeHandoffButton"),
+  seriesReportsInput: $("#seriesReportsInput"),
+  openSeriesReports: $("#openSeriesReportsButton"),
+  seriesOverviewResult: $("#seriesOverviewResult"),
   capabilityStatus: $("#capabilityStatus"),
   capabilityList: $("#capabilityList"),
   recordingType: $("#recordingType"),
@@ -662,10 +687,18 @@ function isCurrentJob(operation, data = {}) {
 }
 
 function markEditChanged(reason = "edit") {
+  const activeRegionJob = state.jobs.region;
+  const activeSpectralJob = state.jobs.spectral;
+  if (activeRegionJob) analysisWorker?.postMessage({ type: "cancel", jobId: activeRegionJob, operation: "analyze-region" });
+  if (activeSpectralJob) analysisWorker?.postMessage({ type: "cancel", jobId: activeSpectralJob, operation: "spectral-diagnostics" });
+  state.jobs.region = null;
+  state.jobs.spectral = null;
   state.dirty = true;
   state.regionAnalysis = null;
+  state.regionStatus = "stale";
   state.verifiedExport = null;
   state.lastExportReport = null;
+  state.spectralDiagnostics = null;
   state.analysisExchange.preview = null;
   state.analysisExchange.lastBundle = null;
   state.analysisExchange.lastBundleBlob = null;
@@ -682,6 +715,11 @@ function markEditChanged(reason = "edit") {
   if (state.exportStatus === "complete") state.exportStatus = "idle";
   if (elements.regionMeasureStatus) elements.regionMeasureStatus.textContent = "Behöver beräknas på nytt";
   if (elements.verifiedMeasureStatus) elements.verifiedMeasureStatus.textContent = "Ogiltig efter ändring";
+  renderSpectralDiagnostics();
+  renderDeepMeasurements();
+  updateProjectedMetrics();
+  updateExportRecommendation();
+  renderPublicationCard();
   window.clearTimeout(regionTimer);
   regionTimer = window.setTimeout(requestRegionAnalysis, 450);
   emitState(reason);
@@ -786,17 +824,23 @@ async function openAudioFile(file) {
   analysisWorker = null;
   exportWorker?.terminate();
   exportWorker = null;
-  state.jobs = { analysis: null, region: null, detail: null, export: null, storage: null };
+  state.jobs = { analysis: null, region: null, detail: null, spectral: null, export: null, storage: null };
   if (state.fileUrl) URL.revokeObjectURL(state.fileUrl);
   state.file = file;
   state.fileUrl = URL.createObjectURL(file);
   state.fileInfo = null;
   state.analysis = null;
   state.regionAnalysis = null;
+  state.regionStatus = "idle";
   state.verifiedExport = null;
   state.analysisStatus = "idle";
   state.exportStatus = "idle";
   state.lastExportReport = null;
+  state.spectralDiagnostics = null;
+  state.publication = {
+    manual: { fullListen: false, boundaries: false, stereo: false, mono: false, privacy: false, archiveSaved: false },
+    exceptionNote: "",
+  };
   state.analysisExchange.preview = null;
   state.analysisExchange.lastBundle = null;
   state.analysisExchange.lastBundleBlob = null;
@@ -820,7 +864,7 @@ async function openAudioFile(file) {
   state.trim.gainDb = 0;
   state.trim.fadeInSeconds = 0;
   state.trim.fadeOutSeconds = 0;
-  state.series = { status: "preserved", proposedGainDb: null, targetLufs: -19, rangeMinLufs: -20, rangeMaxLufs: -18, ceilingDbtp: -2 };
+  state.series = { status: "preserved", proposedGainDb: null, profileId: TMH_SERIES_PROFILE.id, profileVersion: TMH_SERIES_PROFILE.version, targetLufs: TMH_SERIES_PROFILE.targetLufs, rangeMinLufs: TMH_SERIES_PROFILE.rangeMinLufs, rangeMaxLufs: TMH_SERIES_PROFILE.rangeMaxLufs, ceilingDbtp: TMH_SERIES_PROFILE.truePeakOrientationDbtp };
   elements.fileName.textContent = file.name;
   elements.fileTechnical.textContent = `${formatBytes(file.size)} · läser WAVE-rubrik`;
   elements.fileStrip.hidden = false;
@@ -852,6 +896,8 @@ async function openAudioFile(file) {
   syncTrimUi();
   renderMarkers();
   renderAnalysisSummary();
+  renderSpectralDiagnostics();
+  renderPublicationCard();
   if (state.pendingProject) await applyPendingProjectToFile();
   setMode("analyze");
   showToast("Filen öppnades lokalt. Originalet är oförändrat.");
@@ -908,19 +954,23 @@ function setDetailStatus(message, busy = false) {
 }
 
 function handleAnalysisMessage(data = {}) {
-  const operation = data.operation === "analyze-region" ? "region" : data.operation === "waveform-detail" ? "detail" : "analysis";
+  const operation = data.operation === "analyze-region" ? "region"
+    : data.operation === "waveform-detail" ? "detail"
+      : data.operation === "spectral-diagnostics" ? "spectral" : "analysis";
   if (!isCurrentJob(operation, data)) return;
   if (data.type === "progress") {
     if (operation === "analysis") updateAnalysisProgress(data.fraction, data.message || data.phase, false, data.phase);
     else if (operation === "detail" && elements.detailStatus) setDetailStatus(data.message || "Läser detaljdata", true);
     else if (operation === "region" && elements.regionMeasureStatus) elements.regionMeasureStatus.textContent = data.message || "Beräknar exporturval";
+    else if (operation === "spectral" && elements.spectralDiagnosticsResult) elements.spectralDiagnosticsResult.innerHTML = `<div><dt>Status</dt><dd>${escapeHtml(data.message || "Samplar lokalt")}</dd></div>`;
     return;
   }
   if (data.type === "cancelled") {
     state.jobs[operation] = null;
     if (operation === "analysis") finishAnalysisJob("Analysen avbröts");
-    if (operation === "region") { elements.regionMeasureStatus.textContent = "Beräkningen avbröts"; elements.cancelRegion.hidden = true; }
+    if (operation === "region") { state.regionStatus = "cancelled"; elements.regionMeasureStatus.textContent = "Beräkningen avbröts"; elements.cancelRegion.hidden = true; renderDeepMeasurements(); updateProjectedMetrics(); }
     if (operation === "detail") setDetailStatus("Detaljläsningen avbröts", false);
+    if (operation === "spectral") renderSpectralDiagnostics("Avbruten");
     if (operation === "region" || operation === "analysis") syncAnalysisExchangeAvailability();
     return;
   }
@@ -928,6 +978,7 @@ function handleAnalysisMessage(data = {}) {
     const result = data.result ?? data;
     if (operation === "region") applyRegionResult(result);
     else if (operation === "detail") applyDetailResult(result);
+    else if (operation === "spectral") applySpectralDiagnosticsResult(result);
     else applyAnalysisResult(result);
     return;
   }
@@ -935,7 +986,8 @@ function handleAnalysisMessage(data = {}) {
     state.jobs[operation] = null;
     if (operation !== "analysis") {
       if (operation === "detail" && elements.detailStatus) setDetailStatus("Detaljdata kunde inte läsas", false);
-      if (operation === "region" && elements.regionMeasureStatus) { elements.regionMeasureStatus.textContent = "Beräkningen misslyckades"; elements.cancelRegion.hidden = true; }
+      if (operation === "region" && elements.regionMeasureStatus) { state.regionStatus = "error"; elements.regionMeasureStatus.textContent = "Beräkningen misslyckades"; elements.cancelRegion.hidden = true; renderDeepMeasurements(); updateProjectedMetrics(); }
+      if (operation === "spectral") renderSpectralDiagnostics("Kunde inte beräknas");
       if (operation === "region") syncAnalysisExchangeAvailability();
       return;
     }
@@ -1049,6 +1101,7 @@ function applyAnalysisResult(result) {
         seconds,
         endSeconds: finite(suggestion.endSeconds) ?? seconds,
         type: suggestion.type || "technical",
+        machineKind: suggestion.machineKind || suggestion.kind || suggestion.type || null,
         severity: suggestion.severity || "info",
         channel: suggestion.channel ?? null,
         detail: suggestion.detail || suggestion.message || "",
@@ -1064,6 +1117,7 @@ function applyAnalysisResult(result) {
   renderAnalysisSummary();
   renderObservations();
   renderMarkers();
+  renderPublicationCard();
   scheduleCanvasRender();
   updateCapabilities(true, state.capabilities.export);
   requestRegionAnalysis();
@@ -1092,6 +1146,7 @@ function requestRegionAnalysis() {
   if (previous) analysisWorker.postMessage({ type: "cancel", jobId: previous, operation: "analyze-region" });
   const jobId = nextJobId("region");
   state.jobs.region = jobId;
+  state.regionStatus = "running";
   syncAnalysisExchangeAvailability();
   if (elements.regionMeasureStatus) elements.regionMeasureStatus.textContent = "Beräknar exakt urval";
   elements.cancelRegion.hidden = false;
@@ -1100,6 +1155,7 @@ function requestRegionAnalysis() {
 
 function applyRegionResult(result) {
   state.regionAnalysis = result;
+  state.regionStatus = "complete";
   state.jobs.region = null;
   syncAnalysisExchangeAvailability();
   elements.cancelRegion.hidden = true;
@@ -1108,8 +1164,49 @@ function applyRegionResult(result) {
   const peak = finite(summary.truePeakEstimateDbtp ?? summary.truePeakDbtp ?? summary.truePeak);
   if (elements.regionMeasureStatus) elements.regionMeasureStatus.textContent = `${lufs === null ? "LUFS saknas" : `${formatDecimal(lufs, 1)} LUFS-I`} · ${peak === null ? "TP saknas" : `${formatDecimal(peak, 1)} dBTP`}`;
   renderCanvasTextAlternative();
+  renderDeepMeasurements();
+  updateProjectedMetrics();
   updateExportSummary();
+  renderPublicationCard();
   emitState("region-analysis-complete");
+}
+
+function requestSpectralDiagnostics() {
+  if (!state.file || !state.analysis || !state.capabilities.workers || state.jobs.spectral) return;
+  ensureAnalysisWorker();
+  const jobId = nextJobId("spectral");
+  state.jobs.spectral = jobId;
+  elements.runSpectralDiagnostics.disabled = true;
+  elements.spectralDiagnosticsResult.innerHTML = "<div><dt>Status</dt><dd>Förbereder lokal sampling</dd></div>";
+  analysisWorker.postMessage({ type: "spectral-diagnostics", jobId, file: state.file, options: regionOptions() });
+}
+
+function applySpectralDiagnosticsResult(result) {
+  state.jobs.spectral = null;
+  state.spectralDiagnostics = result;
+  elements.runSpectralDiagnostics.disabled = false;
+  renderSpectralDiagnostics();
+  emitState("spectral-diagnostics-complete");
+}
+
+function renderSpectralDiagnostics(status = null) {
+  if (!elements.spectralDiagnosticsResult) return;
+  if (status) {
+    elements.spectralDiagnosticsResult.innerHTML = `<div><dt>Status</dt><dd>${escapeHtml(status)}</dd></div>`;
+    if (elements.runSpectralDiagnostics) elements.runSpectralDiagnostics.disabled = !state.analysis;
+    return;
+  }
+  const result = state.spectralDiagnostics;
+  if (!result) {
+    elements.spectralDiagnosticsResult.innerHTML = "<div><dt>Status</dt><dd>Inte körd</dd></div>";
+    if (elements.runSpectralDiagnostics) elements.runSpectralDiagnostics.disabled = !state.analysis;
+    return;
+  }
+  elements.spectralDiagnosticsResult.innerHTML = `
+    <div><dt>Sampling</dt><dd>${Number(result.windowCount || 0)} fönster, ${formatDecimal(result.sampledSeconds, 1)} s totalt</dd></div>
+    <div><dt>Lågfrekvent energi</dt><dd>median ${formatDecimal(result.lowFrequencyEnergyPercentMedian, 1)} %, max ${formatDecimal(result.lowFrequencyEnergyPercentMaximum, 1)} %</dd></div>
+    <div><dt>50 Hz</dt><dd>median ${formatDecimal(result.mainsHum50RelativeDbMedian, 1)} dB, max ${formatDecimal(result.mainsHum50RelativeDbMaximum, 1)} dB relativt</dd></div>
+    <div><dt>Tolkning</dt><dd>${escapeHtml(result.interpretation || "Samplad orientering för mänsklig granskning")}</dd></div>`;
 }
 
 function requestWaveformDetail() {
@@ -1307,17 +1404,22 @@ function updateExportRecommendation() {
   if (trimmed) changes.push("trimning");
   if (state.trim.fadeInSeconds > 0 || state.trim.fadeOutSeconds > 0) changes.push("toningar");
   if (Math.abs(state.trim.gainDb) > 1e-9) changes.push("global gain");
+  const decision = decisionMeasurement();
   const peak = analysisTruePeakDbtp();
-  const predicted = peak === null ? null : peak + state.trim.gainDb;
+  const predicted = peak === null ? null : peak + decision.gainAdjustmentDb;
   if (!changes.length) {
     elements.exportRecommendationText.textContent = "Inga bearbetningar är valda. Hela filen kan bevaras utan omräkning av ljudsamplingarna.";
+  } else if (decision.stage === "waiting") {
+    elements.exportRecommendationText.textContent = `Valt: ${changes.join(", ")}. Beräknar aktuellt exporturval innan rekommendationen visas.`;
   } else if (predicted !== null && predicted > 0) {
     elements.exportRecommendationText.textContent = `Valt: ${changes.join(", ")}. Det orienterande toppestimatet ligger över 0 dBTP. Sänk den synliga globala gainen före export. Ingen dold toppsänkning görs.`;
   } else {
     const ditherText = state.fileInfo?.encoding === "PCM" && changes.some(item => item !== "trimning")
       ? "PCM samplingarna räknas om med TPDF dither."
       : "Exportmotorn gör en ny toppförkontroll på exakt valt utsnitt.";
-    elements.exportRecommendationText.textContent = `Valt: ${changes.join(", ")}. ${ditherText} Provlyssna den sparade filen.`;
+    const seriesText = predicted !== null && predicted > state.series.ceilingDbtp
+      ? ` Det ligger över den frivilliga serieorienteringen ${formatDecimal(state.series.ceilingDbtp, 1)} dBTP, men innebär inte i sig teknisk klamprisk.` : "";
+    elements.exportRecommendationText.textContent = `Valt: ${changes.join(", ")}. ${ditherText}${seriesText} Provlyssna den sparade filen.`;
   }
 }
 
@@ -1343,6 +1445,12 @@ function renderDeepMeasurements() {
   set("#deepCorrelation", finite(summary.correlation) === null ? "saknas" : formatDecimal(summary.correlation, 4));
   set("#deepChannelBalance", db(summary.channelBalanceDb, "dB"));
   set("#deepMidSide", db(summary.midSideRatioDb, "dB"));
+  const monoSummary = state.regionAnalysis?.processed?.summary || null;
+  const mono = monoSummary?.monoCompatibility || {};
+  const monoWaiting = Boolean(state.analysis && !monoSummary && !["error", "cancelled"].includes(state.regionStatus));
+  set("#deepMonoDelta", monoWaiting ? "beräknar urval" : db(mono.energyDeltaDb, "dB"));
+  set("#deepMonoPeak", monoWaiting ? "beräknar urval" : db(mono.samplePeakDbfs, "dBFS"));
+  set("#deepNegativeCorrelation", monoWaiting ? "beräknar urval" : finite(mono.negativeCorrelationPercent) === null ? "saknas" : `${formatDecimal(mono.negativeCorrelationPercent, 1)} % · ${Array.isArray(mono.negativeCorrelationRegions) ? mono.negativeCorrelationRegions.length : 0} regioner`);
   set("#deepDcLeft", finite(channels[0]?.dcOffset) === null ? "saknas" : Number(channels[0].dcOffset).toExponential(4));
   set("#deepDcRight", finite(channels[1]?.dcOffset) === null ? (channels.length === 1 ? "mono" : "saknas") : Number(channels[1].dcOffset).toExponential(4));
   set("#deepOverrange", finite(summary.overrangeSamples) === null ? "saknas" : `${Number(summary.overrangeSamples).toLocaleString("sv-SE")} samplingar`);
@@ -1386,7 +1494,7 @@ function renderObservations() {
 }
 
 function renderMarkers() {
-  const markerTypes = new Set(["descriptive", "technical", "user", "note"]);
+  const markerTypes = new Set(["descriptive", "technical", "privacy", "keep", "remove", "chapter", "user", "note"]);
   state.markers = (Array.isArray(state.markers) ? state.markers : []).map((marker, index) => {
     const seconds = finite(marker?.seconds);
     if (seconds === null) return null;
@@ -1395,6 +1503,7 @@ function renderMarkers() {
       seconds: Math.max(0, seconds),
       endSeconds: Math.max(0, finite(marker?.endSeconds) ?? seconds),
       type: markerTypes.has(marker?.type) ? marker.type : "user",
+      machineKind: marker?.machineKind || marker?.kind || null,
       text: String(marker?.text ?? marker?.label ?? "Markör"),
       detail: String(marker?.detail ?? ""),
       severity: ["critical", "review", "info"].includes(marker?.severity) ? marker.severity : /warning|error|critical/i.test(marker?.severity || "") ? "critical" : /notice|technical/i.test(marker?.severity || "") ? "review" : "info",
@@ -1574,8 +1683,14 @@ function updateFade(kind, value, enabled = true) {
   markEditChanged("fade");
 }
 
+function decisionMeasurement() {
+  if (state.regionAnalysis?.processed?.summary) return { summary: state.regionAnalysis.processed.summary, stage: "calculated", gainAdjustmentDb: 0 };
+  const waiting = Boolean(state.analysis && !["error", "cancelled"].includes(state.regionStatus));
+  return { summary: state.analysis?.summary || {}, stage: waiting ? "waiting" : "source", gainAdjustmentDb: state.trim.gainDb };
+}
+
 function analysisTruePeakDbtp() {
-  const summary = state.analysis?.summary || {};
+  const summary = decisionMeasurement().summary;
   return finite(summary.truePeakEstimateDbtp ?? summary.truePeakDbtp ?? summary.truePeak);
 }
 
@@ -1631,10 +1746,17 @@ function updateGain(value, options = {}) {
 }
 
 function updateProjectedMetrics() {
-  const summary = state.analysis?.summary || {};
+  const decision = decisionMeasurement();
+  const summary = decision.summary;
   const lufs = finite(summary.integratedLufs ?? summary.lufsI);
   const peak = analysisTruePeakDbtp();
-  const gain = state.trim.gainDb;
+  const gain = decision.gainAdjustmentDb;
+  if (decision.stage === "waiting") {
+    elements.projectedLufs.textContent = "beräknar urval";
+    elements.projectedPeak.textContent = "beräknar urval";
+    elements.gainNotice.hidden = true;
+    return;
+  }
   elements.projectedLufs.textContent = lufs === null ? "saknas" : `${formatDecimal(lufs + gain, 1)} LUFS`;
   elements.projectedPeak.textContent = peak === null ? "saknas" : `${formatDecimal(peak + gain, 1)} dBTP`;
   const projectedPeak = peak === null ? null : peak + gain;
@@ -2180,13 +2302,17 @@ async function loadAnalysisExchangeTools() {
 
 function syncAnalysisExchangeAvailability() {
   const analysisReady = Boolean(analysisExchangeTools && state.file && state.analysisStatus === "complete" && state.analysis);
-  const ready = Boolean(analysisReady && state.regionAnalysis && !state.jobs.region);
+  const requestedStage = exchangeStage();
+  const stageReady = requestedStage === "source"
+    || (requestedStage === "calculated-export-selection" && state.regionAnalysis && !state.jobs.region)
+    || (requestedStage === "verified-output" && state.exportStatus === "complete" && state.verifiedExport);
+  const ready = Boolean(analysisReady && stageReady);
   elements.openAnalysisExport.disabled = !ready;
   elements.importGuidance.disabled = !ready;
   elements.pasteGuidance.disabled = !ready;
   elements.processGuidanceText.disabled = !ready || !elements.guidanceTextInput.value.trim();
-  if (ready && !state.analysisExchange.lastBundle) elements.analysisExchangeStatus.textContent = "Källanalysen är klar. Du kan skapa kopierbar text eller klistra in vägledning.";
-  else if (analysisReady && !state.regionAnalysis) elements.analysisExchangeStatus.textContent = "Väntar på Beräknat exporturval innan analysunderlaget kan skapas.";
+  if (ready && !state.analysisExchange.lastBundle) elements.analysisExchangeStatus.textContent = "Valt signalsteg är klart. Du kan skapa kopierbar text eller klistra in vägledning.";
+  else if (analysisReady) elements.analysisExchangeStatus.textContent = requestedStage === "verified-output" ? "Exportera och verifiera WAV-filen först." : "Väntar på Beräknat exporturval.";
 }
 
 function exchangePrivacyOptions() {
@@ -2197,7 +2323,12 @@ function exchangePrivacyOptions() {
     includeLocation: form.has("includeLocation"),
     includeNotes: form.has("includeNotes"),
     includeCreator: form.has("includeCreator"),
+    includeEditorialCueSheet: form.has("includeEditorialCueSheet"),
   };
+}
+
+function exchangeStage() {
+  return new FormData(elements.analysisExchangeForm).get("exchangeStage") || "calculated-export-selection";
 }
 
 function exchangeProfile() {
@@ -2219,14 +2350,27 @@ function exchangeMetadata() {
 function analysisExchangeInput() {
   const privacySelection = exchangePrivacyOptions();
   const metadata = exchangeMetadata();
+  const requestedStage = exchangeStage();
+  const selected = selectAnalysisStage({
+    source: state.analysis,
+    calculated: state.regionAnalysis?.processed || null,
+    verified: state.exportStatus === "complete" ? state.verifiedExport : null,
+    stage: requestedStage,
+  });
+  if (selected.stage !== requestedStage) throw new Error(requestedStage === "verified-output" ? "Verifierad WAV saknas." : "Beräknat exporturval saknas.");
+  const selectionStartSeconds = requestedStage === "source" ? 0 : state.trim.startSeconds;
+  const selectionEndSeconds = requestedStage === "source" ? durationSeconds() : state.trim.endSeconds;
   return {
     file: state.file,
     analysis: state.analysis,
-    regionAnalysis: state.regionAnalysis,
-    markers: state.markers.filter((marker) => marker.suggested === true && marker.origin === "analysis"),
+    selectedAnalysis: selected.analysis,
+    signalStage: selected.stage,
+    markers: selected.analysis?.markersSuggested || [],
     metadata,
     edit: projectEdit(),
-    assessment: state.assessment,
+    editorialContext: buildEditorialContext({ purpose: state.assessment.purpose, targetDurationSeconds: state.trimWindowSeconds }),
+    editorialCueSheet: privacySelection.includeEditorialCueSheet
+      ? buildEditorialCueSheet(state.markers, { selectionStartSeconds, selectionEndSeconds }) : null,
     profile: exchangeProfile() === "temporal-diagnostics" ? "temporal-diagnostic" : "minimal",
     privacy: privacySelection.includeLocation && state.metadata.coordinatePrecision === "exact" ? "exact" : "redacted",
     privacySelection,
@@ -2269,7 +2413,8 @@ function appendAnalysisExchangeAudit(action, { bundleId, analysisDigest, suggest
 function renderExchangeManifest(profile = exchangeProfile(), bundle = null) {
   const privacy = exchangePrivacyOptions();
   const rows = [
-    "Objektiva sammanfattningsvärden och metodstatus",
+    `Signalsteg: ${{ source: "källfil", "calculated-export-selection": "beräknat exporturval", "verified-output": "verifierad WAV" }[exchangeStage()]}`,
+    "Objektiva sammanfattningsvärden, redaktionell seriekontext och metodstatus",
     "Observationer, markörer och synliga redigeringsval",
     profile === "temporal-diagnostics"
       ? "Grova 5-sekundersaggregat, högst 720 segment: Momentary p10, median och max, Short-term median och max, program-sample-peak max, låg-nivåandel samt stereokorrelation median och min"
@@ -2283,6 +2428,7 @@ function renderExchangeManifest(profile = exchangeProfile(), bundle = null) {
     includeLocation: "Plats enligt aktiv koordinatprecision",
     includeNotes: "Taggar, miljö, anteckningar och länk",
     includeCreator: "Skapare, utrustning och licens",
+    includeEditorialCueSheet: "Integritetsgranskat redaktionellt cue sheet",
   })[key]);
   rows.push(selected.length ? `Frivillig metadata: ${selected.join(", ")}` : "Ingen frivillig metadata");
   if (privacy.includeLocation && state.metadata.coordinatePrecision === "exact") rows.push("Exakt platsprofil är vald. Markörtider kan därför behålla decimalprecision. Granska JSON-preview före export.");
@@ -2300,7 +2446,8 @@ async function refreshAnalysisBundlePreview() {
     const result = await builder(analysisExchangeInput());
     if (requestSequence !== exchangePreviewSequence) return;
     const normalized = normalizeBundleResult(result);
-    if (analysisExchangeTools?.createLocalReceipt) normalized.receipt = await analysisExchangeTools.createLocalReceipt(normalized.bundle, { sourceIdentity: state.analysis?.sourceIdentity || null });
+    const receiptIdentity = exchangeStage() === "verified-output" ? state.verifiedExport?.sourceIdentity : state.analysis?.sourceIdentity;
+    if (analysisExchangeTools?.createLocalReceipt) normalized.receipt = await analysisExchangeTools.createLocalReceipt(normalized.bundle, { sourceIdentity: receiptIdentity || null });
     state.analysisExchange.preview = normalized;
     elements.exchangeJsonPreview.textContent = normalized.json;
     renderExchangeManifest(exchangeProfile(), normalized.bundle);
@@ -2316,8 +2463,10 @@ async function refreshAnalysisBundlePreview() {
 
 async function openAnalysisExchangeReview() {
   if (!state.analysis || !analysisExchangeTools) return;
-  if (!state.regionAnalysis || state.jobs.region) {
-    showToast("Vänta tills Beräknat exporturval är klart.", "error", 6500);
+  const requestedStage = exchangeStage();
+  if ((requestedStage === "calculated-export-selection" && (!state.regionAnalysis || state.jobs.region))
+    || (requestedStage === "verified-output" && (!state.verifiedExport || state.exportStatus !== "complete"))) {
+    showToast(requestedStage === "verified-output" ? "Exportera och verifiera WAV-filen först." : "Vänta tills Beräknat exporturval är klart.", "error", 6500);
     return;
   }
   state.analysisExchange.preview = null;
@@ -2382,6 +2531,13 @@ function normalizedGuidanceResult(result) {
   return { guidance, suggestions, matched, receipt: result?.receipt || null, reason };
 }
 
+function guidanceSourceIdentity() {
+  const signalStage = state.analysisExchange.lastBundle?.bundle?.analysis?.signalStage;
+  return signalStage === "verified-output"
+    ? state.verifiedExport?.sourceIdentity || null
+    : state.analysis?.sourceIdentity || null;
+}
+
 async function importGuidanceText(text) {
   const normalizedText = String(text || "").trim();
   if (!normalizedText) {
@@ -2400,7 +2556,7 @@ async function importGuidanceText(text) {
     JSON.parse(normalizedText);
     const result = await importer(normalizedText, {
       bundleReceipts: state.analysisExchange.receipts,
-      sourceIdentity: state.analysis?.sourceIdentity || null,
+      sourceIdentity: guidanceSourceIdentity(),
       currentAnalysisDigest: state.analysisExchange.lastBundle?.digest || null,
     });
     const normalized = normalizedGuidanceResult(result);
@@ -2636,6 +2792,7 @@ function projectSettings() {
     },
     assessment: { ...state.assessment },
     series: { ...state.series },
+    publication: { manual: { ...state.publication.manual }, exceptionNote: state.publication.exceptionNote },
     analysisExchange: {
       receipts: state.analysisExchange.receipts.map((receipt) => ({ ...receipt })),
       guidance: state.analysisExchange.guidance?.guidance || null,
@@ -2736,6 +2893,11 @@ async function applyPendingProjectToFile() {
   const profileRadio = $(`input[name='exportProfile'][value='${state.exportProfile}']`);
   if (profileRadio) profileRadio.checked = true;
   state.series = { ...state.series, ...(project.settings?.series || {}) };
+  const savedPublication = project.settings?.publication || {};
+  state.publication = {
+    manual: { ...state.publication.manual, ...(savedPublication.manual || {}) },
+    exceptionNote: String(savedPublication.exceptionNote || "").slice(0, 1_000),
+  };
   state.trimWindowSeconds = Math.max(1 / sampleRate(), finite(project.settings?.trimWindowSeconds) ?? 20 * 60);
   const savedExchange = project.settings?.analysisExchange || {};
   if (Array.isArray(savedExchange.receipts)) state.analysisExchange.receipts = savedExchange.receipts.filter((receipt) => receipt && typeof receipt === "object");
@@ -2797,14 +2959,17 @@ async function applyPendingProjectToFile() {
   applyMetadata(project.metadata);
   state.pendingProject = null;
   state.analysisStatus = state.analysis ? "complete" : "idle";
+  state.regionStatus = state.analysis ? "stale" : "idle";
   elements.analysisCanvasEmpty.hidden = Boolean(state.analysis);
   renderAnalysisSummary();
   renderObservations();
   renderMarkers();
+  renderPublicationCard();
   syncTrimUi();
   syncTrimWindowUi();
   syncAuditionUi();
   updateMonitoringGraph();
+  if (state.analysis) requestRegionAnalysis();
   if (requiresReanalysis) {
     showToast("Det äldre projektet saknar full säker hash. Metadata och redigering har återställts, men mätningen körs om lokalt.", "info", 9000);
     startAnalysis();
@@ -2830,6 +2995,8 @@ function reportInput() {
         guidanceDecisions: { ...state.analysisExchange.guidanceDecisions },
         auditLog: state.analysisExchange.auditLog.map((entry) => ({ ...entry })),
       },
+      publication: currentPublicationStatus(),
+      spectralDiagnostics: state.spectralDiagnostics,
     },
   };
 }
@@ -2867,6 +3034,89 @@ function exportReport(format) {
   showToast(format === "html" ? "HTML-rapporten skapades." : "JSON-rapporten skapades.");
 }
 
+const publicationLabels = Object.freeze({
+  duration: "Exakt 20:00 eller dokumenterad avvikelse",
+  verifiedWav: "Verifierad WAV är aktuell",
+  markersReviewed: "Inga kritiska markörer är ogranskade",
+  fullListen: "Hela exporten är genomlyssnad",
+  boundaries: "Början och slutet är kontrollerade",
+  stereo: "Stereo är provlyssnat",
+  mono: "Mono är provlyssnat",
+  privacy: "Röster, privat information och platsdata är bedömda",
+  metadata: "Titel, avsnitt och plats är ifyllda",
+  archiveSaved: "Projekt, rapport och master är sparade",
+});
+
+function currentPublicationStatus() {
+  return publicationStatus({
+    durationSeconds: selectionDurationSeconds(),
+    verifiedCurrent: state.exportStatus === "complete" && Boolean(state.verifiedExport),
+    criticalUnreviewed: state.markers.filter(marker => marker.severity === "critical" && marker.reviewStatus === "unreviewed").length,
+    metadata: collectMetadata(),
+    manual: state.publication.manual,
+    exceptionNote: state.publication.exceptionNote,
+  });
+}
+
+function renderPublicationCard() {
+  if (!elements.publicationStatus || !elements.publicationAutoChecks) return;
+  const result = currentPublicationStatus();
+  elements.publicationStatus.textContent = result.status === "ready" ? "Redo för publicering" : "Granskning krävs";
+  elements.publicationStatus.classList.toggle("is-ready", result.status === "ready");
+  elements.publicationAutoChecks.innerHTML = Object.entries(result.checks).map(([key, passed]) => `<div class="${passed ? "is-pass" : "is-review"}"><span aria-hidden="true">${passed ? "✓" : "○"}</span><p>${escapeHtml(publicationLabels[key] || key)}</p></div>`).join("");
+  $$('input[name="publicationCheck"]').forEach(input => { input.checked = Boolean(state.publication.manual[input.value]); });
+  if (elements.publicationExceptionNote && elements.publicationExceptionNote.value !== state.publication.exceptionNote) elements.publicationExceptionNote.value = state.publication.exceptionNote;
+  elements.exportEpisodeHandoff.disabled = !state.verifiedExport;
+}
+
+function episodeMasterFileName() {
+  const metadata = collectMetadata();
+  const episode = String(metadata.episode || "XX").replace(/\D/g, "").padStart(3, "0");
+  const slug = String(metadata.title || baseName(state.file?.name || "avsnitt"))
+    .normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 80) || "avsnitt";
+  return `TMH_E${episode}_${slug}_MASTER.wav`;
+}
+
+function exportEpisodeHandoff() {
+  if (!state.verifiedExport) return;
+  const publication = currentPublicationStatus();
+  const reportId = state.lastExportReport?.reportId || state.lastExportReport?.fullFileHash?.value || null;
+  const handoff = buildEpisodeHandoff({
+    metadata: collectMetadata(),
+    verifiedOutput: state.verifiedExport,
+    sourceIdentity: state.analysis?.sourceIdentity || null,
+    publication,
+    reportId,
+  });
+  const fileName = episodeMasterFileName().replace(/_MASTER\.wav$/i, "_HANDOFF.json");
+  downloadBlob(new Blob([JSON.stringify(handoff, null, 2)], { type: "application/json" }), fileName);
+  showToast("Avsnittsmanifestet skapades utan ljudsamplingar.");
+}
+
+function renderSeriesOverview() {
+  if (!elements.seriesOverviewResult) return;
+  const overview = state.seriesOverview;
+  if (!overview?.rows?.length) {
+    elements.seriesOverviewResult.innerHTML = "<p>Inga tidigare verifierade rapporter inlästa.</p>";
+    return;
+  }
+  const cell = (value, digits = 1) => finite(value) === null ? "saknas" : formatDecimal(value, digits);
+  const rows = overview.rows.map(row => `<tr><th>${escapeHtml(row.id)}</th><td>${finite(row.durationSeconds) === null ? "saknas" : formatTime(row.durationSeconds, false)}</td><td>${cell(row.integratedLufs)}</td><td>${cell(row.truePeakDbtp)}</td><td>${cell(row.loudnessRangeLu)}</td><td>${cell(row.plrLu)}</td><td>${cell(row.channelBalanceDb)}</td><td>${cell(row.monoDeltaDb)}</td></tr>`).join("");
+  const med = overview.statistics;
+  elements.seriesOverviewResult.innerHTML = `<p>${overview.count} verifierade rapporter. Medianer visas för jämförelse, ingen normalisering görs.</p><table><thead><tr><th>Rapport</th><th>Längd</th><th>LUFS-I</th><th>dBTP</th><th>LRA</th><th>PLR</th><th>Balans</th><th>Mono Δ</th></tr></thead><tbody>${rows}<tr><th>Median</th><td>${finite(med.durationSeconds.median) === null ? "saknas" : formatTime(med.durationSeconds.median, false)}</td><td>${cell(med.integratedLufs.median)}</td><td>${cell(med.truePeakDbtp.median)}</td><td>${cell(med.loudnessRangeLu.median)}</td><td>${cell(med.plrLu.median)}</td><td>${cell(med.channelBalanceDb.median)}</td><td>${cell(med.monoDeltaDb.median)}</td></tr></tbody></table>`;
+}
+
+async function importSeriesReports(files) {
+  const reports = [];
+  for (const file of Array.from(files || [])) {
+    try { reports.push(JSON.parse(await file.text())); }
+    catch { showToast(`${file.name} är inte en giltig JSON-rapport.`, "error", 7000); }
+  }
+  state.seriesOverview = summarizeSeriesReports(reports);
+  renderSeriesOverview();
+}
+
 function startExport() {
   if (!state.file || state.exportStatus === "running") return;
   const selectedProfile = $("input[name='exportProfile']:checked")?.value;
@@ -2890,6 +3140,7 @@ function startExport() {
     state.jobs.export = jobId;
     exportWorker.onerror = (event) => handleExportMessage({ type: "error", jobId, operation: "export", message: event.message || "Exportmotorn kunde inte starta." });
     state.exportStatus = "running";
+    renderPublicationCard();
     elements.exportAudio.disabled = true;
     elements.exportAudio.textContent = "Export pågår";
     updateExportProgress(0, "Förbereder blockvis WAV-export");
@@ -2905,7 +3156,7 @@ function startExport() {
         truePeakCeilingDbtp: state.series.ceilingDbtp,
         fadeInFrames: Math.round(state.trim.fadeInSeconds * sampleRate()),
         fadeOutFrames: Math.round(state.trim.fadeOutSeconds * sampleRate()),
-        fileName: state.metadata.title || state.file.name,
+        fileName: episodeMasterFileName(),
         preferOpfs: true,
         profile: selectedProfile,
       },
@@ -2960,6 +3211,7 @@ function handleExportMessage(data = {}) {
     state.lastExportReport = data.report || data.result?.report || null;
     state.jobs.export = null;
     state.regionAnalysis = data.preflight || data.result?.preflight || state.regionAnalysis;
+    state.regionStatus = state.regionAnalysis ? "complete" : state.regionStatus;
     state.verifiedExport = data.verifiedOutput || data.result?.verifiedOutput || null;
     state.exportStatus = "complete";
     elements.exportAudio.disabled = false;
@@ -2979,6 +3231,7 @@ function handleExportMessage(data = {}) {
       renderStoredExports();
     }
     showToast("Ljudfilen skapades lokalt och är redo att sparas.", "info", 7000);
+    renderPublicationCard();
     emitState("export-complete");
     return;
   }
@@ -3465,6 +3718,7 @@ function bindEvents() {
     elements.markerText.value = "";
     elements.markerCompose.hidden = true;
     renderMarkers();
+    renderPublicationCard();
     state.dirty = true;
     emitState("marker-added");
   });
@@ -3485,8 +3739,9 @@ function bindEvents() {
     }
     const remove = event.target.closest("[data-marker-remove]");
     if (remove) {
-      state.markers = state.markers.filter((marker) => marker.id !== remove.dataset.markerRemove);
+    state.markers = state.markers.filter((marker) => marker.id !== remove.dataset.markerRemove);
       renderMarkers();
+      renderPublicationCard();
       state.dirty = true;
       emitState("marker-removed");
     }
@@ -3496,6 +3751,7 @@ function bindEvents() {
     if (!select) return;
     const marker = state.markers.find((item) => item.id === select.dataset.markerReview);
     if (marker) marker.reviewStatus = select.value;
+    renderPublicationCard();
     state.dirty = true;
     emitState("marker-reviewed");
   });
@@ -3651,6 +3907,7 @@ function bindEvents() {
     }
     if (state.analysis) elements.analysisExchangeStatus.textContent = "Metadata har ändrats. Skapa och granska ett nytt analysunderlag.";
     state.dirty = true;
+    renderPublicationCard();
     emitState("metadata");
   });
   $("#toggleMetadataButton").addEventListener("click", (event) => {
@@ -3666,6 +3923,21 @@ function bindEvents() {
   $$("input[name='exportProfile']").forEach((input) => input.addEventListener("change", () => setExportProfile(input.value)));
   elements.storedExportsList.addEventListener("click", handleStoredExportAction);
   elements.clearStoredExports.addEventListener("click", clearStoredExports);
+  elements.runSpectralDiagnostics.addEventListener("click", requestSpectralDiagnostics);
+  $$('input[name="publicationCheck"]').forEach(input => input.addEventListener("change", () => {
+    state.publication.manual[input.value] = input.checked;
+    state.dirty = true;
+    renderPublicationCard();
+    emitState("publication-check");
+  }));
+  elements.publicationExceptionNote.addEventListener("input", () => {
+    state.publication.exceptionNote = elements.publicationExceptionNote.value.slice(0, 1_000);
+    state.dirty = true;
+    renderPublicationCard();
+  });
+  elements.exportEpisodeHandoff.addEventListener("click", exportEpisodeHandoff);
+  elements.openSeriesReports.addEventListener("click", () => elements.seriesReportsInput.click());
+  elements.seriesReportsInput.addEventListener("change", () => importSeriesReports(elements.seriesReportsInput.files));
 
   elements.openAnalysisExport.addEventListener("click", openAnalysisExchangeReview);
   elements.importGuidance.addEventListener("click", () => elements.guidanceFileInput.click());
@@ -3677,7 +3949,10 @@ function bindEvents() {
     try { createLocalAnalysisBundle(); } catch (error) { showToast(`Analysunderlaget kunde inte sparas: ${error.message}`, "error", 8000); }
   });
   elements.analysisExchangeForm.addEventListener("change", (event) => {
-    if (event.target.matches("input[name='exchangeProfile'], input[type='checkbox']")) refreshAnalysisBundlePreview();
+    if (event.target.matches("input[name='exchangeProfile'], input[name='exchangeStage'], input[type='checkbox']")) {
+      syncAnalysisExchangeAvailability();
+      refreshAnalysisBundlePreview();
+    }
   });
   elements.analysisExchangeDialog.addEventListener("click", (event) => { if (event.target === elements.analysisExchangeDialog) elements.analysisExchangeDialog.close(); });
   elements.copyAnalysisExchange.addEventListener("click", async () => {
@@ -3767,6 +4042,9 @@ async function initialize() {
   syncAuditionUi();
   setExportProfile(state.exportProfile, { dirty: false, force: true });
   renderStoredExports();
+  renderSpectralDiagnostics();
+  renderPublicationCard();
+  renderSeriesOverview();
   await loadProjectTools();
   await loadAnalysisExchangeTools();
   if (state.capabilities.opfs && state.capabilities.workers) sendStorageCommand("storage-list");

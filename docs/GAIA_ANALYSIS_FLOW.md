@@ -8,7 +8,7 @@ LjudR:s mätvärden, gAIa/VEP:s tolkning och användarens beslut är tre skilda 
 
 ## Analysunderlag schema 1
 
-Formatet heter `se.gaia.ljudr.analysis-exchange/1`. Varje export får ett slumpmässigt `bundleId`. `analysisDigest` är SHA-256 över den dokumenterade kanoniska representationen av schema, bundleId och payload. Samma bundleId och digest måste återkomma i guidance.
+Formatet heter `se.gaia.ljudr.analysis-exchange/2`. Signalsteget anges som källfil, beräknat exporturval eller verifierad WAV. Maskinmarkörer använder samma nollbaserade tidsaxel som det valda steget. Twenty Minutes Here-kontext och ett eventuellt cue sheet klassas separat som redaktionella uppgifter. Varje export får ett slumpmässigt `bundleId`. `analysisDigest` är SHA-256 över den dokumenterade kanoniska representationen av schema, bundleId och payload. Samma bundleId och digest måste återkomma i guidance.
 
 Projektet behåller lokalt kopplingen mellan:
 

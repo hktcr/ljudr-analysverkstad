@@ -1,4 +1,4 @@
-import { analyzeRegion, analyzeWaveformDetail, analyzeWav } from "./dsp-core.js";
+import { analyzeRegion, analyzeSpectralDiagnostics, analyzeWaveformDetail, analyzeWav } from "./dsp-core.js";
 
 const cancelledJobs = new Set();
 const latestByOperation = new Map();
@@ -12,7 +12,7 @@ self.addEventListener("message", async event => {
     if (jobId) cancelledJobs.add(jobId);
     return;
   }
-  if (!["analyze", "analyze-region", "waveform-detail"].includes(message.type) || !jobId) return;
+  if (!["analyze", "analyze-region", "waveform-detail", "spectral-diagnostics"].includes(message.type) || !jobId) return;
 
   const operation = message.type;
   latestByOperation.set(operation, jobId);
@@ -28,7 +28,9 @@ self.addEventListener("message", async event => {
       ? await analyzeWav(message.file, options, progress)
       : operation === "analyze-region"
         ? await analyzeRegion(message.file, options, progress)
-        : await analyzeWaveformDetail(message.file, options, progress);
+        : operation === "spectral-diagnostics"
+          ? await analyzeSpectralDiagnostics(message.file, options, progress)
+          : await analyzeWaveformDetail(message.file, options, progress);
     if (shouldCancel()) post("cancelled", jobId, operation);
     else post("result", jobId, operation, { result });
   } catch (error) {

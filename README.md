@@ -1,6 +1,6 @@
 # LjudR Analysverkstad
 
-LjudR är ett lokalt och icke destruktivt verktyg för analys och varsam redigering av fältinspelningar och ljudlandskap. Version `1.0.0-rc.7` är en offentlig valideringskandidat, inte en produktionsverifierad 1.0.
+LjudR är ett lokalt och icke destruktivt verktyg för analys och varsam redigering av fältinspelningar och ljudlandskap. Version `1.0.0-rc.8` är en offentlig valideringskandidat, inte en produktionsverifierad 1.0.
 
 ## Integritet och princip
 
@@ -40,7 +40,9 @@ Rapporten skiljer strikt mellan:
 
 ## Ljudfritt analysunderlag för gAIa och VEP
 
-LjudR kan skapa ett lokalt JSON-underlag enligt `se.gaia.ljudr.analysis-exchange/1`. Underlaget innehåller tekniska sammanfattningar och maskinella observationer men aldrig ljudsamplingar, waveform, spektrum, binär media eller originalfilens fulla SHA-256. Standardprofilen `Minimal` innehåller ingen kontinuerlig tidsserie och saknar filnamn, fria markörtexter och platskoordinater. Den uttryckliga profilen `Temporal diagnostik` kan lägga till grova programaggregat med minst 5 sekunder per segment och högst 720 segment. Segmenten innehåller sample peak, inte segmentbaserad True Peak, eftersom motorn saknar en verifierad True Peak-tidsserie.
+LjudR kan skapa ett lokalt JSON-underlag enligt `se.gaia.ljudr.analysis-exchange/2`. Underlaget innehåller tekniska sammanfattningar och maskinella observationer men aldrig ljudsamplingar, waveform, spektrum, binär media eller originalfilens fulla SHA-256. Signalsteget anges som källfil, beräknat exporturval eller verifierad WAV. Twenty Minutes Here-kontexten är ett separat redaktionellt lager. Standardprofilen `Minimal` innehåller ingen kontinuerlig tidsserie och saknar filnamn, fria markörtexter och platskoordinater. Ett redaktionellt cue sheet kräver ett eget aktivt val. Den uttryckliga profilen `Temporal diagnostik` kan lägga till grova programaggregat med minst 5 sekunder per segment och högst 720 segment. Segmenten innehåller sample peak, inte segmentbaserad True Peak, eftersom motorn saknar en verifierad True Peak-tidsserie.
+
+Poddflödet har ett lokalt publiceringskort, serieöversikt från verifierade rapporter och ett kompakt avsnittsmanifest med masterhash. Den frivilliga serieorienteringen är versionsstyrd och är inte en Spotify-standard. Spotify for Creators kan ta emot den verifierade WAV-mastern direkt. Ferrite används fortsatt för montage, interna klipp och separat codec-export.
 
 Underlaget visas alltid i sin helhet före kopiering. All frivillig metadata är av från början och väljs fältgrupp för fältgrupp. Exakta koordinater kräver ett uttryckligt exakt integritetsval. LjudR ansluter inte till gAIa eller någon AI-tjänst och behåller `connect-src 'none'`. Användaren kopierar JSON-texten till gAIa och klistrar in vägledningen i verktyget. JSON-fil finns kvar som valfri reserv.
 
@@ -78,7 +80,7 @@ Se [valideringsplanen](docs/VALIDATION.md), [metoden](docs/METHOD.md), [gAIa-fl�
 
 ## Releaseport
 
-`1.0.0-rc.7` får publiceras som valideringskandidat. Versionsnumret `1.0.0` är förbjudet tills hela den fixerade testsuiten, EBU 68/68, ITU 19/19 och den fysiska iPad-matrisen är godkända. Matrisen omfattar en 15 till 20 minuter lång stereo float32/96 kHz-fil nära 1 GB i både Safari och installerad PWA, inklusive kopiera och klistra in flödet, export, Filer-handoff, bakgrund/återgång, quota, avbrott, OPFS-städning, offline och uppdatering.
+`1.0.0-rc.8` får publiceras som valideringskandidat. Versionsnumret `1.0.0` är förbjudet tills hela den fixerade testsuiten, EBU 68/68, ITU 19/19 och den fysiska iPad-matrisen är godkända. Matrisen omfattar en 15 till 20 minuter lång stereo float32/96 kHz-fil nära 1 GB i både Safari och installerad PWA, inklusive kopiera och klistra in flödet, export, Filer-handoff, bakgrund/återgång, quota, avbrott, OPFS-städning, offline och uppdatering.
 
 ## Lokal utveckling
 

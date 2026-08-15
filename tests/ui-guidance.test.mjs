@@ -50,5 +50,5 @@ test("bearbetningar och exportval har rekommendationsinformation", async () => {
   }
   assert.match(html, /id="exportRecommendationText"/);
   assert.doesNotMatch(html, /Lyssningskopia|Kommer senare/);
-  assert.match(html, /AAC, MP3, FLAC och Spotify-publicering görs inte här/);
+  assert.match(html, /Spotify for Creators kan ta emot den verifierade WAV-mastern direkt/);
 });

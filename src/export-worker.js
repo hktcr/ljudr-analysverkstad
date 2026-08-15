@@ -13,7 +13,7 @@ import {
 } from "./dsp-core.js";
 import { sha256Blob } from "./sha256.js";
 
-const ENGINE_VERSION = "1.0.0-rc.7";
+const ENGINE_VERSION = "1.0.0-rc.8";
 const DEFAULT_CHUNK_BYTES = 8 * 1024 * 1024;
 const MEMORY_WARNING_BYTES = 512 * 1024 * 1024;
 const GAIN_EPSILON_DB = 1e-9;
@@ -439,7 +439,8 @@ export async function exportWav(file, options = {}, onProgress = () => {}) {
     error.details = { ...pcmClampingRisk, blocked: true };
     throw error;
   }
-  const fileName = `${cleanName(options.fileName || file.name)}_trim.wav`;
+  const requestedName = cleanName(options.fileName || file.name);
+  const fileName = /_MASTER$/i.test(requestedName) ? `${requestedName}.wav` : `${requestedName}_trim.wav`;
   const { header, dataBytes, dataPadBytes, droppedChunks } = await createWaveHeader(inspected, selectedFrames, startFrame);
   const writer = await chooseWriter(
     fileName,
@@ -575,6 +576,8 @@ export async function exportWav(file, options = {}, onProgress = () => {}) {
       riffPaddingBytes: dataPadBytes,
     },
     summary: verifiedAnalysis.summary,
+    markersSuggested: verifiedAnalysis.markersSuggested,
+    validation: verifiedAnalysis.validation,
     sourceIdentity: verifiedAnalysis.sourceIdentity,
     samplePayloadIdentity,
     samplePayloadHash: samplePayloadIdentity?.output || null,

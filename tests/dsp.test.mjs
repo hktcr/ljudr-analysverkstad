@@ -7,6 +7,7 @@ import {
   calculateLoudnessRange,
   FirTruePeakEstimator,
   analyzeRegion,
+  analyzeSpectralDiagnostics,
   analyzeWaveformDetail,
 } from "../src/dsp-core.js";
 
@@ -306,4 +307,32 @@ test("True Peak får kanal och gruppfördröjningskorrigerad tid", async () => {
   assert.equal(marker.objective, true);
   assert.equal(marker.heuristic, false);
   assert.ok(marker.timePrecisionSeconds <= 1 / 48000);
+});
+
+test("mono fold-down mäts och varaktig negativ korrelation blir navigerbar", async () => {
+  const sampleRate = 48000;
+  const frames = Array.from({ length: sampleRate * 2 }, (_, index) => {
+    const value = 0.25 * Math.sin(2 * Math.PI * 997 * index / sampleRate);
+    return [value, -value];
+  });
+  const result = await analyzeWav(makeWav({ sampleRate, frames }), { waveformBins: 64 });
+  assert.ok(result.summary.monoCompatibility.energyDeltaDb < -40);
+  assert.ok(result.summary.monoCompatibility.negativeCorrelationPercent > 90);
+  assert.ok(result.summary.monoCompatibility.negativeCorrelationRegions.length >= 1);
+  assert.ok(result.markersSuggested.some(marker => marker.machineKind === "negative-stereo-correlation"));
+});
+
+test("spektral diagnostik samplar deterministiskt utan EQ-beslut", async () => {
+  const sampleRate = 48000;
+  const frames = Array.from({ length: sampleRate }, (_, index) => {
+    const value = 0.2 * Math.sin(2 * Math.PI * 50 * index / sampleRate);
+    return [value, value];
+  });
+  const result = await analyzeSpectralDiagnostics(makeWav({ sampleRate, frames }), { windowCount: 3 });
+  assert.equal(result.scope, "deterministic-sampled-windows");
+  assert.equal(result.windowCount, 1);
+  assert.equal(result.sampledSeconds, 1);
+  assert.ok(Number.isFinite(result.mainsHum50RelativeDbMedian));
+  assert.match(result.interpretation, /Inte full spektralanalys/);
+  assert.doesNotMatch(JSON.stringify(result), /equaliz|auto.?eq/i);
 });

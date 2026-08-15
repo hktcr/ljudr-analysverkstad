@@ -1,6 +1,6 @@
 import { sha256Hex } from "./sha256.js";
 
-export const ANALYSIS_EXCHANGE_SCHEMA = "se.gaia.ljudr.analysis-exchange/1";
+export const ANALYSIS_EXCHANGE_SCHEMA = "se.gaia.ljudr.analysis-exchange/2";
 export const GUIDANCE_SCHEMA = "se.gaia.ljudr.guidance/1";
 
 export const EXCHANGE_LIMITS = Object.freeze({
@@ -120,7 +120,9 @@ function markerTime(value, marker, privacy, critical) {
 }
 
 function markerKind(marker) {
-  const value = `${marker.type || ""} ${marker.label || ""}`.toLowerCase();
+  const explicit = marker.machineKind || marker.kind;
+  if (typeof explicit === "string" && explicit.trim()) return explicit.trim().toLowerCase().slice(0, 100);
+  const value = `${marker.type || ""} ${marker.label || ""} ${marker.text || ""}`.toLowerCase();
   if (value.includes("true peak")) return "true-peak";
   if (value.includes("sample peak")) return "sample-peak";
   if (value.includes("ogilt") || value.includes("invalid") || value.includes("nan") || value.includes("infinity")) return "invalid-float";
@@ -133,11 +135,11 @@ function markerKind(marker) {
   return "review-point";
 }
 
-function sanitizeMarker(marker, privacy, index) {
+function sanitizeMarker(marker, privacy, index, durationSeconds = Infinity) {
   const severity = severityOf(marker);
   const critical = severity === "critical" && classificationOf(marker) === "objective";
-  const startSeconds = markerTime(marker.startSeconds, marker, privacy, critical);
-  const endSeconds = Math.max(startSeconds, markerTime(marker.endSeconds, marker, privacy, critical));
+  const startSeconds = Math.min(durationSeconds, markerTime(marker.startSeconds, marker, privacy, critical));
+  const endSeconds = Math.min(durationSeconds, Math.max(startSeconds, markerTime(marker.endSeconds, marker, privacy, critical)));
   return {
     id: `marker-${index + 1}`,
     type: markerKind(marker),
@@ -201,6 +203,7 @@ function buildTemporalDiagnostic(analysis) {
 
 function buildMeasurements(analysis) {
   const summary = analysis?.summary || {};
+  const mono = summary.monoCompatibility || {};
   const channelCount = Math.max(0, Math.min(2, Math.trunc(safeNumber(analysis?.format?.channels, 0))));
   return {
     integratedLufs: safeNumber(summary.integratedLufs),
@@ -214,6 +217,15 @@ function buildMeasurements(analysis) {
     crestFactorDb: safeNumber(summary.crestFactorDb),
     channelBalanceDb: safeNumber(summary.channelBalanceDb),
     stereoCorrelation: safeNumber(summary.correlation),
+    monoCompatibility: summary.monoCompatibility ? {
+      energyDeltaDb: safeNumber(mono.energyDeltaDb),
+      samplePeakDbfs: safeNumber(mono.samplePeakDbfs),
+      negativeCorrelationPercent: safeNumber(mono.negativeCorrelationPercent),
+      riskRegions: (mono.negativeCorrelationRegions || []).slice(0, 100).map(region => ({
+        startSeconds: safeNumber(region.startSeconds, 0),
+        endSeconds: safeNumber(region.endSeconds, 0),
+      })),
+    } : null,
     overrangeSamples: Math.max(0, Math.trunc(safeNumber(summary.overrangeSamples, 0))),
     nonFiniteSamples: Math.max(0, Math.trunc(safeNumber(summary.nonFiniteSamples, 0))),
     channels: Array.from({ length: channelCount }, (_, index) => {
@@ -238,7 +250,11 @@ function sanitizeMetadata(metadata, privacy, selection = {}) {
     && Number.isFinite(metadata.coordinates.latitude) && Number.isFinite(metadata.coordinates.longitude)
     && metadata.coordinates.latitude >= -90 && metadata.coordinates.latitude <= 90
     && metadata.coordinates.longitude >= -180 && metadata.coordinates.longitude <= 180
-    ? { latitude: metadata.coordinates.latitude, longitude: metadata.coordinates.longitude, precision: privacy }
+    ? {
+        latitude: privacy === "exact" ? metadata.coordinates.latitude : Number(metadata.coordinates.latitude.toFixed(2)),
+        longitude: privacy === "exact" ? metadata.coordinates.longitude : Number(metadata.coordinates.longitude.toFixed(2)),
+        precision: privacy,
+      }
     : Number.isFinite(Number(metadata.latitude)) && Number.isFinite(Number(metadata.longitude))
       && Number(metadata.latitude) >= -90 && Number(metadata.latitude) <= 90
       && Number(metadata.longitude) >= -180 && Number(metadata.longitude) <= 180
@@ -266,19 +282,26 @@ function sanitizeMetadata(metadata, privacy, selection = {}) {
   };
 }
 
-function buildAnalysisPayload({ analysis, regionAnalysis = null, markers = null, metadata = {}, privacySelection = {}, privacy, profile, release }) {
+function buildAnalysisPayload({ analysis, selectedAnalysis = null, signalStage = null, regionAnalysis = null, markers = null, metadata = {}, privacySelection = {}, privacy, profile, release, editorialContext = null, editorialCueSheet = null }) {
   if (!plainObject(analysis)) throw new AnalysisExchangeError("ANALYSIS_REQUIRED", "Ett analysresultat krävs.");
-  const selected = regionAnalysis?.processed || analysis;
+  const selected = selectedAnalysis || regionAnalysis?.processed || analysis;
   const sourceMarkers = markers || selected.markersSuggested || [];
   const format = selected.format || {};
   const region = selected.region || {};
+  const selectedFrames = Math.max(0, Math.trunc(safeNumber(region.selectedFrames, format.frameCount || 0)));
+  const sampleRate = Math.max(0, Math.trunc(safeNumber(format.sampleRate, 0)));
+  const durationSeconds = selectedFrames > 0 && sampleRate > 0
+    ? selectedFrames / sampleRate : safeNumber(format.durationSeconds, safeNumber(selected.duration, 0));
+  const markerTimeOf = marker => safeNumber(marker.startSeconds, safeNumber(marker.timeSeconds, 0));
+  const markerEndOf = marker => safeNumber(marker.endSeconds, markerTimeOf(marker));
+  const selectedMarkers = sourceMarkers.filter(marker => markerTimeOf(marker) <= durationSeconds && markerEndOf(marker) >= 0);
   const payload = {
-    signalStage: regionAnalysis ? "calculated-export-selection" : "source",
+    signalStage: signalStage || (regionAnalysis ? "calculated-export-selection" : "source"),
     region: {
       range: "[startFrame,endFrame)",
       startFrame: Math.max(0, Math.trunc(safeNumber(region.startFrame, 0))),
       endFrame: Math.max(0, Math.trunc(safeNumber(region.endFrame, format.frameCount || 0))),
-      selectedFrames: Math.max(0, Math.trunc(safeNumber(region.selectedFrames, format.frameCount || 0))),
+      selectedFrames,
       fadeInFrames: Math.max(0, Math.trunc(safeNumber(region.fadeInFrames, 0))),
       fadeOutFrames: Math.max(0, Math.trunc(safeNumber(region.fadeOutFrames, 0))),
       globalGainDb: safeNumber(region.globalGainDb, 0),
@@ -287,16 +310,18 @@ function buildAnalysisPayload({ analysis, regionAnalysis = null, markers = null,
       container: String(format.container || "WAVE").slice(0, 32),
       encoding: String(format.encoding || "unknown").slice(0, 64),
       channels: Math.trunc(safeNumber(format.channels, 0)),
-      sampleRate: Math.trunc(safeNumber(format.sampleRate, 0)),
+      sampleRate,
       bitsPerSample: Math.trunc(safeNumber(format.bitsPerSample, 0)),
       validBitsPerSample: Math.trunc(safeNumber(format.validBitsPerSample, format.bitsPerSample || 0)),
-      durationSeconds: safeNumber(format.durationSeconds, safeNumber(selected.duration, 0)),
+      durationSeconds,
       fileSizeBytes: Math.max(0, Math.trunc(safeNumber(format.fileSizeBytes, 0))),
       fileName: privacySelection.includeFileName === true ? String(metadata.sourceFileName || format.fileName || "").slice(0, 255) : null,
     },
     metadata: sanitizeMetadata(metadata, privacy, privacySelection),
     measurements: buildMeasurements(selected),
-    markers: rankMarkers(sourceMarkers.map((marker, index) => sanitizeMarker(marker, privacy, index))),
+    markers: rankMarkers(selectedMarkers.map((marker, index) => sanitizeMarker(marker, privacy, index, durationSeconds))),
+    editorialContext: editorialContext || null,
+    editorialCueSheet: Array.isArray(editorialCueSheet) ? editorialCueSheet : null,
     temporalDiagnostic: profile === "temporal-diagnostic" ? buildTemporalDiagnostic(selected) : null,
     provenance: {
       engineVersion: String(selected.validation?.engineVersion || release.engineVersion || "unknown").slice(0, 80),
@@ -438,7 +463,7 @@ export function validateAnalysisBundle(bundle) {
   if (!DETAIL_PROFILES.has(bundle.profile)) errors.push("Ogiltig analysprofil.");
   if (!PRIVACY_PROFILES.has(bundle.privacy)) errors.push("Ogiltig integritetsprofil.");
   if (!Number.isFinite(Date.parse(bundle.createdAt))) errors.push("Ogiltig createdAt.");
-  exactKeys(bundle.analysis, new Set(["signalStage", "region", "format", "metadata", "measurements", "markers", "temporalDiagnostic", "provenance", "evidence"]), "$.analysis", errors);
+  exactKeys(bundle.analysis, new Set(["signalStage", "region", "format", "metadata", "measurements", "markers", "editorialContext", "editorialCueSheet", "temporalDiagnostic", "provenance", "evidence"]), "$.analysis", errors);
   exactKeys(bundle.analysis?.region, new Set(["range", "startFrame", "endFrame", "selectedFrames", "fadeInFrames", "fadeOutFrames", "globalGainDb"]), "$.analysis.region", errors);
   exactKeys(bundle.analysis?.format, new Set(["container", "encoding", "channels", "sampleRate", "bitsPerSample", "validBitsPerSample", "durationSeconds", "fileSizeBytes", "fileName"]), "$.analysis.format", errors);
   exactKeys(bundle.analysis?.metadata, new Set(["sourceFileName", "identity", "location", "notes", "creator"]), "$.analysis.metadata", errors);
@@ -449,7 +474,24 @@ export function validateAnalysisBundle(bundle) {
   }
   if (bundle.analysis?.metadata?.notes !== null) exactKeys(bundle.analysis.metadata.notes, new Set(["tags", "environment", "notes", "relatedImage"]), "$.analysis.metadata.notes", errors);
   if (bundle.analysis?.metadata?.creator !== null) exactKeys(bundle.analysis.metadata.creator, new Set(["creator", "equipment", "license"]), "$.analysis.metadata.creator", errors);
-  exactKeys(bundle.analysis?.measurements, new Set(["integratedLufs", "loudnessRangeLu", "momentaryMaxLufs", "shortTermMaxLufs", "samplePeakDbfs", "truePeakDbtp", "plrLu", "rmsDbfs", "crestFactorDb", "channelBalanceDb", "stereoCorrelation", "overrangeSamples", "nonFiniteSamples", "channels"]), "$.analysis.measurements", errors);
+  if (bundle.analysis?.editorialContext !== null) {
+    exactKeys(bundle.analysis.editorialContext, new Set(["classification", "seriesProfileId", "seriesProfileVersion", "purpose", "targetDurationSeconds", "durationToleranceSeconds", "loudnessOrientation", "truePeakOrientationDbtp", "continuityPolicy", "questions"]), "$.analysis.editorialContext", errors);
+    exactKeys(bundle.analysis.editorialContext?.loudnessOrientation, new Set(["targetLufs", "rangeMinLufs", "rangeMaxLufs", "rationale"]), "$.analysis.editorialContext.loudnessOrientation", errors);
+    requireStrings(bundle.analysis.editorialContext, ["classification", "seriesProfileId", "seriesProfileVersion", "purpose", "continuityPolicy"], "$.analysis.editorialContext", errors);
+    requireNullableNumbers(bundle.analysis.editorialContext, ["targetDurationSeconds", "durationToleranceSeconds", "truePeakOrientationDbtp"], "$.analysis.editorialContext", errors);
+    requireNullableNumbers(bundle.analysis.editorialContext.loudnessOrientation, ["targetLufs", "rangeMinLufs", "rangeMaxLufs"], "$.analysis.editorialContext.loudnessOrientation", errors);
+    requireStrings(bundle.analysis.editorialContext.loudnessOrientation, ["rationale"], "$.analysis.editorialContext.loudnessOrientation", errors);
+    if (bundle.analysis.editorialContext.classification !== "editorial" || !Array.isArray(bundle.analysis.editorialContext.questions) || bundle.analysis.editorialContext.questions.some(item => typeof item !== "string")) errors.push("Ogiltig redaktionell kontext.");
+  }
+  if (bundle.analysis?.editorialCueSheet !== null) {
+    if (!Array.isArray(bundle.analysis.editorialCueSheet) || bundle.analysis.editorialCueSheet.length > 200) errors.push("Ogiltigt redaktionellt cue sheet.");
+    else bundle.analysis.editorialCueSheet.forEach((cue, index) => {
+      exactKeys(cue, new Set(["id", "type", "startSeconds", "endSeconds", "text", "reviewStatus", "classification"]), `$.analysis.editorialCueSheet[${index}]`, errors);
+      requireStrings(cue, ["id", "type", "text", "reviewStatus", "classification"], `$.analysis.editorialCueSheet[${index}]`, errors);
+      if (cue.classification !== "editorial" || !Number.isFinite(cue.startSeconds) || !Number.isFinite(cue.endSeconds) || cue.startSeconds < 0 || cue.endSeconds < cue.startSeconds || cue.endSeconds > bundle.analysis.format.durationSeconds) errors.push(`Ogiltig redaktionell cue ${index}.`);
+    });
+  }
+  exactKeys(bundle.analysis?.measurements, new Set(["integratedLufs", "loudnessRangeLu", "momentaryMaxLufs", "shortTermMaxLufs", "samplePeakDbfs", "truePeakDbtp", "plrLu", "rmsDbfs", "crestFactorDb", "channelBalanceDb", "stereoCorrelation", "monoCompatibility", "overrangeSamples", "nonFiniteSamples", "channels"]), "$.analysis.measurements", errors);
   requireStrings(bundle.analysis, ["signalStage"], "$.analysis", errors);
   if (!["source", "calculated-export-selection", "verified-output"].includes(bundle.analysis?.signalStage)) errors.push("Ogiltigt signalStage.");
   requireStrings(bundle.analysis?.region, ["range"], "$.analysis.region", errors);
@@ -466,6 +508,16 @@ export function validateAnalysisBundle(bundle) {
     || coordinates.latitude < -90 || coordinates.latitude > 90 || !Number.isFinite(coordinates.longitude)
     || coordinates.longitude < -180 || coordinates.longitude > 180 || !PRIVACY_PROFILES.has(coordinates.precision))) errors.push("Ogiltiga metadata-koordinater.");
   requireNullableNumbers(bundle.analysis?.measurements, ["integratedLufs", "loudnessRangeLu", "momentaryMaxLufs", "shortTermMaxLufs", "samplePeakDbfs", "truePeakDbtp", "plrLu", "rmsDbfs", "crestFactorDb", "channelBalanceDb", "stereoCorrelation"], "$.analysis.measurements", errors);
+  const mono = bundle.analysis?.measurements?.monoCompatibility;
+  if (mono !== null) {
+    exactKeys(mono, new Set(["energyDeltaDb", "samplePeakDbfs", "negativeCorrelationPercent", "riskRegions"]), "$.analysis.measurements.monoCompatibility", errors);
+    requireNullableNumbers(mono, ["energyDeltaDb", "samplePeakDbfs", "negativeCorrelationPercent"], "$.analysis.measurements.monoCompatibility", errors);
+    if (!Array.isArray(mono.riskRegions) || mono.riskRegions.length > 100) errors.push("Ogiltiga monoriskregioner.");
+    else mono.riskRegions.forEach((region, index) => {
+      exactKeys(region, new Set(["startSeconds", "endSeconds"]), `$.analysis.measurements.monoCompatibility.riskRegions[${index}]`, errors);
+      if (!Number.isFinite(region.startSeconds) || !Number.isFinite(region.endSeconds) || region.startSeconds < 0 || region.endSeconds < region.startSeconds || region.endSeconds > bundle.analysis.format.durationSeconds) errors.push(`Ogiltig monoriskregion ${index}.`);
+    });
+  }
   for (const key of ["overrangeSamples", "nonFiniteSamples"]) if (!Number.isSafeInteger(bundle.analysis?.measurements?.[key]) || bundle.analysis.measurements[key] < 0) errors.push(`Ogiltigt mätvärde ${key}.`);
   const region = bundle.analysis?.region;
   if (!Number.isSafeInteger(region?.startFrame) || !Number.isSafeInteger(region?.endFrame)
@@ -493,7 +545,7 @@ export function validateAnalysisBundle(bundle) {
   else bundle.analysis.markers.forEach((marker, index) => {
     exactKeys(marker, new Set(["id", "type", "classification", "severity", "startSeconds", "endSeconds", "channel", "summary", "methodId", "reviewStatus", "timePrecisionSeconds"]), `$.analysis.markers[${index}]`, errors);
     if (!CLASSIFICATIONS.has(marker.classification) || !SEVERITIES.has(marker.severity)) errors.push(`Ogiltig markörklass i markör ${index}.`);
-    if (!Number.isFinite(marker.startSeconds) || !Number.isFinite(marker.endSeconds) || marker.startSeconds < 0 || marker.endSeconds < marker.startSeconds) errors.push(`Ogiltigt tidsintervall i markör ${index}.`);
+    if (!Number.isFinite(marker.startSeconds) || !Number.isFinite(marker.endSeconds) || marker.startSeconds < 0 || marker.endSeconds < marker.startSeconds || marker.endSeconds > format.durationSeconds) errors.push(`Ogiltigt tidsintervall i markör ${index}.`);
     requireStrings(marker, ["id", "type", "summary", "methodId", "reviewStatus"], `$.analysis.markers[${index}]`, errors);
     if (marker.channel !== null && (!Number.isSafeInteger(marker.channel) || marker.channel < 1 || marker.channel > format.channels)) errors.push(`Ogiltig kanal i markör ${index}.`);
     if (!nullableFinite(marker.timePrecisionSeconds) || (marker.timePrecisionSeconds !== null && marker.timePrecisionSeconds < 0)) errors.push(`Ogiltig tidsprecision i markör ${index}.`);

@@ -1,6 +1,6 @@
 {
   "schema": "se.gaia.ljudr.test-inventory/1",
-  "release": "1.0.0-rc.7",
+  "release": "1.0.0-rc.8",
   "files": {
     "analysis-exchange.test.mjs": [
       "kanonisk JSON är nyckelordningsoberoende och digest stabil",
@@ -15,7 +15,9 @@
       "långa tidslinjer får högst 720 deterministiska segment med 5 s multipel",
       "guidance kräver känd evidens och audit är hashkedjad före och efter",
       "guidance blir aldrig bound-current utan både aktuell full hash och digest",
-      "strict schema avvisar okända och feltypade nested scalarer efter omdigest"
+      "strict schema avvisar okända och feltypade nested scalarer efter omdigest",
+      "trimmat signalsteg använder urvalsrelativ tidsaxel och bevarar maskintyp",
+      "redaktionell kontext och cue sheet hålls åtskilda från objektiva markörer"
     ],
     "dsp.test.mjs": [
       "tolkar PCM16 och hoppar över ett udda okänt chunk",
@@ -34,7 +36,9 @@
       "Extensible PCM med 24 giltiga vänsterjusterade bitar avkodas korrekt",
       "regionskedjan mäter exakt urval efter fades och enda globala gain",
       "adaptiv vågformsdetalj ger L och R min max RMS samt sampel vid djup zoom",
-      "True Peak får kanal och gruppfördröjningskorrigerad tid"
+      "True Peak får kanal och gruppfördröjningskorrigerad tid",
+      "mono fold-down mäts och varaktig negativ korrelation blir navigerbar",
+      "spektral diagnostik samplar deterministiskt utan EQ-beslut"
     ],
     "export.test.mjs": [
       "WAV-parsern läser ett vanligt stereo PCM-huvud",
@@ -58,6 +62,14 @@
     "opfs.test.mjs": [
       "OPFS registrerar bara complete-exporter och stöder hämta och radera",
       "OPFS cleanup tar bort partial och clear tar bara registrerade LjudR-exporter"
+    ],
+    "podcast-workflow.test.mjs": [
+      "signalsteg väljs uttryckligt och faller säkert tillbaka till källan",
+      "Twenty Minutes Here-profilen är versionsstyrd redaktionell orientering",
+      "cue sheet är opt-in, urvalsrelativt och bara användarskrivet",
+      "publiceringskortet använder mjuka spärrar och dokumenterad längdavvikelse",
+      "handoff binder avsnittsmetadata till verifierad masterhash",
+      "serieöversikten visar median och spridning utan normalisering"
     ],
     "project.test.mjs": [
       "SHA-256 klarar NIST-vektorer och blockvis Blob",
@@ -88,6 +100,7 @@
     "ui-analysis-exchange.test.mjs": [
       "analysutbytet är lokalt, granskat och uttryckligt",
       "profilerna följer den låsta integritetspolicyn",
+      "signalsteg, redaktionell kontext och cue sheet är uttryckliga",
       "app-lik temporal input accepteras av den faktiska buildern",
       "bundle-ID och digest binds lokalt utan källhash i UI-paketet",
       "extern vägledning är separat, osignerad och aldrig autoapplicerad",
@@ -105,7 +118,8 @@
       "redigering ogiltigförklarar hela tidigare exportverifieringen",
       "adaptiv detalj, previewkanaler och workerjobb är operabla",
       "importerade markörtider normaliseras numeriskt före DOM-rendering",
-      "mätkedja, canvastext och lokala arbetsfiler är synliga"
+      "mätkedja, canvastext och lokala arbetsfiler är synliga",
+      "poddflödet har publiceringskort, serieöversikt och handoff"
     ],
     "ui-guidance.test.mjs": [
       "varje fördjupat mätvärde har en klickbar informationsruta",
@@ -121,7 +135,7 @@
       "alla service-workerresurser finns i den lokala MASTER"
     ],
     "worker-protocol.test.mjs": [
-      "analysworkern har jobId cancel stale-filter och tre deterministiska operationer",
+      "analysworkern har jobId cancel stale-filter och fyra deterministiska operationer",
       "exportworkern har samma jobbkontrakt och full OPFS-livscykel"
     ]
   },
@@ -131,5 +145,5 @@
       "Ren trimning bevarar PCM32 exakt"
     ]
   },
-  "total": 98
+  "total": 110
 }

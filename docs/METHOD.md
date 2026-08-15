@@ -50,7 +50,7 @@ Full lokal inkrementell SHA-256 över hela originalfilens bytes är projektets s
 
 ## Ljudfritt analysunderlag
 
-Ett underlag enligt `se.gaia.ljudr.analysis-exchange/1` är en minimerad representation för extern tolkning. Det är inte en ljudexport och innehåller inte originalets fulla filhash. Underlagets slumpmässiga bundleId och kanoniska analysisDigest binds lokalt till full källidentitet, metodversion och editidentitet.
+Ett underlag enligt `se.gaia.ljudr.analysis-exchange/2` är en minimerad representation för extern tolkning. Det är inte en ljudexport och innehåller inte originalets fulla filhash. Signalstegets längd och markörer delar samma urvalsrelativa tidsaxel. Redaktionell seriekontext och opt-in cue sheet hålls åtskilda från objektiva mätningar. Underlagets slumpmässiga bundleId och kanoniska analysisDigest binds lokalt till full källidentitet, metodversion och editidentitet.
 
 Minimal innehåller ingen kontinuerlig tidsserie. Temporal diagnostik använder minst 5 sekunder per intervall och högst 720 intervall. För längre material ökas bredden deterministiskt i steg om 5 sekunder. Endast aggregerad Momentary, Short-term, sample peak, låg-nivåandel och stereokorrelation ingår. Segmentbaserad True Peak är uttryckligen otillgänglig eftersom motorn saknar en verifierad True Peak-tidsserie. Samples, waveform, spektrum, kanalnivåserier, RMS-arrayer och exakta samplepositioner är förbjudna.
 

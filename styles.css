@@ -3626,3 +3626,65 @@ svg {
     min-height: 48px;
   }
 }
+
+.spectral-diagnostics,
+.podcast-publication-card,
+.series-overview {
+  margin-top: 18px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, .72);
+}
+
+.spectral-diagnostics {
+  display: grid;
+  gap: 14px;
+}
+
+.spectral-diagnostics p,
+.compact-heading p,
+.series-overview p {
+  margin: 4px 0 0;
+  color: var(--ink-muted);
+}
+
+.publication-auto-checks,
+.publication-manual-checks {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 16px 0;
+}
+
+.publication-auto-checks div,
+.publication-manual-checks label {
+  min-height: 46px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.publication-auto-checks .is-pass { border-color: rgba(44, 132, 97, .45); }
+.publication-auto-checks .is-review { border-color: rgba(190, 128, 42, .55); }
+
+.series-overview-result table {
+  width: 100%;
+  margin-top: 14px;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.series-overview-result th,
+.series-overview-result td {
+  padding: 8px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+}
+
+@media (max-width: 700px) {
+  .publication-auto-checks,
+  .publication-manual-checks { grid-template-columns: 1fr; }
+  .series-overview-result { overflow-x: auto; }
+}

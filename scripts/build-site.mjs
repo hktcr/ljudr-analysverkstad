@@ -24,6 +24,7 @@ const publicFiles = [
   "src/sha256.js",
   "src/release-meta.js",
   "src/analysis-exchange.js",
+  "src/podcast-workflow.js",
   "validation-manifest.json",
 ];
 
@@ -56,7 +57,7 @@ const releaseMeta = {
   commit: releaseCommit,
   builtAt,
   channel: "public-validation-candidate",
-  methodVersion: "ljudr-method/1.0-rc.7",
+  methodVersion: "ljudr-method/1.0-rc.8",
 };
 await writeFile(
   resolve(destination, "src/release-meta.js"),

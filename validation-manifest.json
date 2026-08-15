@@ -1,14 +1,14 @@
 {
   "schema": "se.gaia.ljudr.validation-manifest/1",
-  "release": "1.0.0-rc.7",
+  "release": "1.0.0-rc.8",
   "status": "public-validation-candidate",
   "certification": false,
   "verifiedAt": "2026-08-15",
-  "engineVersion": "1.0.0-rc.7",
+  "engineVersion": "1.0.0-rc.8",
   "automatedTestInventory": {
     "fixedBy": "tests/test-inventory.json",
-    "tests": 98,
-    "sha256": "6b0af009a60b0fc3c7c687e66eb24c4c7885ae6a234b19c3fd70f84dfcb0def9",
+    "tests": 110,
+    "sha256": "10c3e40fe13e284d43406a8e17d38a58a8182cd326f377cb34423828284daae0",
     "requiredFailures": 0
   },
   "ebu": {
@@ -27,7 +27,7 @@
     "fixtureManifestSha256": "d1a496580da2351eda28464e84402ed362590e7a997632a6be1689e865dec69d"
   },
   "analysisExchange": {
-    "schema": "se.gaia.ljudr.analysis-exchange/1",
+    "schema": "se.gaia.ljudr.analysis-exchange/2",
     "guidanceSchema": "se.gaia.ljudr.guidance/1",
     "defaultDataProfile": "minimal",
     "defaultPrivacyMode": "redacted-no-optional-metadata",

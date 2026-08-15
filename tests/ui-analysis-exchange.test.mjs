@@ -38,6 +38,16 @@ test("profilerna följer den låsta integritetspolicyn", () => {
   assert.match(app, /privacy: privacySelection\.includeLocation && state\.metadata\.coordinatePrecision === "exact" \? "exact" : "redacted"/);
 });
 
+test("signalsteg, redaktionell kontext och cue sheet är uttryckliga", () => {
+  for (const stage of ["source", "calculated-export-selection", "verified-output"]) assert.match(html, new RegExp(`name="exchangeStage" value="${stage}"`));
+  assert.match(html, /name="includeEditorialCueSheet"/);
+  assert.doesNotMatch(html, /name="includeEditorialCueSheet"[^>]*checked/);
+  assert.match(app, /selectedAnalysis:\s*selected\.analysis/);
+  assert.match(app, /markers:\s*selected\.analysis\?\.markersSuggested \|\| \[\]/);
+  assert.match(app, /editorialContext:\s*buildEditorialContext/);
+  assert.doesNotMatch(app.match(/function analysisExchangeInput\(\)[\s\S]*?\n}/)?.[0] || "", /markers:\s*state\.markers\.filter/);
+});
+
 test("app-lik temporal input accepteras av den faktiska buildern", () => {
   const count = 100;
   const bundle = buildAnalysisBundle({
@@ -80,6 +90,10 @@ test("bundle-ID och digest binds lokalt utan källhash i UI-paketet", () => {
   assert.match(app, /bundleReceipts: state\.analysisExchange\.receipts/);
   assert.match(app, /analysisExchangeTools\?\.parseGuidanceFile/);
   assert.match(app, /currentAnalysisDigest: state\.analysisExchange\.lastBundle\?\.digest \|\| null/);
+  assert.match(app, /function guidanceSourceIdentity\(\)/);
+  assert.match(app, /signalStage === "verified-output"/);
+  assert.match(app, /state\.verifiedExport\?\.sourceIdentity \|\| null/);
+  assert.match(app, /sourceIdentity: guidanceSourceIdentity\(\)/);
   assert.match(app, /const hasCurrentDigest = Boolean\(state\.analysisExchange\.lastBundle\?\.digest\)/);
   assert.match(app, /const matched = moduleMatch && hasCurrentDigest/);
   assert.match(app, /Full källhash stannar lokalt/);

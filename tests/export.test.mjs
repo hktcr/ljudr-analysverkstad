@@ -290,9 +290,10 @@ test("export gör ingen dold toppsänkning utan blockerar det bekräftade gainv�
     error => error.code === "TRUE_PEAK_CEILING_EXCEEDED",
   );
 
-  const { output, report, verifiedOutput } = await exportWav(file, {
+  const { output, fileName, report, verifiedOutput } = await exportWav(file, {
     globalGainDb: -5.5,
     truePeakCeilingDbtp: -6,
+    fileName: "TMH_E008_har_MASTER.wav",
     preferOpfs: false,
   });
   assert.equal(report.edit.globalGainDb, -5.5);
@@ -302,7 +303,10 @@ test("export gör ingen dold toppsänkning utan blockerar det bekräftade gainv�
   assert.equal(report.edit.truePeakValidationStatus, "ebu-minimum-requirements-validated");
   assert.equal(report.output.pcmClampingRisk.detected, false);
   assert.equal(report.output.dither.applied, true);
+  assert.equal(fileName, "TMH_E008_har_MASTER.wav");
   assert.ok(verifiedOutput.summary.truePeakEstimateDbtp <= -6);
+  assert.ok(Array.isArray(verifiedOutput.markersSuggested));
+  assert.equal(verifiedOutput.validation.engineVersion, "1.0.0-rc.8");
 
   const info = await inspectWav(output);
   const view = new DataView(await output.slice(info.data.dataOffset).arrayBuffer());

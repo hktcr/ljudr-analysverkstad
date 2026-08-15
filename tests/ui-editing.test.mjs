@@ -54,8 +54,9 @@ test("seriereferensen har tre uttryckliga steg och ingen dold toppsänkning", ()
 
 test("exporten använder endast synlig global gain och sparar serieflödet", () => {
   assert.match(app, /series:\s*\{ status: "preserved"/);
-  assert.match(app, /targetLufs:\s*-19/);
-  assert.match(app, /ceilingDbtp:\s*-2/);
+  assert.match(app, /targetLufs:\s*TMH_SERIES_PROFILE\.targetLufs/);
+  assert.match(app, /ceilingDbtp:\s*TMH_SERIES_PROFILE\.truePeakOrientationDbtp/);
+  assert.match(app, /profileVersion:\s*TMH_SERIES_PROFILE\.version/);
   const projectEdit = app.match(/function projectEdit\(\)[\s\S]*?\n}/)?.[0] || "";
   assert.match(projectEdit, /globalGainDb:\s*state\.trim\.gainDb/);
   assert.doesNotMatch(projectEdit, /peakHandling/);
@@ -69,7 +70,14 @@ test("redigering ogiltigförklarar hela tidigare exportverifieringen", () => {
   assert.match(invalidation, /state\.regionAnalysis = null/);
   assert.match(invalidation, /state\.verifiedExport = null/);
   assert.match(invalidation, /state\.lastExportReport = null/);
+  assert.match(invalidation, /state\.spectralDiagnostics = null/);
+  assert.match(invalidation, /operation: "analyze-region"/);
+  assert.match(invalidation, /operation: "spectral-diagnostics"/);
+  assert.match(invalidation, /state\.jobs\.region = null/);
+  assert.match(invalidation, /state\.jobs\.spectral = null/);
   assert.match(invalidation, /state\.exportStatus === "complete"/);
+  assert.match(invalidation, /updateProjectedMetrics\(\)/);
+  assert.match(invalidation, /updateExportRecommendation\(\)/);
 
   const report = app.match(/function reportInput\(\)[\s\S]*?\n}/)?.[0] || "";
   assert.match(report, /state\.exportStatus === "complete" && Boolean\(state\.verifiedExport\)/);
@@ -78,6 +86,12 @@ test("redigering ogiltigförklarar hela tidigare exportverifieringen", () => {
   const exportStart = app.match(/function startExport\(\)[\s\S]*?\n}\n\nfunction handleExportMessage/)?.[0] || "";
   assert.match(exportStart, /state\.lastExportReport = null/);
   assert.match(exportStart, /state\.verifiedExport = null/);
+  assert.match(exportStart, /renderPublicationCard\(\)/);
+  const handler = app.match(/function handleAnalysisMessage\(data = \{\}\)[\s\S]*?\n}\n\nfunction finishAnalysisJob/)?.[0] || "";
+  const regionCancelled = handler.match(/if \(operation === "region"\) \{ state\.regionStatus = "cancelled";[^\n]+/)?.[0] || "";
+  const regionError = handler.match(/if \(operation === "region" && elements\.regionMeasureStatus\) \{ state\.regionStatus = "error";[^\n]+/)?.[0] || "";
+  assert.match(regionCancelled, /renderDeepMeasurements\(\)/);
+  assert.match(regionError, /renderDeepMeasurements\(\)/);
 });
 
 test("adaptiv detalj, previewkanaler och workerjobb är operabla", () => {
@@ -122,4 +136,14 @@ test("mätkedja, canvastext och lokala arbetsfiler är synliga", () => {
   assert.match(app, /storage-clear/);
   assert.match(html, /id="updateBanner"/);
   assert.match(app, /hasUnsafeUpdateState/);
+});
+
+test("poddflödet har publiceringskort, serieöversikt och handoff", () => {
+  for (const id of ["publicationStatus", "publicationAutoChecks", "publicationExceptionNote", "exportEpisodeHandoffButton", "seriesReportsInput", "seriesOverviewResult", "runSpectralDiagnosticsButton"]) assert.match(html, new RegExp(`id="${id}"`));
+  assert.match(app, /function renderPublicationCard/);
+  assert.match(app, /function exportEpisodeHandoff/);
+  assert.match(app, /function importSeriesReports/);
+  assert.match(app, /function episodeMasterFileName/);
+  assert.match(app, /TMH_E\$\{episode\}_\$\{slug\}_MASTER\.wav/);
+  assert.match(app, /state\.regionAnalysis\?\.processed\?\.summary/);
 });

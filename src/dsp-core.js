@@ -8,7 +8,7 @@
 import { decodeSampleAt, inspectWav, parseWavHeader as parseSharedWavHeader } from "./wav.js";
 import { sha256Blob } from "./sha256.js";
 
-export const ENGINE_VERSION = "1.0.0-rc.7";
+export const ENGINE_VERSION = "1.0.0-rc.8";
 
 export const DEFAULT_PEAK_HANDLING = Object.freeze({
   enabled: false,
@@ -669,6 +669,9 @@ export async function analyzeWav(blob, suppliedOptions = {}, onProgress = () => 
     sumR2: 0,
     midEnergy: 0,
     sideEnergy: 0,
+    monoEnergy: 0,
+    monoPeak: 0,
+    monoPeakFrame: 0,
   };
   const zeroCollector = regionCollector(Math.round(sampleRate * options.zeroMinimumSeconds));
   const overrangeCollector = regionCollector(1);
@@ -838,6 +841,11 @@ export async function analyzeWav(blob, suppliedOptions = {}, onProgress = () => 
           global.sumR2 += right * right;
           global.midEnergy += mid * mid;
           global.sideEnergy += side * side;
+          global.monoEnergy += mid * mid;
+          if (Math.abs(mid) > global.monoPeak) {
+            global.monoPeak = Math.abs(mid);
+            global.monoPeakFrame = frameIndex;
+          }
           stepSumL += left;
           stepSumR += right;
           stepSumLR += left * right;
@@ -946,6 +954,7 @@ export async function analyzeWav(blob, suppliedOptions = {}, onProgress = () => 
   let correlation = null;
   let channelBalanceDb = null;
   let midSideRatioDb = null;
+  let monoEnergyDeltaDb = null;
   if (channels === 2 && global.validFrames > 0) {
     const covariance = global.sumLR - global.sumL * global.sumR / global.validFrames;
     const varianceL = global.sumL2 - global.sumL * global.sumL / global.validFrames;
@@ -954,6 +963,10 @@ export async function analyzeWav(blob, suppliedOptions = {}, onProgress = () => 
     correlation = denominator > 0 ? Math.max(-1, Math.min(1, covariance / denominator)) : null;
     channelBalanceDb = global.sumR2 > 0 ? 10 * Math.log10(global.sumL2 / global.sumR2) : null;
     midSideRatioDb = global.sideEnergy > 0 ? 10 * Math.log10(global.midEnergy / global.sideEnergy) : null;
+    const stereoReferenceEnergy = (global.sumL2 + global.sumR2) * 0.5;
+    monoEnergyDeltaDb = stereoReferenceEnergy > 0
+      ? (global.monoEnergy > 0 ? 10 * Math.log10(global.monoEnergy / stereoReferenceEnergy) : -300)
+      : null;
   }
 
   const lowLevelThresholdEnergy = 10 ** (options.lowLevelThresholdDbfs / 10);
@@ -1028,6 +1041,30 @@ export async function analyzeWav(blob, suppliedOptions = {}, onProgress = () => 
     invalidRegions,
     options.maxMarkersPerKind,
   );
+  const negativeCorrelationRegions = [];
+  if (channels === 2) {
+    let negativeStart = null;
+    stepCorrelation.forEach((value, index) => {
+      if (Number.isFinite(value) && value < -0.25 && negativeStart === null) negativeStart = index;
+      if ((!Number.isFinite(value) || value >= -0.25) && negativeStart !== null) {
+        if ((index - negativeStart) * options.timelineStepSeconds >= 1) negativeCorrelationRegions.push([negativeStart, index]);
+        negativeStart = null;
+      }
+    });
+    if (negativeStart !== null && (stepCorrelation.length - negativeStart) * options.timelineStepSeconds >= 1) negativeCorrelationRegions.push([negativeStart, stepCorrelation.length]);
+    negativeCorrelationRegions.slice(0, options.maxMarkersPerKind).forEach(([start, end], index) => {
+      importantMarkers.push({
+        ...markerBase(`negative-correlation-${index}-${start}`, "review", true, false, "Stereokorrelationen ligger under -0,25 i minst en sekund. Provlyssna mono fold-down."),
+        machineKind: "negative-stereo-correlation",
+        timeSeconds: start * options.timelineStepSeconds,
+        startSeconds: start * options.timelineStepSeconds,
+        endSeconds: Math.min(header.durationSeconds, end * options.timelineStepSeconds),
+        sourceTimeSeconds: analysisStartFrame / sampleRate + start * options.timelineStepSeconds,
+        channel: null,
+        label: "Varaktigt negativ stereokorrelation",
+      });
+    });
+  }
   for (const channel of channelResults) {
     if (Number.isFinite(channel.samplePeakDbfs)) {
       importantMarkers.push({
@@ -1153,6 +1190,19 @@ export async function analyzeWav(blob, suppliedOptions = {}, onProgress = () => 
       channelBalanceDb,
       correlation,
       midSideRatioDb,
+      monoCompatibility: channels === 2 ? {
+        energyDeltaDb: monoEnergyDeltaDb,
+        samplePeakDbfs: finiteDb(global.monoPeak),
+        samplePeakTimeSeconds: global.monoPeakFrame / sampleRate,
+        negativeCorrelationPercent: stepCorrelation.filter(Number.isFinite).length
+          ? 100 * stepCorrelation.filter(value => Number.isFinite(value) && value < -0.25).length / stepCorrelation.filter(Number.isFinite).length
+          : null,
+        negativeCorrelationRegions: negativeCorrelationRegions.map(([start, end]) => ({
+          startSeconds: start * options.timelineStepSeconds,
+          endSeconds: Math.min(header.durationSeconds, end * options.timelineStepSeconds),
+        })),
+        interpretation: "Orienterande mono fold-down. Ingen automatisk stereokorrigering.",
+      } : null,
       overrangeSamples: channelResults.reduce((sum, item) => sum + item.overrangeSamples, 0),
       nonFiniteSamples: channelResults.reduce((sum, item) => sum + item.nonFiniteSamples, 0),
       channels: channelResults,
@@ -1242,6 +1292,100 @@ export async function analyzeRegion(blob, suppliedOptions = {}, onProgress = () 
     },
     source,
     processed,
+  };
+}
+
+function goertzelRelativeDb(samples, sampleRate, frequency) {
+  if (!samples.length) return null;
+  const omega = 2 * Math.PI * frequency / sampleRate;
+  const coefficient = 2 * Math.cos(omega);
+  let previous = 0;
+  let previousTwo = 0;
+  let totalEnergy = 0;
+  for (const sample of samples) {
+    const next = sample + coefficient * previous - previousTwo;
+    previousTwo = previous;
+    previous = next;
+    totalEnergy += sample * sample;
+  }
+  if (totalEnergy <= 0) return null;
+  const tonePower = Math.max(0, previousTwo * previousTwo + previous * previous - coefficient * previous * previousTwo);
+  const relative = tonePower / (samples.length * totalEnergy);
+  return relative > 0 ? 10 * Math.log10(relative) : null;
+}
+
+const medianFinite = values => {
+  const sorted = values.filter(Number.isFinite).sort((a, b) => a - b);
+  if (!sorted.length) return null;
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+};
+
+export async function analyzeSpectralDiagnostics(blob, suppliedOptions = {}, onProgress = () => {}) {
+  const inspected = await inspectWav(blob);
+  const { format } = inspected;
+  const startFrame = Math.min(inspected.frameCount, Math.max(0, Math.floor(Number(suppliedOptions.startFrame) || 0)));
+  const endFrame = Math.min(inspected.frameCount, Math.max(startFrame, Math.ceil(Number(suppliedOptions.endFrame ?? inspected.frameCount) || 0)));
+  if (endFrame <= startFrame) throw new Error("Spektral diagnostik kräver ett ljudintervall.");
+  const windowCount = Math.max(1, Math.min(12, Math.round(Number(suppliedOptions.windowCount) || 12)));
+  const windowFrames = Math.max(1, Math.min(endFrame - startFrame, Math.round(format.sampleRate * 5)));
+  const stride = Math.max(1, Math.floor(format.sampleRate / 4_000));
+  const sampledRate = format.sampleRate / stride;
+  const starts = [...new Set(Array.from({ length: windowCount }, (_, index) => {
+    if (windowCount === 1) return startFrame;
+    return Math.round(startFrame + (endFrame - startFrame - windowFrames) * index / (windowCount - 1));
+  }))];
+  const windows = [];
+  const bytesPerSample = format.bitsPerSample / 8;
+  for (let windowIndex = 0; windowIndex < starts.length; windowIndex += 1) {
+    if (suppliedOptions.shouldCancel?.()) throw new DOMException("Spektral diagnostik avbröts.", "AbortError");
+    const frameStart = starts[windowIndex];
+    const frames = Math.min(windowFrames, endFrame - frameStart);
+    const byteStart = inspected.data.dataOffset + frameStart * format.blockAlign;
+    const bytes = new Uint8Array(await blob.slice(byteStart, byteStart + frames * format.blockAlign).arrayBuffer());
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const mono = [];
+    for (let frame = 0; frame < frames; frame += stride) {
+      let sum = 0;
+      let valid = 0;
+      for (let channel = 0; channel < format.channels; channel += 1) {
+        const sample = decodeSampleAt(view, frame * format.blockAlign + channel * bytesPerSample, format);
+        if (Number.isFinite(sample)) { sum += sample; valid += 1; }
+      }
+      if (valid) mono.push(sum / valid);
+    }
+    let low = 0;
+    let lowEnergy = 0;
+    let totalEnergy = 0;
+    const alpha = 1 - Math.exp(-2 * Math.PI * 120 / sampledRate);
+    for (const sample of mono) {
+      low += alpha * (sample - low);
+      lowEnergy += low * low;
+      totalEnergy += sample * sample;
+    }
+    const harmonics = [50, 100, 150, 200].map(frequency => goertzelRelativeDb(mono, sampledRate, frequency));
+    windows.push({
+      startSeconds: frameStart / format.sampleRate,
+      sampledSeconds: frames / format.sampleRate,
+      lowFrequencyEnergyPercent: totalEnergy > 0 ? 100 * lowEnergy / totalEnergy : null,
+      mainsHum50RelativeDb: harmonics[0],
+      mainsHarmonicMaximumRelativeDb: harmonics.filter(Number.isFinite).length ? Math.max(...harmonics.filter(Number.isFinite)) : null,
+    });
+    onProgress({ phase: "spectral-diagnostics", fraction: (windowIndex + 1) / starts.length, message: `Spektral orientering ${windowIndex + 1} av ${starts.length}` });
+    await new Promise(resolve => setTimeout(resolve, 0));
+  }
+  const lowValues = windows.map(item => item.lowFrequencyEnergyPercent);
+  const humValues = windows.map(item => item.mainsHum50RelativeDb);
+  return {
+    scope: "deterministic-sampled-windows",
+    windowCount: windows.length,
+    sampledSeconds: windows.reduce((sum, item) => sum + item.sampledSeconds, 0),
+    lowFrequencyEnergyPercentMedian: medianFinite(lowValues),
+    lowFrequencyEnergyPercentMaximum: lowValues.filter(Number.isFinite).length ? Math.max(...lowValues.filter(Number.isFinite)) : null,
+    mainsHum50RelativeDbMedian: medianFinite(humValues),
+    mainsHum50RelativeDbMaximum: humValues.filter(Number.isFinite).length ? Math.max(...humValues.filter(Number.isFinite)) : null,
+    windows,
+    interpretation: "Orienterande, deterministiskt samplad diagnostik för provlyssning. Inte full spektralanalys, felbesked eller EQ-rekommendation.",
   };
 }
 

@@ -1,5 +1,15 @@
 # Ändringslogg
 
+## 1.0.0-rc.8, 2026-08-15
+
+- rättar analysutbytets tidsaxel efter trimning och bevarar maskinella markörtyper
+- skiljer källfil, beräknat exporturval och verifierad WAV som uttryckliga signalsteg
+- lägger till versionsstyrd Twenty Minutes Here-kontext och opt-in redaktionellt cue sheet
+- visar beslutstal för aktuellt exporturval och separerar teknisk klamprisk från frivillig serieorientering
+- lägger till publiceringskort, standardiserat masternamn, avsnittsmanifest och lokal serieöversikt
+- mäter mono fold-down, navigerbar negativ korrelation och frivillig samplad spektral orientering
+- utökar den fixerade testsuiten till 110 tester
+
 ## 1.0.0-rc.7, 2026-08-15
 
 - gör kopierbar JSON-text till primärt analysutbyte med gAIa

@@ -67,6 +67,7 @@ test("webbpaketet innehåller exakt den uttryckliga tillåtelselistan", async ()
     "src/app.js",
     "src/dsp-core.js",
     "src/export-worker.js",
+    "src/podcast-workflow.js",
     "src/project.js",
     "src/release-meta.js",
     "src/sha256.js",
