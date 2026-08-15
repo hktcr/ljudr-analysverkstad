@@ -25,6 +25,18 @@ test("integritetsbudskap och nätspärr finns", () => {
   assert.doesNotMatch(css, /url\(["']?https?:\/\//i);
 });
 
+test("analysförloppet förklarar syfte och visar sammanhängande delsteg", () => {
+  for (const id of ["progressPhase", "progressPurpose"]) assert.match(html, new RegExp(`id="${id}"`));
+  for (const phase of ["header", "analysis", "statistics", "hash"]) {
+    assert.match(html, new RegExp(`data-analysis-phase="${phase}"`));
+  }
+  assert.match(app, /const ANALYSIS_PHASES = Object\.freeze/);
+  assert.match(app, /function analysisOverallProgress/);
+  assert.match(app, /if \(phase === "analysis"\) return 0\.04 \+ value \* 0\.76/);
+  assert.match(app, /if \(phase === "hash"\) return 0\.86 \+ value \* 0\.13/);
+  assert.match(app, /updateAnalysisProgress\(data\.fraction, data\.message \|\| data\.phase, false, data\.phase\)/);
+});
+
 test("alla knappar har uttrycklig typ", () => {
   const buttons = [...html.matchAll(/<button\b[^>]*>/g)].map(match => match[0]);
   assert.ok(buttons.length > 20);

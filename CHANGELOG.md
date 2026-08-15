@@ -1,5 +1,13 @@
 # Ändringslogg
 
+## 1.0.0-rc.6, 2026-08-15
+
+- förklarar analysens fyra pågående delsteg: filstruktur, signal, sammanställning och källidentitet
+- visar syftet med varje delsteg i klartext medan analysen arbetar
+- gör analysens totalprogress sammanhängande även när ett nytt internt delsteg börjar på noll
+- förtydligar startsidans målgrupper, objektiva mätning, varsamma redigering och lokala integritet
+- förbättrar startsidans visuella hierarki med kompakta funktionskort och lugnare bakgrundsgrafik
+
 ## 1.0.0-rc.5, 2026-08-15
 
 - hämtar navigering och versionsbundna programresurser från nätet först när nät finns

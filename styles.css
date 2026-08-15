@@ -533,11 +533,24 @@ svg {
 }
 
 .open-hero {
+  position: relative;
   display: grid;
   min-height: 510px;
   grid-template-columns: minmax(0, 1.15fr) minmax(340px, 0.85fr);
   align-items: center;
   gap: clamp(45px, 8vw, 115px);
+}
+
+.open-hero::before {
+  position: absolute;
+  z-index: -1;
+  inset: -40px 43% -30px -5vw;
+  background:
+    radial-gradient(circle at 21% 35%, rgba(110, 90, 167, 0.16), transparent 25%),
+    radial-gradient(circle at 58% 70%, rgba(45, 136, 145, 0.13), transparent 28%);
+  content: "";
+  filter: blur(2px);
+  pointer-events: none;
 }
 
 .hero-copy {
@@ -565,7 +578,7 @@ svg {
 
 .hero-copy > p {
   max-width: 620px;
-  margin-bottom: 28px;
+  margin-bottom: 24px;
   font-size: clamp(1rem, 1.4vw, 1.18rem);
   line-height: 1.66;
 }
@@ -592,6 +605,48 @@ svg {
 
 .principle-list svg {
   color: var(--positive);
+}
+
+.hero-capabilities {
+  display: grid;
+  max-width: 690px;
+  margin: 22px 0 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.hero-capabilities div {
+  position: relative;
+  min-width: 0;
+  padding: 13px 14px 14px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(24, 34, 54, 0.09);
+  border-radius: 13px;
+}
+
+.hero-capabilities div::before {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--violet), var(--cyan));
+  content: "";
+}
+
+.hero-capabilities dt {
+  margin-bottom: 4px;
+  color: var(--ink);
+  font-size: 0.75rem;
+  font-weight: 760;
+}
+
+.hero-capabilities dd {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.69rem;
+  line-height: 1.45;
 }
 
 .open-card {
@@ -813,6 +868,89 @@ svg {
   margin-top: 9px;
   color: var(--ink-faint);
   font-size: 0.7rem;
+}
+
+.analysis-phase-copy {
+  display: grid;
+  margin-top: 14px;
+  padding: 13px 14px;
+  grid-template-columns: minmax(105px, auto) 1fr;
+  align-items: start;
+  gap: 12px;
+  background: linear-gradient(110deg, rgba(110, 90, 167, 0.08), rgba(45, 136, 145, 0.07));
+  border: 1px solid rgba(78, 91, 125, 0.11);
+  border-radius: 10px;
+}
+
+.analysis-phase-kicker {
+  color: var(--violet);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.analysis-phase-copy p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.analysis-phase-list {
+  display: grid;
+  margin: 13px 0 0;
+  padding: 0;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+  list-style: none;
+}
+
+.analysis-phase-list li {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  color: var(--ink-faint);
+  font-size: 0.68rem;
+  font-weight: 680;
+}
+
+.analysis-phase-list li i {
+  display: grid;
+  width: 23px;
+  height: 23px;
+  flex: 0 0 23px;
+  place-items: center;
+  color: var(--ink-faint);
+  background: var(--surface-muted);
+  border-radius: 50%;
+  font-size: 0.64rem;
+  font-style: normal;
+}
+
+.analysis-phase-list li.is-current {
+  color: var(--violet);
+}
+
+.analysis-phase-list li.is-current i {
+  color: #fff;
+  background: var(--violet);
+  box-shadow: 0 0 0 4px rgba(110, 90, 167, 0.11);
+}
+
+.analysis-phase-list li.is-complete {
+  color: var(--positive);
+}
+
+.analysis-phase-list li.is-complete i {
+  color: transparent;
+  background: rgba(57, 114, 97, 0.13);
+}
+
+.analysis-phase-list li.is-complete i::after {
+  color: var(--positive);
+  content: "✓";
 }
 
 .timeline-card,
@@ -2670,6 +2808,10 @@ svg {
     gap: 38px;
   }
 
+  .open-hero::before {
+    inset: -25px -4vw 45% -4vw;
+  }
+
   .hero-copy {
     max-width: 760px;
   }
@@ -2774,6 +2916,10 @@ svg {
     font-size: clamp(2.3rem, 13vw, 3.7rem);
   }
 
+  .hero-capabilities {
+    grid-template-columns: 1fr;
+  }
+
   .open-hero {
     gap: 30px;
   }
@@ -2794,6 +2940,16 @@ svg {
     align-items: flex-start;
     flex-direction: column;
     gap: 13px;
+  }
+
+  .analysis-phase-copy {
+    grid-template-columns: 1fr;
+    gap: 5px;
+  }
+
+  .analysis-phase-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px;
   }
 
   .section-heading .button {

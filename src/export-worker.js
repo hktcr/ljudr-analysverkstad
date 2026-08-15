@@ -13,7 +13,7 @@ import {
 } from "./dsp-core.js";
 import { sha256Blob } from "./sha256.js";
 
-const ENGINE_VERSION = "1.0.0-rc.5";
+const ENGINE_VERSION = "1.0.0-rc.6";
 const DEFAULT_CHUNK_BYTES = 8 * 1024 * 1024;
 const MEMORY_WARNING_BYTES = 512 * 1024 * 1024;
 const GAIN_EPSILON_DB = 1e-9;

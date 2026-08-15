@@ -123,6 +123,51 @@ let detailTimer = 0;
 let regionTimer = 0;
 let exchangePreviewSequence = 0;
 
+const ANALYSIS_PHASES = Object.freeze({
+  header: {
+    order: 0,
+    label: "Filstruktur",
+    title: "Kontrollerar WAV-filens struktur",
+    purpose: "Kontrollerar container, ljudformat, kanaler, samplingsfrekvens och datagränser innan signalen läses.",
+  },
+  analysis: {
+    order: 1,
+    label: "Signal",
+    title: "Läser och mäter ljudsignalen",
+    purpose: "Läser filen blockvis och mäter loudness, toppar, dynamik, stereorelationer, vågform och möjliga tekniska avvikelser.",
+  },
+  statistics: {
+    order: 2,
+    label: "Sammanställning",
+    title: "Sammanställer mätvärden och fynd",
+    purpose: "Sammanför mätningen till LUFS-I, LRA, PLR, kanalvärden, observationer och navigerbara markörer.",
+  },
+  hash: {
+    order: 3,
+    label: "Källidentitet",
+    title: "Binder analysen till källfilen",
+    purpose: "Beräknar en lokal SHA-256 för hela filen, så att resultatet kan knytas till exakt rätt original.",
+  },
+  complete: {
+    order: 4,
+    label: "Klar",
+    title: "Analysen är klar",
+    purpose: "Resultaten beskriver signalen. Den regelbaserade reflektionen tolkar dem därefter utifrån vald inspelningstyp.",
+  },
+  cancelled: {
+    order: -1,
+    label: "Avbruten",
+    title: "Analysen avbröts",
+    purpose: "Inget ljud har ändrats. Du kan starta om analysen när du vill.",
+  },
+  error: {
+    order: -1,
+    label: "Fel",
+    title: "Analysen kunde inte slutföras",
+    purpose: "Originalfilen är orörd. Läs felmeddelandet och försök igen eller välj en annan WAV-fil.",
+  },
+});
+
 const elements = {
   appVersion: $("#appVersion"),
   audioInput: $("#audioFileInput"),
@@ -140,6 +185,9 @@ const elements = {
   progressLabel: $("#progressLabel"),
   progressPercent: $("#progressPercent"),
   progressFill: $("#progressFill"),
+  progressPhase: $("#progressPhase"),
+  progressPurpose: $("#progressPurpose"),
+  progressSteps: Array.from(document.querySelectorAll("[data-analysis-phase]")),
   analysisCanvas: $("#analysisCanvas"),
   analysisCanvasEmpty: $("#analysisCanvasEmpty"),
   trimCanvas: $("#trimCanvas"),
@@ -799,12 +847,37 @@ async function openAudioFile(file) {
   emitState("file-opened");
 }
 
-function updateAnalysisProgress(fraction, message, hidden = false) {
+function analysisOverallProgress(phase, fraction) {
   const value = clamp(fraction, 0, 1);
+  if (phase === "header") return 0.02;
+  if (phase === "analysis") return 0.04 + value * 0.76;
+  if (phase === "statistics") return 0.84;
+  if (phase === "hash") return 0.86 + value * 0.13;
+  if (phase === "complete") return 1;
+  return value;
+}
+
+function updateAnalysisProgress(fraction, message, hidden = false, phase = null) {
+  const currentPhase = ANALYSIS_PHASES[phase] ? phase : null;
+  const value = currentPhase ? analysisOverallProgress(currentPhase, fraction) : clamp(fraction, 0, 1);
   elements.analysisProgress.hidden = hidden;
   elements.progressFill.style.width = `${value * 100}%`;
   elements.progressPercent.textContent = `${Math.round(value * 100)} %`;
-  elements.progressLabel.textContent = message || "Analyserar ljud";
+  const phaseInfo = currentPhase ? ANALYSIS_PHASES[currentPhase] : null;
+  elements.progressLabel.textContent = phaseInfo?.title || message || "Analyserar ljud";
+  if (elements.progressPhase) elements.progressPhase.textContent = phaseInfo?.label || "Pågående analys";
+  if (elements.progressPurpose) elements.progressPurpose.textContent = phaseInfo?.purpose || "Mätningen pågår lokalt i webbläsaren.";
+  if (currentPhase) {
+    for (const step of elements.progressSteps) {
+      const stepInfo = ANALYSIS_PHASES[step.dataset.analysisPhase];
+      const isCurrent = step.dataset.analysisPhase === currentPhase;
+      const isComplete = currentPhase === "complete" || (phaseInfo.order >= 0 && stepInfo.order < phaseInfo.order);
+      step.classList.toggle("is-current", isCurrent);
+      step.classList.toggle("is-complete", isComplete);
+      if (isCurrent) step.setAttribute("aria-current", "step");
+      else step.removeAttribute("aria-current");
+    }
+  }
 }
 
 function updateExportProgress(fraction, message, hidden = false) {
@@ -827,7 +900,7 @@ function handleAnalysisMessage(data = {}) {
   const operation = data.operation === "analyze-region" ? "region" : data.operation === "waveform-detail" ? "detail" : "analysis";
   if (!isCurrentJob(operation, data)) return;
   if (data.type === "progress") {
-    if (operation === "analysis") updateAnalysisProgress(data.fraction, data.message || data.phase);
+    if (operation === "analysis") updateAnalysisProgress(data.fraction, data.message || data.phase, false, data.phase);
     else if (operation === "detail" && elements.detailStatus) setDetailStatus(data.message || "Läser detaljdata", true);
     else if (operation === "region" && elements.regionMeasureStatus) elements.regionMeasureStatus.textContent = data.message || "Beräknar exporturval";
     return;
@@ -859,7 +932,7 @@ function handleAnalysisMessage(data = {}) {
     syncAnalysisExchangeAvailability();
     elements.analyzeButton.disabled = false;
     elements.analyzeButton.textContent = "Försök analysera igen";
-    updateAnalysisProgress(0, data.message || data.error || "Analysen misslyckades");
+    updateAnalysisProgress(0, data.message || data.error || "Analysen misslyckades", false, "error");
     showToast(data.message || data.error || "Analysen misslyckades.", "error", 8000);
     updateCapabilities(false, state.capabilities.export);
     emitState("analysis-error");
@@ -873,7 +946,7 @@ function finishAnalysisJob(message) {
   elements.analyzeButton.textContent = state.analysis ? "Analysera igen" : "Starta analys";
   elements.cancelAnalysis.hidden = true;
   elements.cancelAnalysis.disabled = false;
-  updateAnalysisProgress(0, message);
+  updateAnalysisProgress(0, message, false, "cancelled");
 }
 
 function ensureAnalysisWorker() {
@@ -914,7 +987,7 @@ function startAnalysis() {
     elements.analyzeButton.textContent = "Analys pågår";
     elements.cancelAnalysis.hidden = false;
     elements.cancelAnalysis.disabled = false;
-    updateAnalysisProgress(0, "Förbereder blockvis analys");
+    updateAnalysisProgress(0, "Förbereder blockvis analys", false, "header");
     analysisWorker.postMessage({
       type: "analyze",
       jobId,
@@ -951,7 +1024,7 @@ function applyAnalysisResult(result) {
   elements.analysisCanvasEmpty.hidden = true;
   elements.analyzeButton.disabled = false;
   elements.analyzeButton.textContent = "Analysera igen";
-  updateAnalysisProgress(1, "Analysen är klar");
+  updateAnalysisProgress(1, "Analysen är klar", false, "complete");
   window.setTimeout(() => { if (state.analysisStatus === "complete") elements.analysisProgress.hidden = true; }, 1200);
   const suggestions = Array.isArray(result.markersSuggested) ? result.markersSuggested : [];
   const existingIds = new Set(state.markers.map((marker) => marker.id));

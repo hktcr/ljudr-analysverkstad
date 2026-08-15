@@ -1,13 +1,13 @@
-# Releasechecklista för 1.0.0-rc.5
+# Releasechecklista för 1.0.0-rc.6
 
 Status: offentlig valideringskandidat. Inte produktionsverifierad 1.0.
 
 ## Förverifiering 15 augusti 2026
 
-- [x] Fixerad testsuite: 96 av 96 tester, inventering SHA-256 `fcb89013d2b4a458d92b2a199ede6ba94b17af0ebac73462e9635c748e615ec6`.
+- [x] Fixerad testsuite: 97 av 97 tester, inventering SHA-256 `39d009fe7fa94bd1807f82afa989e3570405fd6bcbcc30cf0bf0d580a3222a87`.
 - [x] EBU Loudness Test Set v5.0: 68 av 68 krav för 62 relevanta filer.
 - [x] ITU-R BS.2217-2: 19 av 19 relevanta filer inom +/-0,1 LKFS.
-- [x] Syntaxkontroll och `git diff --check` godkända för rc.4.
+- [x] Syntaxkontroll och `git diff --check` godkända för rc.6.
 - [x] Pagespaket innehåller 18 filer: 17 uttryckligen tillåtna resurser plus hashbundet buildmanifest.
 - [x] Samtliga 18 publika resurser ger HTTP 200 från lokal server.
 - [x] Inga spårade ljudfiler, rapporter, projekt, uppenbara hemligheter eller U+2013 hittas.
@@ -16,8 +16,8 @@ Status: offentlig valideringskandidat. Inte produktionsverifierad 1.0.
 ## Lokal kandidat
 
 - [ ] Varje releasefil är avsiktligt inkluderad och det publicerade GitHub-trädet matchar det lokalt beräknade trädet exakt.
-- [x] Versionen `1.0.0-rc.5` är konsekvent i paket, app, workers, projekt, rapport, dokumentation, PWA-cache och validation-manifest.
-- [x] Syntaxkontroll, hela fixerade testsuiten med 96 av 96 och `git diff --check` passerar.
+- [x] Versionen `1.0.0-rc.6` är konsekvent i paket, app, workers, projekt, rapport, dokumentation, PWA-cache och validation-manifest.
+- [x] Syntaxkontroll, hela fixerade testsuiten med 97 av 97 och `git diff --check` passerar.
 - [x] EBU visar 68/68 och ITU visar 19/19 för exakt releasekod.
 - [x] Build skapar endast den uttryckliga allowlisten och `build-manifest.json`.
 - [x] Varje publik fil har SHA-256 i buildmanifestet.
@@ -51,7 +51,7 @@ Status: offentlig valideringskandidat. Inte produktionsverifierad 1.0.
 - [x] Pages använder GitHub Actions.
 - [x] Appskalet använder nät först när nät finns, cache endast som reserv och `updateViaCache: none` för service workern.
 - [x] Automatisk aktivering och omladdning blockeras av osparat arbete eller pågående workerjobb.
-- [ ] Liveversionen på `https://hktcr.github.io/ljudr-analysverkstad/` visar `1.0.0-rc.5` och matchar releasecommitten.
+- [ ] Liveversionen på `https://hktcr.github.io/ljudr-analysverkstad/` visar `1.0.0-rc.6` och matchar releasecommitten.
 
 ## Live smoke
 
@@ -70,7 +70,7 @@ Status: offentlig valideringskandidat. Inte produktionsverifierad 1.0.
 
 ## RC-kvitto
 
-- Releaseversion: `1.0.0-rc.5`
+- Releaseversion: `1.0.0-rc.6`
 - Releasecommit: _fylls efter commit_
 - Tree-id: _fylls efter commit_
 - Actions run-id: _fylls efter grön körning_
@@ -78,7 +78,7 @@ Status: offentlig valideringskandidat. Inte produktionsverifierad 1.0.
 - Pages-URL: `https://hktcr.github.io/ljudr-analysverkstad/`
 - Buildmanifest SHA-256: _fylls efter bygg från releasecommit_
 - Livekontroll: _fylls efter publicering_
-- Fixerad testsuite: `96/96`, inventory SHA-256 `fcb89013d2b4a458d92b2a199ede6ba94b17af0ebac73462e9635c748e615ec6`
+- Fixerad testsuite: `97/97`, inventory SHA-256 `39d009fe7fa94bd1807f82afa989e3570405fd6bcbcc30cf0bf0d580a3222a87`
 - EBU/ITU: `68/68 respektive 19/19`
 - Validation-manifest SHA-256: `fc6e8f2152bd331ed29e8f3e51437008a29d969c99125a074e9202055b2423c7`
 - Status: `GO för commit och publicering som publik valideringskandidat`; deploy- och livekvitton återstår.

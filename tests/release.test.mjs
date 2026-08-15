@@ -104,7 +104,8 @@ test("ignore-reglerna skyddar ljud och lokala rapporter oavsett normalt skiftlä
 });
 
 test("PWA hämtar nätversionen först och aktiverar uppdatering endast i säkert läge", async () => {
-  const [worker, app, html] = await Promise.all([read("sw.js"), read("src/app.js"), read("index.html")]);
+  const [worker, app, html, packageRaw] = await Promise.all([read("sw.js"), read("src/app.js"), read("index.html"), read("package.json")]);
+  const version = JSON.parse(packageRaw).version;
   assert.match(worker, /data\?\.type === "SKIP_WAITING"/);
   assert.doesNotMatch(worker.split('self.addEventListener("message"')[0], /self\.skipWaiting\(\)/);
   assert.match(worker, /await fetch\(event\.request, \{ cache: "no-store" \}\)/);
@@ -117,7 +118,7 @@ test("PWA hämtar nätversionen först och aktiverar uppdatering endast i säker
   assert.match(app, /visibilitychange/);
   assert.match(app, /maybeActivateWaitingUpdate/);
   assert.match(app, /reloadWhenSafe/);
-  assert.match(html, /id="appVersion"[^>]*>v1\.0\.0-rc\.5</);
+  assert.match(html, new RegExp(`id="appVersion"[^>]*>v${version.replaceAll(".", "\\.")}<`));
 });
 
 test("den fixerade testinventeringen matchar exakt releasekällan", async () => {

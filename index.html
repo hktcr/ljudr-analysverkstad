@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="LjudR">
-    <meta name="description" content="Lokal, varsam analys och trimning av långa ljudlandskap.">
+    <meta name="description" content="Lokal WAV-analys och varsam redigering av fältinspelningar, ljudlandskap, intervjuer och poddmaster.">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'; manifest-src 'self'">
     <title>LjudR Analysverkstad</title>
     <link rel="manifest" href="./manifest.webmanifest">
@@ -26,7 +26,7 @@
           </span>
           <span>
             <strong>LjudR</strong>
-            <small>Analysverkstad <span class="brand-version" id="appVersion" aria-label="Programversion">v1.0.0-rc.5</span></small>
+            <small>Analysverkstad <span class="brand-version" id="appVersion" aria-label="Programversion">v1.0.0-rc.6</span></small>
           </span>
         </a>
 
@@ -90,14 +90,19 @@
         <section class="mode-panel open-panel is-visible" data-panel="open" aria-labelledby="openTitle">
           <div class="open-hero">
             <div class="hero-copy">
-              <span class="eyebrow">För fältinspelningar och ljudlandskap</span>
-              <h1 id="openTitle">Se ljudet tydligt.<br>Bevara platsen som den var.</h1>
-              <p>Analysera, lyssna och trimma långa inspelningar utan att skicka dem någonstans. Verktyget arbetar direkt i din webbläsare och låter originalets dynamik vara orörd.</p>
+              <span class="eyebrow">Lokal WAV-analys för inspelat ljud</span>
+              <h1 id="openTitle">Förstå signalen.<br>Bevara upplevelsen.</h1>
+              <p>LjudR hjälper dig att granska fältinspelningar, ljudlandskap, intervjuer och poddmaster. Du får objektiva mätvärden, navigerbara markörer och varsamma redigeringsval, medan originalet förblir orört på din enhet.</p>
               <div class="principle-list" aria-label="Grundprinciper">
-                <span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.2 16.6-4.3-4.3 1.5-1.5 2.8 2.8 8.4-8.4 1.5 1.5-9.9 9.9Z"/></svg>Ingen uppladdning</span>
-                <span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.2 16.6-4.3-4.3 1.5-1.5 2.8 2.8 8.4-8.4 1.5 1.5-9.9 9.9Z"/></svg>Inga automatiska ingrepp</span>
-                <span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.2 16.6-4.3-4.3 1.5-1.5 2.8 2.8 8.4-8.4 1.5 1.5-9.9 9.9Z"/></svg>Transparent analys</span>
+                <span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.2 16.6-4.3-4.3 1.5-1.5 2.8 2.8 8.4-8.4 1.5 1.5-9.9 9.9Z"/></svg>Hela ljudfilen stannar lokalt</span>
+                <span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.2 16.6-4.3-4.3 1.5-1.5 2.8 2.8 8.4-8.4 1.5 1.5-9.9 9.9Z"/></svg>Analys skiljs från råd</span>
+                <span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.2 16.6-4.3-4.3 1.5-1.5 2.8 2.8 8.4-8.4 1.5 1.5-9.9 9.9Z"/></svg>Inget ändras utan ditt val</span>
               </div>
+              <dl class="hero-capabilities" aria-label="Verktygets huvudfunktioner">
+                <div><dt>Objektiv mätning</dt><dd>LUFS, True Peak, LRA, PLR och stereodata</dd></div>
+                <div><dt>Varsam redigering</dt><dd>Trimning, linjära fades och konstant global gain</dd></div>
+                <div><dt>Spårbart flöde</dt><dd>Projekt, rapport och ljudfritt analysunderlag</dd></div>
+              </dl>
             </div>
 
             <div class="open-card">
@@ -106,13 +111,13 @@
                 <span class="drop-graphic" aria-hidden="true">
                   <svg viewBox="0 0 48 48"><path d="M24 6a18 18 0 1 0 18 18A18 18 0 0 0 24 6Zm1.75 9v7.25H33v3.5h-7.25V33h-3.5v-7.25H15v-3.5h7.25V15Z"/></svg>
                 </span>
-                <strong>Välj en WAV-inspelning</strong>
-                <span>eller dra filen hit</span>
-                <small>Optimerat för stora stereo-filer, även 32-bit float och 96 kHz</small>
+                <strong>Öppna en WAV-inspelning</strong>
+                <span>Välj fil eller dra den hit</span>
+                <small>Filen kontrolleras lokalt. Analysen startar först när du väljer det.</small>
               </label>
               <div class="local-explainer">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 10V8a4 4 0 1 1 8 0v2h2v11H6V10h2Zm2 0h4V8a2 2 0 1 0-4 0v2Zm0 4v3h4v-3h-4Z"/></svg>
-                <p><strong>Bearbetas lokalt på denna enhet</strong><br>Endast filer som du själv exporterar lämnar verktyget.</p>
+                <p><strong>Ljudet stannar på denna enhet</strong><br>Verktyget har ingen serveranslutning. Endast filer som du själv hämtar eller delar lämnar arbetsytan.</p>
               </div>
               <button class="text-button" type="button" id="openProjectButton">Öppna ett sparat projekt</button>
               <input id="projectFileInput" type="file" accept="application/json,.ljudr.json,.json" hidden>
@@ -151,7 +156,17 @@
                   <span id="progressPercent">0 %</span>
                 </div>
                 <div class="progress-track"><i id="progressFill"></i></div>
-                <small>Du kan lämna skärmen på, men undvik att stänga fliken under analysen.</small>
+                <div class="analysis-phase-copy">
+                  <span class="analysis-phase-kicker" id="progressPhase">Förberedelse</span>
+                  <p id="progressPurpose">Kontrollerar filen innan den blockvisa mätningen börjar.</p>
+                </div>
+                <ol class="analysis-phase-list" aria-label="Analysens delsteg">
+                  <li data-analysis-phase="header"><i>1</i><span>Filstruktur</span></li>
+                  <li data-analysis-phase="analysis"><i>2</i><span>Signal</span></li>
+                  <li data-analysis-phase="statistics"><i>3</i><span>Sammanställning</span></li>
+                  <li data-analysis-phase="hash"><i>4</i><span>Källidentitet</span></li>
+                </ol>
+                <small>Håll gärna skärmen aktiv och stanna kvar i fliken. Du kan avbryta mellan två läsblock.</small>
               </div>
 
               <section class="assessment-context" aria-labelledby="assessmentContextTitle">
