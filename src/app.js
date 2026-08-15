@@ -85,6 +85,7 @@ const state = {
       correlation: false,
       markers: true,
     },
+    markerLayer: "all",
     detail: null,
     detailStatus: "overview",
   },
@@ -1107,6 +1108,20 @@ function openWorkspaceModule(invoker) {
   });
 }
 
+function openAnalysisTimelineWorkspace({ markerLayer = "all", tracks = [] } = {}) {
+  const invoker = $('.step-module-card[data-workspace-target="analysisTimelineCard,canvasTextAlternative"]');
+  if (!invoker) return;
+  openWorkspaceModule(invoker);
+  state.view.markerLayer = markerLayer;
+  state.view.tracks.waveform = true;
+  state.view.tracks.markers = true;
+  tracks.forEach(track => { if (track in state.view.tracks) state.view.tracks[track] = true; });
+  syncTrackControls();
+  syncMarkerLayerControls();
+  renderCanvasTextAlternative();
+  scheduleCanvasRender();
+}
+
 function setTransportExpanded(expanded) {
   if (!elements.globalPlayer || !elements.toggleTransport) return;
   elements.globalPlayer.classList.toggle("is-expanded", expanded);
@@ -1243,6 +1258,7 @@ async function openAudioFile(file) {
   state.trimEditor.appliedEndSeconds = duration;
   state.view.startSeconds = 0;
   state.view.endSeconds = duration;
+  state.view.markerLayer = "all";
   elements.globalPlayer.hidden = false;
   elements.playButton.disabled = true;
   elements.transportSeek.disabled = true;
@@ -1489,6 +1505,7 @@ function applyAnalysisResult(result) {
   renderObservations();
   renderMarkers();
   renderPublicationCard();
+  renderSpectralDiagnostics();
   scheduleCanvasRender();
   updateCapabilities(true, state.capabilities.export);
   state.regionAnalysis = null;
@@ -1582,6 +1599,11 @@ function applySpectralDiagnosticsResult(result) {
     });
   });
   elements.runSpectralDiagnostics.disabled = false;
+  state.view.markerLayer = "rumble";
+  state.view.tracks.waveform = true;
+  state.view.tracks.markers = true;
+  syncTrackControls();
+  syncMarkerLayerControls();
   renderSpectralDiagnostics();
   renderAnalysisModuleBoard();
   renderFullAnalysis();
@@ -1616,7 +1638,7 @@ function renderSpectralDiagnostics(status = null) {
     ? `<h4>${regions.length} samplade område${regions.length === 1 ? "" : "n"} att lyssna på</h4>${regions.map((region, index) => `
       <article class="diagnostic-region">
         <div><strong>${escapeHtml(region.likelihoodLabel)} vid ${formatTime(region.startSeconds, false)}</strong><small>Under 120 Hz ${formatDecimal(region.lowFrequencyEnergyPercent, 1)} %, subsoniskt ${formatDecimal(region.subsonicEnergyPercent, 1)} %, över 120 Hz ${formatDecimal(region.contentAbove120HzPercent, 1)} %.</small></div>
-        <button class="button button-quiet button-small" type="button" data-rumble-play="${index}">Lyssna</button>
+        <div class="diagnostic-region-actions"><button class="button button-secondary button-small" type="button" data-rumble-show="${index}">Visa i vågformen</button><button class="button button-quiet button-small" type="button" data-rumble-play="${index}">Lyssna</button></div>
       </article>`).join("")}`
     : "<p>Inget samplat fönster fick måttlig eller förhöjd sannolikhet. Det utesluter inte rumble mellan de samplade fönstren.</p>";
 }
@@ -1693,13 +1715,37 @@ function renderCanvasTextAlternative() {
     elements.canvasTextContent.innerHTML = "<p>Analysera filen för en navigerbar textöversikt.</p>";
     return;
   }
-  const markerRows = [...state.markers].sort((a, b) => a.seconds - b.seconds).map((marker) => `<li><button type="button" data-text-marker="${escapeHtml(marker.id)}">${formatTime(marker.seconds, false)}: ${escapeHtml(marker.text)}</button><span>${escapeHtml(marker.detail || "")}</span></li>`).join("") || "<li>Inga markörer</li>";
+  const visibleMarkers = state.markers.filter(markerMatchesTimelineLayer);
+  const markerRows = [...visibleMarkers].sort((a, b) => a.seconds - b.seconds).map((marker) => `<li><button type="button" data-text-marker="${escapeHtml(marker.id)}">${formatTime(marker.seconds, false)}: ${escapeHtml(marker.text)}</button><span>${escapeHtml(marker.detail || "")}</span></li>`).join("") || "<li>Inga markörer i valt fyndlager</li>";
   const accessibleValue = (value, unit) => {
     const number = finite(value);
     return number === null ? "saknas" : `${formatDecimal(number, 2)} ${unit}`;
   };
-  const channelRows = channels.map((channel, index) => `<tr><th>${index === 0 ? "Vänster" : index === 1 ? "Höger" : `Kanal ${index + 1}`}</th><td>${accessibleValue(channel.samplePeakDbfs, "dBFS")}</td><td>${accessibleValue(channel.truePeakEstimateDbtp ?? channel.truePeakDbtp, "dBTP")}</td><td>${accessibleValue(channel.rmsDbfs, "dBFS")}</td></tr>`).join("");
-  elements.canvasTextContent.innerHTML = `<p>Synlig vy: ${formatTime(state.view.startSeconds)} till ${formatTime(state.view.endSeconds)}.</p><table><thead><tr><th>Kanal</th><th>Sample peak</th><th>True Peak</th><th>RMS</th></tr></thead><tbody>${channelRows}</tbody></table><h3>Markörer</h3><ol>${markerRows}</ol>`;
+  const summaryChannels = Array.isArray(summary.channels) ? summary.channels : [];
+  const channelRows = summaryChannels.map((channel, index) => `<tr><th>${index === 0 ? "Vänster" : index === 1 ? "Höger" : `Kanal ${index + 1}`}</th><td>${accessibleValue(channel.samplePeakDbfs, "dBFS")}</td><td>${accessibleValue(channel.truePeakEstimateDbtp ?? channel.truePeakDbtp, "dBTP")}</td><td>${accessibleValue(channel.rmsDbfs, "dBFS")}</td></tr>`).join("");
+  const layerLabels = { all: "alla fynd", rumble: "rumble och 50 Hz", float: "float över 0 dBFS", mono: "stereo och mono", editorial: "redaktionella fynd" };
+  elements.canvasTextContent.innerHTML = `<p>Synlig vy: ${formatTime(state.view.startSeconds)} till ${formatTime(state.view.endSeconds)}. Markeringslager: ${escapeHtml(layerLabels[state.view.markerLayer] || layerLabels.all)}.</p><table><thead><tr><th>Kanal</th><th>Sample peak</th><th>True Peak</th><th>RMS</th></tr></thead><tbody>${channelRows}</tbody></table><h3>Markörer</h3><ol>${markerRows}</ol>`;
+}
+
+function markerMatchesTimelineLayer(marker) {
+  const layer = state.view.markerLayer || "all";
+  const kind = String(marker.machineKind || marker.kind || "").toLowerCase();
+  const type = String(marker.type || "").toLowerCase();
+  const classification = String(marker.classification || "").toLowerCase();
+  if (layer === "all") return true;
+  if (layer === "rumble") return marker.origin === "spectral-screening" || kind.includes("low-frequency") || kind.includes("rumble") || kind.includes("50-hz");
+  if (layer === "float") return marker.id?.startsWith("overrange-") || kind === "float-overrange" || kind.includes("overrange");
+  if (layer === "mono") return kind.includes("mono") || kind.includes("correlation") || kind.includes("stereo") || type === "stereo";
+  if (layer === "editorial") return classification === "editorial" || ["privacy", "remove", "keep", "chapter", "editorial"].includes(type);
+  return true;
+}
+
+function syncMarkerLayerControls() {
+  $$('[data-marker-layer]').forEach(button => {
+    const active = button.dataset.markerLayer === (state.view.markerLayer || "all");
+    button.classList.toggle("is-on", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
 }
 
 function renderAnalysisSummary() {
@@ -1908,10 +1954,10 @@ function renderFullAnalysis() {
       <article><strong>Digital klippning</strong><span>${possibleFlatTop ? "Platåindikation att granska" : "Ingen klippindikation hittad av dessa tester"}</span><p>Fastslås inte av toppvärdet. Platåmönster är bara en heuristik och måste kontrolleras i förstorad vågform och med lyssning.</p></article>
       <article><strong>Analog överstyrning</strong><span>Kan inte avgöras säkert</span><p>Mikrofon eller försteg kan ha distorderat innan signalen lagrades. Sänkt gain skapar marginal men reparerar inte sådan skada.</p></article>
       <article><strong>Exportklippning</strong><span>${truePeak !== null && truePeak > 0 ? "Källan behöver marginal före PCM" : "Aktuellt exporturval måste verifieras"}</span><p>Floatvärden över full skala kan kapas vid heltalsexport. Komprimerade format kan också skapa nya toppar, så slutformatet måste verifieras efter kodning.</p></article>
-    </div><div class="full-analysis-actions"><button class="button button-primary" type="button" data-full-action="peak-workshop">Öppna lokal toppverkstad</button><button class="button button-secondary" type="button" data-full-action="peak-study">Studera topparna</button>${overrange > 0 ? '<button class="button button-secondary" type="button" data-full-action="float-regions">Visa floatregioner</button>' : ""}</div></section>
-    <section id="analysis-section-loudness"><h3 tabindex="-1">Ljudstyrka</h3><dl class="analysis-facts"><div><dt>Integrerad loudness</dt><dd>${analysisMetric(integrated, "LUFS", 1)}</dd></div><div><dt>Momentary max</dt><dd>${analysisMetric(summary.momentaryMaxLufs, "LUFS", 1)}</dd></div><div><dt>Short-term max</dt><dd>${analysisMetric(summary.shortTermMaxLufs, "LUFS", 1)}</dd></div><div><dt>Tolkning</dt><dd>${escapeHtml(loudnessState)}</dd></div></dl></section>
+    </div><div class="full-analysis-actions"><button class="button button-primary" type="button" data-full-action="peak-workshop">Öppna lokal toppverkstad</button><button class="button button-secondary" type="button" data-full-action="timeline-peaks">Visa toppar över vågformen</button><button class="button button-secondary" type="button" data-full-action="peak-study">Studera topparna</button>${overrange > 0 ? '<button class="button button-secondary" type="button" data-full-action="float-regions">Visa floatregioner</button>' : ""}</div></section>
+    <section id="analysis-section-loudness"><h3 tabindex="-1">Ljudstyrka</h3><dl class="analysis-facts"><div><dt>Integrerad loudness</dt><dd>${analysisMetric(integrated, "LUFS", 1)}</dd></div><div><dt>Momentary max</dt><dd>${analysisMetric(summary.momentaryMaxLufs, "LUFS", 1)}</dd></div><div><dt>Short-term max</dt><dd>${analysisMetric(summary.shortTermMaxLufs, "LUFS", 1)}</dd></div><div><dt>Tolkning</dt><dd>${escapeHtml(loudnessState)}</dd></div></dl><div class="full-analysis-actions"><button class="button button-secondary" type="button" data-full-action="timeline-loudness">Visa loudness över vågformen</button></div></section>
     <section id="analysis-section-dynamics"><h3 tabindex="-1">Dynamik</h3><dl class="analysis-facts"><div><dt>Loudness Range</dt><dd>${analysisMetric(lra, "LU", 1)}</dd></div><div><dt>PLR</dt><dd>${analysisMetric(plr, "LU", 1)}</dd></div><div><dt>RMS</dt><dd>${analysisMetric(summary.rmsDbfs, "dBFS", 1)}</dd></div><div><dt>Crest factor</dt><dd>${analysisMetric(summary.crestFactorDb, "dB", 1)}</dd></div></dl><p>Värdena beskriver nivåspridning och transientmarginal. De har ingen universell godkänd eller underkänd nivå och avgör inte ensamma om dynamiken känns naturlig.</p></section>
-    <section id="analysis-section-stereo"><h3 tabindex="-1">Stereo och mono</h3><dl class="analysis-facts"><div><dt>Stereokorrelation</dt><dd>${analysisMetric(summary.stereoCorrelation, "", 2)}</dd></div><div><dt>Kanalbalans</dt><dd>${analysisMetric(summary.channelBalanceDb, "dB", 1)}</dd></div><div><dt>Mono energiskillnad</dt><dd>${analysisMetric(mono.energyDeltaDb, "dB", 1)}</dd></div><div><dt>Negativ korrelation</dt><dd>${analysisMetric(mono.negativeCorrelationPercent, "%", 1)}</dd></div></dl><p>Negativ korrelation i korta regioner är en granskningssignal, inte automatiskt ett fel. Provlyssna i mono.</p></section>
+    <section id="analysis-section-stereo"><h3 tabindex="-1">Stereo och mono</h3><dl class="analysis-facts"><div><dt>Stereokorrelation</dt><dd>${analysisMetric(summary.stereoCorrelation, "", 2)}</dd></div><div><dt>Kanalbalans</dt><dd>${analysisMetric(summary.channelBalanceDb, "dB", 1)}</dd></div><div><dt>Mono energiskillnad</dt><dd>${analysisMetric(mono.energyDeltaDb, "dB", 1)}</dd></div><div><dt>Negativ korrelation</dt><dd>${analysisMetric(mono.negativeCorrelationPercent, "%", 1)}</dd></div></dl><p>Negativ korrelation i korta regioner är en granskningssignal, inte automatiskt ett fel. Provlyssna i mono.</p><div class="full-analysis-actions"><button class="button button-secondary" type="button" data-full-action="timeline-stereo">Visa stereokorrelation över vågformen</button></div></section>
     <section id="analysis-section-integrity"><h3 tabindex="-1">Signalintegritet</h3><dl class="analysis-facts"><div><dt>Icke ändliga värden</dt><dd>${Number(nonFinite).toLocaleString("sv-SE")}</dd></div><div><dt>Platåindikationer</dt><dd>${possibleFlatTop ? "Minst en heuristisk indikation" : "Ingen hittad av aktuellt test"}</dd></div><div><dt>Float-overrange</dt><dd>${Number(overrange).toLocaleString("sv-SE")}</dd></div><div><dt>Testets begränsning</dt><dd>Analog överstyrning kan inte uteslutas</dd></div></dl></section>
     <section id="analysis-section-rumble"><h3 tabindex="-1">Rumble, lågfrekvens och 50 Hz</h3>${spectral ? `<dl class="analysis-facts"><div><dt>Faktisk sampling</dt><dd>${Number(spectral.windowCount || 0)} fönster · ${analysisMetric(spectral.sampledSeconds, "s", 1)}</dd></div><div><dt>Täckning av filen</dt><dd>${spectralCoverage === null ? "saknas" : `${formatDecimal(spectralCoverage, 1)} %`}</dd></div><div><dt>Lyssningspunkter</dt><dd>${spectralReviews}</dd></div><div><dt>50 Hz, högsta relativa nivå</dt><dd>${analysisMetric(spectral.mainsHum50RelativeDbMaximum, "dB", 1)}</dd></div></dl><p>${escapeHtml(spectral.interpretation || "Samplad screening för mänsklig granskning.")} Ett uteblivet fynd gäller endast de samplade fönstren. Vind, hav, trafik och andra naturliga lågfrekventa ljud är inte automatiskt störningar.</p>` : `<p>Screeningen är inte körd. Den samplar ett begränsat antal fönster och identifierar inte ljudkällan. Ett uteblivet fynd kan därför aldrig frikänna hela filen.</p>`}<div class="full-analysis-actions"><button class="button button-secondary" type="button" data-full-action="rumble-workspace">Öppna mätvärden och rumble</button></div></section>
     <section><h3>Kanaler</h3><div class="analysis-table-wrap"><table><thead><tr><th>Kanal</th><th>Sample Peak</th><th>True Peak</th><th>RMS</th><th>Overrange</th></tr></thead><tbody>${channelRows}</tbody></table></div></section>
@@ -3773,7 +3819,7 @@ function drawTimeline(canvas, trimMode = false) {
 
   if (tracks.markers) {
     state.markers.forEach((marker) => {
-      if (state.markerFilter !== "all" && marker.severity !== state.markerFilter) return;
+      if (!markerMatchesTimelineLayer(marker)) return;
       if ((marker.endSeconds ?? marker.seconds) < viewStart || marker.seconds > viewEnd) return;
       const x = xAtTime(marker.seconds);
       const endX = xAtTime(marker.endSeconds ?? marker.seconds);
@@ -5505,7 +5551,17 @@ function bindEvents() {
   });
   $$(".mode-tab").forEach((tab) => tab.addEventListener("click", () => setMode(tab.dataset.mode)));
   elements.workflowPrimaryAction?.addEventListener("click", runWorkflowPrimaryAction);
-  $$('[data-workspace-target]').forEach((button) => button.addEventListener("click", () => openWorkspaceModule(button)));
+  $$('.step-module-card[data-workspace-target]').forEach((button) => button.addEventListener("click", () => {
+    openWorkspaceModule(button);
+    if (String(button.dataset.workspaceTarget).includes("deepMeasurements")) {
+      state.view.markerLayer = "rumble";
+      state.view.tracks.waveform = true;
+      state.view.tracks.markers = true;
+      syncTrackControls();
+      syncMarkerLayerControls();
+      scheduleCanvasRender();
+    }
+  }));
   $$('[data-open-special="local-peaks"]').forEach((button) => button.addEventListener("click", () => elements.openLocalPeakWorkshop.click()));
   $("#closeWorkspaceModuleButton")?.addEventListener("click", closeWorkspaceModule);
   elements.workspaceModuleDialog?.addEventListener("close", restoreWorkspaceModule);
@@ -5591,7 +5647,13 @@ function bindEvents() {
     playReviewRegion(Math.max(0, highest.seconds - 0.5), Math.min(durationSeconds(), highest.seconds + 0.5));
   });
   elements.showFloatPeaks.addEventListener("click", () => {
-    openWorkspaceModule($('[data-workspace-target="deepMeasurements"]'));
+    openWorkspaceModule($("#openMeasurementsWorkspaceButton"));
+    state.view.markerLayer = "float";
+    state.view.tracks.waveform = true;
+    state.view.tracks.markers = true;
+    syncTrackControls();
+    syncMarkerLayerControls();
+    scheduleCanvasRender();
     requestAnimationFrame(() => $("#floatOverrangeTitle")?.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" }));
   });
   elements.openPeakStudy.addEventListener("click", () => {
@@ -5623,7 +5685,20 @@ function bindEvents() {
   $("#openFullAnalysisBoardButton").addEventListener("click", () => openFullAnalysisAt("overview"));
   $("#analysisModuleBoard").addEventListener("click", (event) => {
     const card = event.target.closest("[data-analysis-module]");
-    if (card && !card.disabled) openFullAnalysisAt(card.dataset.analysisModule);
+    if (!card || card.disabled) return;
+    if (card.dataset.workspaceTarget) {
+      openWorkspaceModule(card);
+      if (card.dataset.analysisModule === "rumble") {
+        state.view.markerLayer = "rumble";
+        state.view.tracks.waveform = true;
+        state.view.tracks.markers = true;
+        syncTrackControls();
+        syncMarkerLayerControls();
+        requestAnimationFrame(() => $("#spectralDiagnosticsTitle")?.scrollIntoView({ block: "start", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }));
+      }
+      return;
+    }
+    openFullAnalysisAt(card.dataset.analysisModule);
   });
   $("#closeFullAnalysisButton").addEventListener("click", () => elements.fullAnalysisDialog.close());
   elements.fullAnalysisDialog.addEventListener("click", (event) => {
@@ -5641,11 +5716,20 @@ function bindEvents() {
     if (actionButton) {
       elements.fullAnalysisDialog.close();
       if (actionButton.dataset.fullAction === "peak-workshop") elements.openLocalPeakWorkshop.click();
+      if (actionButton.dataset.fullAction === "timeline-peaks") openAnalysisTimelineWorkspace({ tracks: ["peaks"] });
+      if (actionButton.dataset.fullAction === "timeline-loudness") openAnalysisTimelineWorkspace({ tracks: ["loudness"] });
+      if (actionButton.dataset.fullAction === "timeline-stereo") openAnalysisTimelineWorkspace({ markerLayer: "mono", tracks: ["correlation"] });
       if (actionButton.dataset.fullAction === "peak-study") elements.openPeakStudy.click();
       if (actionButton.dataset.fullAction === "float-regions") elements.showFloatPeaks.click();
       if (actionButton.dataset.fullAction === "rumble-workspace") {
-        const tool = $('[data-workspace-target="deepMeasurements"]');
+        const tool = $("#openMeasurementsWorkspaceButton");
         openWorkspaceModule(tool);
+        state.view.markerLayer = "rumble";
+        state.view.tracks.waveform = true;
+        state.view.tracks.markers = true;
+        syncTrackControls();
+        syncMarkerLayerControls();
+        scheduleCanvasRender();
         requestAnimationFrame(() => $("#spectralDiagnosticsTitle")?.scrollIntoView({ block: "start", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }));
       }
       return;
@@ -5778,6 +5862,14 @@ function bindEvents() {
     });
     scheduleCanvasRender();
   }));
+  $$('[data-marker-layer]').forEach(button => button.addEventListener("click", () => {
+    state.view.markerLayer = button.dataset.markerLayer || "all";
+    state.view.tracks.markers = true;
+    syncTrackControls();
+    syncMarkerLayerControls();
+    renderCanvasTextAlternative();
+    scheduleCanvasRender();
+  }));
 
   $$("[data-diagram-action]").forEach(button => button.addEventListener("click", () => {
     const action = button.dataset.diagramAction;
@@ -5794,9 +5886,24 @@ function bindEvents() {
     }
   }));
   elements.rumbleRegions.addEventListener("click", (event) => {
-    const button = event.target.closest("[data-rumble-play]");
-    const region = state.spectralDiagnostics?.reviewRegions?.[Number(button?.dataset.rumblePlay)];
-    if (region) playReviewRegion(region.startSeconds, region.endSeconds);
+    const showButton = event.target.closest("[data-rumble-show]");
+    const playButton = event.target.closest("[data-rumble-play]");
+    const index = Number(showButton?.dataset.rumbleShow ?? playButton?.dataset.rumblePlay);
+    const region = state.spectralDiagnostics?.reviewRegions?.[index];
+    if (!region) return;
+    const padding = Math.max(2, (region.endSeconds - region.startSeconds) * 0.5);
+    state.view.startSeconds = Math.max(0, region.startSeconds - padding);
+    state.view.endSeconds = Math.min(durationSeconds(), region.endSeconds + padding);
+    state.view.markerLayer = "rumble";
+    state.view.tracks.waveform = true;
+    state.view.tracks.markers = true;
+    syncTrackControls();
+    syncMarkerLayerControls();
+    scheduleDetailRequest();
+    renderCanvasTextAlternative();
+    scheduleCanvasRender();
+    elements.analysisCanvas?.scrollIntoView({ block: "center", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+    if (playButton) playReviewRegion(region.startSeconds, region.endSeconds);
   });
   elements.floatOverrangeRegions.addEventListener("click", (event) => {
     const button = event.target.closest("[data-float-play]");
@@ -6303,6 +6410,7 @@ async function initialize() {
   syncTrimWindowUi();
   syncSeriesUi();
   syncAuditionUi();
+  syncMarkerLayerControls();
   setExportProfile(state.exportProfile, { dirty: false, force: true });
   renderStoredExports();
   renderSpectralDiagnostics();

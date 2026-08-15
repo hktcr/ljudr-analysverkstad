@@ -1099,6 +1099,37 @@ svg {
 .legend-chip .legend-correlation { background: #ef8f68; }
 .legend-chip .legend-markers { background: var(--gold); }
 
+.marker-layer-controls {
+  display: flex;
+  min-height: 48px;
+  padding: 7px 16px;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  background: #fbfaf6;
+  border-bottom: 1px solid #e3e4e4;
+}
+
+.marker-layer-controls > strong { margin-right: 4px; color: var(--ink-muted); font-size: .8125rem; }
+.marker-layer-chip {
+  min-height: 38px;
+  padding: 6px 10px;
+  color: var(--ink-muted);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font: inherit;
+  font-size: .8125rem;
+  font-weight: 750;
+}
+.marker-layer-chip.is-on { color: #fff; background: var(--ink); border-color: var(--ink); }
+.marker-layer-chip:focus-visible { outline: 3px solid rgba(49, 95, 139, .28); outline-offset: 2px; }
+.diagnostic-region-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+@media (pointer: coarse) {
+  .marker-layer-chip { min-height: 48px; }
+}
+
 .canvas-wrap {
   position: relative;
   min-height: 420px;

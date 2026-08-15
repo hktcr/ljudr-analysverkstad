@@ -1,14 +1,14 @@
 {
   "schema": "se.gaia.ljudr.validation-manifest/1",
-  "release": "1.0.0-rc.15",
+  "release": "1.0.0-rc.16",
   "status": "public-validation-candidate",
   "certification": false,
   "verifiedAt": "2026-08-15",
-  "engineVersion": "1.0.0-rc.15",
+  "engineVersion": "1.0.0-rc.16",
   "automatedTestInventory": {
     "fixedBy": "tests/test-inventory.json",
-    "tests": 120,
-    "sha256": "3343e623b0141d22b46baf300bb1dd02859e6fd80db6625c423f974bd9b53016",
+    "tests": 121,
+    "sha256": "1dd8b55c797ea85fffa314c6857fe1adc72708e352d44868903a47ec832de10b",
     "requiredFailures": 0
   },
   "ebu": {

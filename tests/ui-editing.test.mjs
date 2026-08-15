@@ -155,7 +155,7 @@ test("iPadflödet har fyra arbetssteg, en huvudåtgärd och fokuserade moduler",
   assert.equal((workflowNav.match(/class="mode-tab" data-mode="(?:analyze|trim|preflight|export)"/g) || []).length, 4);
   assert.match(workflowNav, /data-mode="open"[^>]*hidden/);
   for (const id of ["workflowActionDock", "workflowPrimaryAction", "workspaceModuleDialog", "sessionPlayButton", "sessionSafetyStatus"]) assert.match(html, new RegExp(`id="${id}"`));
-  for (const target of ["assessmentContext", "analysisTimelineCard,canvasTextAlternative", "deepMeasurements", "analysisInspector", "trimTimelineCard,trimWindowCard,trimControlGrid", "fadeModule", "gainModule,recommendationWorkbench", "trimAuditionModule,auditionStatus,monitorModule", "metadataModule", "publicationModule"]) assert.match(html, new RegExp(`data-workspace-target="${target}"`));
+  for (const target of ["assessmentContext", "analysisTimelineCard,canvasTextAlternative", "analysisTimelineCard,canvasTextAlternative,deepMeasurements", "analysisInspector", "trimTimelineCard,trimWindowCard,trimControlGrid", "fadeModule", "gainModule,recommendationWorkbench", "trimAuditionModule,auditionStatus,monitorModule", "metadataModule", "publicationModule"]) assert.match(html, new RegExp(`data-workspace-target="${target}"`));
   assert.match(html, /data-analysis-module="rumble"/);
   assert.ok(html.indexOf('id="exportAudioButton"') < html.indexOf('id="metadataModule"'), "exportåtgärden ska ligga före metadata i DOM-ordningen");
   assert.equal((html.match(/id="exportAudioButton"/g) || []).length, 1);
@@ -181,6 +181,20 @@ test("iPadflödet har fyra arbetssteg, en huvudåtgärd och fokuserade moduler",
   assert.match(projectRestore, /if \(!monitorSafetyForPreview\(\)\.ready\)/);
   assert.match(projectRestore, /\$\$\('dialog\[open\]'\)/);
   assert.match(projectRestore, /setMode\("analyze"\)/);
+});
+
+test("rumble öppnas med valbar screening, vågform och fyndlager", () => {
+  assert.match(html, /data-analysis-module="rumble"[^>]*data-workspace-target="analysisTimelineCard,canvasTextAlternative,deepMeasurements"/);
+  assert.match(html, /id="runSpectralDiagnosticsButton"/);
+  for (const layer of ["all", "rumble", "float", "mono", "editorial"]) assert.match(html, new RegExp(`data-marker-layer="${layer}"`));
+  assert.match(app, /renderPublicationCard\(\);\s*renderSpectralDiagnostics\(\);\s*scheduleCanvasRender\(\);/);
+  assert.match(app, /function markerMatchesTimelineLayer\(marker\)/);
+  assert.match(app, /function openAnalysisTimelineWorkspace/);
+  assert.match(app, /data-rumble-show/);
+  for (const action of ["timeline-peaks", "timeline-loudness", "timeline-stereo"]) assert.match(app, new RegExp(`data-full-action="${action}"`));
+  assert.match(app, /state\.view\.markerLayer = "rumble"/);
+  assert.match(css, /\.marker-layer-controls/);
+  assert.match(css, /\.marker-layer-chip\.is-on/);
 });
 
 test("säker medhörning kräver aktuell toppanalys och takbyte ogiltigförklarar verifiering", () => {

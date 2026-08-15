@@ -26,7 +26,7 @@
           </span>
           <span>
             <strong>LjudR</strong>
-            <small>Analysverkstad <span class="brand-version" id="appVersion" aria-label="Programversion">v1.0.0-rc.15</span></small>
+            <small>Analysverkstad <span class="brand-version" id="appVersion" aria-label="Programversion">v1.0.0-rc.16</span></small>
           </span>
         </a>
 
@@ -277,7 +277,7 @@
                   <button class="analysis-module-card" type="button" data-analysis-module="loudness" data-state="waiting" disabled><span class="module-status"><i aria-hidden="true">○</i><strong>Inte analyserad</strong></span><span><b>Ljudstyrka</b><small>LUFS och vald arbetsorientering</small></span><em>Detaljer</em></button>
                   <button class="analysis-module-card" type="button" data-analysis-module="dynamics" data-state="waiting" disabled><span class="module-status"><i aria-hidden="true">○</i><strong>Inte analyserad</strong></span><span><b>Dynamik</b><small>LRA, PLR och transientmarginal</small></span><em>Detaljer</em></button>
                   <button class="analysis-module-card" type="button" data-analysis-module="stereo" data-state="waiting" disabled><span class="module-status"><i aria-hidden="true">○</i><strong>Inte analyserad</strong></span><span><b>Stereo och mono</b><small>Balans, korrelation och monorisk</small></span><em>Detaljer</em></button>
-                  <button class="analysis-module-card" type="button" data-analysis-module="rumble" data-state="waiting" disabled><span class="module-status"><i aria-hidden="true">○</i><strong>Inte analyserad</strong></span><span><b>Rumble och störningar</b><small>Samplad lågfrekvensscreening och 50 Hz</small></span><em>Detaljer</em></button>
+                  <button class="analysis-module-card" type="button" data-analysis-module="rumble" data-workspace-target="analysisTimelineCard,canvasTextAlternative,deepMeasurements" data-workspace-title="Rumble, 50 Hz och vågform" data-workspace-description="Kör screeningen, se fynden markerade över vågformen och öppna varje område för visning eller lyssning." data-state="waiting" disabled><span class="module-status"><i aria-hidden="true">○</i><strong>Inte analyserad</strong></span><span><b>Rumble och störningar</b><small>Samplad lågfrekvensscreening och 50 Hz</small></span><em>Öppna</em></button>
                   <button class="analysis-module-card" type="button" data-analysis-module="review" data-state="waiting" disabled><span class="module-status"><i aria-hidden="true">○</i><strong>Inte analyserad</strong></span><span><b>Mänsklig granskning</b><small>Markörer, lyssning och redaktionella frågor</small></span><em>Detaljer</em></button>
                 </div>
               </section>
@@ -287,7 +287,7 @@
                 <div class="step-module-grid">
                   <button class="step-module-card" type="button" data-workspace-target="assessmentContext" data-workspace-title="Bedömningskontext" data-workspace-description="Välj inspelningstyp och användning. Valet ändrar bara tolkningen, aldrig mätdata eller ljud."><span class="module-symbol" aria-hidden="true">◎</span><span><strong>Bedömningskontext</strong><small id="analysisContextSummary">Lågmält soundscape · publicering</small></span><em>Öppna</em></button>
                   <button class="step-module-card" type="button" data-workspace-target="analysisTimelineCard,canvasTextAlternative" data-workspace-title="Tidslinje och lyssning" data-workspace-description="Vågform, loudness, toppar, stereo och markörer i en fokuserad arbetsyta."><span class="module-symbol" aria-hidden="true">⌁</span><span><strong>Tidslinje och lyssning</strong><small>Studera och spela valda områden</small></span><em>Öppna</em></button>
-                  <button class="step-module-card" type="button" data-workspace-target="deepMeasurements" data-workspace-title="Mätvärden, rumble och float" data-workspace-description="Objektiva värden, mätmetod, samplad rumble- och 50 Hz-screening samt floatregioner."><span class="module-symbol" aria-hidden="true">ƒ</span><span><strong>Mätvärden och rumble</strong><small id="analysisRumbleSummary">Screening inte körd</small></span><em>Öppna</em></button>
+                  <button class="step-module-card" id="openMeasurementsWorkspaceButton" type="button" data-workspace-target="analysisTimelineCard,canvasTextAlternative,deepMeasurements" data-workspace-title="Mätvärden, rumble och vågform" data-workspace-description="Objektiva värden, samplad rumble- och 50 Hz-screening samt valbara fyndlager över vågformen."><span class="module-symbol" aria-hidden="true">ƒ</span><span><strong>Mätvärden och rumble</strong><small id="analysisRumbleSummary">Screening inte körd</small></span><em>Öppna</em></button>
                   <button class="step-module-card" type="button" data-workspace-target="analysisInspector" data-workspace-title="Observationer och markörer" data-workspace-description="Lyssna, filtrera och bedöm tekniska, redaktionella och integritetsrelaterade granskningspunkter."><span class="module-symbol" aria-hidden="true">!</span><span><strong>Granskningskö</strong><small id="analysisReviewSummary">Väntar på analys</small></span><em>Öppna</em></button>
                   <button class="step-module-card" type="button" data-workspace-target="analysisExchange" data-workspace-title="Analysunderlag för gAIa" data-workspace-description="Frivilligt textutbyte utan ljud. Inget kopieras eller tillämpas automatiskt."><span class="module-symbol" aria-hidden="true">{ }</span><span><strong>Analysutbyte</strong><small>JSON, digest och integritetsval</small></span><em>Öppna</em></button>
                 </div>
@@ -321,6 +321,14 @@
                   <button class="legend-chip is-on" type="button" data-track="peaks"><i class="legend-peaks"></i>Toppar</button>
                   <button class="legend-chip" type="button" data-track="correlation"><i class="legend-correlation"></i>Stereo och monorisk</button>
                   <button class="legend-chip is-on" type="button" data-track="markers"><i class="legend-markers"></i>Markörer</button>
+                </div>
+                <div class="marker-layer-controls" aria-label="Vilka fynd som markeras över vågformen">
+                  <strong>Markerade fynd</strong>
+                  <button class="marker-layer-chip is-on" type="button" data-marker-layer="all" aria-pressed="true">Alla</button>
+                  <button class="marker-layer-chip" type="button" data-marker-layer="rumble" aria-pressed="false">Rumble och 50 Hz</button>
+                  <button class="marker-layer-chip" type="button" data-marker-layer="float" aria-pressed="false">Float över 0 dBFS</button>
+                  <button class="marker-layer-chip" type="button" data-marker-layer="mono" aria-pressed="false">Stereo och mono</button>
+                  <button class="marker-layer-chip" type="button" data-marker-layer="editorial" aria-pressed="false">Redaktionellt</button>
                 </div>
                 <div class="canvas-wrap">
                   <canvas id="analysisCanvas" class="timeline-canvas" role="img" aria-label="Tidslinje med separata spår för vänster och höger kanal, loudness, toppnivåer och markörer"></canvas>

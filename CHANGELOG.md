@@ -1,5 +1,15 @@
 # Ändringslogg
 
+## 1.0.0-rc.16, 2026-08-16
+
+- återaktiverar den uttryckliga rumble- och 50 Hz-screeningen direkt när källanalysen är klar
+- öppnar rumble tillsammans med vågformen i samma fokuserade arbetsyta
+- lägger till valbara markeringslager för alla fynd, rumble och 50 Hz, float över 0 dBFS, stereo och mono samt redaktionella markörer
+- ger varje misstänkt rumbleområde separata val för att visas i vågformen eller spelas
+- zoomar vågformen till valt rumbleområde och läser in verklig detaljdata för den synliga regionen
+- filtrerar även tidslinjens textmotsvarighet efter valt fyndlager
+- rättar ett kanaldatafel som kunde stoppa tidslinjens textmotsvarighet efter genomförd analys
+
 ## 1.0.0-rc.15, 2026-08-16
 
 - bygger om iPad-flödet till fyra tydliga arbetssteg efter filval: Källanalys, Granska och redigera, Analysera exporturval samt Exportera och verifiera

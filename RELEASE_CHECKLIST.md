@@ -1,13 +1,13 @@
-# Releasechecklista för 1.0.0-rc.15
+# Releasechecklista för 1.0.0-rc.16
 
 Status: offentlig valideringskandidat. Inte produktionsverifierad 1.0.
 
 ## Förverifiering 16 augusti 2026
 
-- [x] Fixerad testsuite: 120 av 120 tester, inventering SHA-256 `3343e623b0141d22b46baf300bb1dd02859e6fd80db6625c423f974bd9b53016`.
+- [x] Fixerad testsuite: 121 av 121 tester, inventering SHA-256 `1dd8b55c797ea85fffa314c6857fe1adc72708e352d44868903a47ec832de10b`.
 - [x] EBU Loudness Test Set v5.0: 68 av 68 krav för 62 relevanta filer.
 - [x] ITU-R BS.2217-2: 19 av 19 relevanta filer inom +/-0,1 LKFS.
-- [x] Syntaxkontroll och `git diff --check` godkända för rc.15.
+- [x] Syntaxkontroll och `git diff --check` godkända för rc.16.
 - [x] VEP:s visuella, informationsarkitektoniska och ljudsäkerhetsmässiga slutgrind ger PASS för den färdiga iPad-arkitekturen.
 - [x] Virtuell användarpanel med 12 roller och tre konkreta uppgifter per roll: 36 av 36 flöden passerar efter åtgärdade panelblockerare.
 - [x] Pagespaket innehåller 20 filer: 19 uttryckligen tillåtna resurser plus hashbundet buildmanifest.
@@ -18,9 +18,9 @@ Status: offentlig valideringskandidat. Inte produktionsverifierad 1.0.
 ## Lokal kandidat
 
 - [ ] Varje releasefil är avsiktligt inkluderad och det publicerade GitHub-trädet matchar det lokalt beräknade trädet exakt.
-- [x] Versionen `1.0.0-rc.15` är konsekvent i paket, app, workers, projekt, rapport, dokumentation, PWA-cache och validation-manifest.
-- [x] Syntaxkontroll, hela fixerade testsuiten med 120 av 120 och `git diff --check` passerar.
-- [x] EBU 68/68 och ITU 19/19 är oförändrad valideringsbas; rc.15 ändrar inte loudness- eller True Peak-beräkningen.
+- [x] Versionen `1.0.0-rc.16` är konsekvent i paket, app, workers, projekt, rapport, dokumentation, PWA-cache och validation-manifest.
+- [x] Syntaxkontroll, hela fixerade testsuiten med 121 av 121 och `git diff --check` passerar.
+- [x] EBU 68/68 och ITU 19/19 är oförändrad valideringsbas; rc.16 ändrar inte loudness- eller True Peak-beräkningen.
 - [x] Build skapar endast den uttryckliga allowlisten och `build-manifest.json`.
 - [x] Varje publik fil har SHA-256 i buildmanifestet.
 - [x] Inga ljudfiler, projekt, rapporter, credentials, hemligheter eller U+2013 finns i releasepaketet.
@@ -53,7 +53,7 @@ Status: offentlig valideringskandidat. Inte produktionsverifierad 1.0.
 - [x] Pages använder GitHub Actions.
 - [x] Appskalet använder nät först när nät finns, cache endast som reserv och `updateViaCache: none` för service workern.
 - [x] Automatisk aktivering och omladdning blockeras av osparat arbete eller pågående workerjobb.
-- [ ] Liveversionen på `https://hktcr.github.io/ljudr-analysverkstad/` visar `1.0.0-rc.15` och matchar releasecommitten.
+- [ ] Liveversionen på `https://hktcr.github.io/ljudr-analysverkstad/` visar `1.0.0-rc.16` och matchar releasecommitten.
 
 ## Live smoke
 
@@ -72,7 +72,7 @@ Status: offentlig valideringskandidat. Inte produktionsverifierad 1.0.
 
 ## RC-kvitto
 
-- Releaseversion: `1.0.0-rc.15`
+- Releaseversion: `1.0.0-rc.16`
 - Releasecommit: _fylls efter commit_
 - Tree-id: _fylls efter commit_
 - Actions run-id: _fylls efter grön körning_
