@@ -74,7 +74,7 @@ export function buildEditorialCueSheet(markers = [], { selectionStartSeconds = 0
     }));
 }
 
-export function publicationStatus({ durationSeconds, verifiedCurrent, criticalUnreviewed = 0, metadata = {}, manual = {}, exceptionNote = "" } = {}) {
+export function publicationStatus({ durationSeconds, verifiedCurrent, criticalUnreviewed = 0, editorialUnreviewed = 0, metadata = {}, manual = {}, exceptionNote = "" } = {}) {
   const target = TMH_SERIES_PROFILE.targetDurationSeconds;
   const durationOk = finite(durationSeconds) !== null && Math.abs(durationSeconds - target) <= Math.max(TMH_SERIES_PROFILE.durationToleranceSeconds, 0.001);
   const metadataOk = Boolean(text(metadata.title).trim() && text(metadata.episode).trim() && text(metadata.place).trim());
@@ -82,7 +82,7 @@ export function publicationStatus({ durationSeconds, verifiedCurrent, criticalUn
   const checks = {
     duration: durationOk || documentedException,
     verifiedWav: Boolean(verifiedCurrent),
-    markersReviewed: criticalUnreviewed === 0,
+    markersReviewed: criticalUnreviewed === 0 && editorialUnreviewed === 0,
     fullListen: Boolean(manual.fullListen),
     boundaries: Boolean(manual.boundaries),
     stereo: Boolean(manual.stereo),

@@ -267,6 +267,7 @@ const elements = {
   exportTrimCanvas: $("#exportTrimCanvas"),
   exportSelectionMapping: $("#exportSelectionMapping"),
   monitorVolume: $("#monitorVolume"),
+  monitorSafetyStatus: $("#monitorSafetyStatus"),
   fadeInToggle: $("#fadeInToggle"),
   fadeInNumber: $("#fadeInNumber"),
   fadeInRange: $("#fadeInRange"),
@@ -810,7 +811,7 @@ function markEditChanged(reason = "edit") {
   renderPublicationCard();
   syncTrimHud();
   window.clearTimeout(regionTimer);
-  regionTimer = window.setTimeout(requestRegionAnalysis, 450);
+  renderPreflightPanel();
   emitState(reason);
 }
 
@@ -823,6 +824,7 @@ function invalidateSeriesProposal() {
 }
 
 function emitState(reason) {
+  renderWorkflowStatus();
   window.dispatchEvent(new CustomEvent("ljudr:statechange", {
     detail: {
       reason,
@@ -843,8 +845,32 @@ function emitState(reason) {
   if (reloadWhenSafe && !hasUnsafeUpdateState()) location.reload();
 }
 
+function renderWorkflowStatus() {
+  const set = (id, text, stateName) => {
+    const node = $(id);
+    if (!node) return;
+    node.textContent = text;
+    node.dataset.state = stateName;
+  };
+  set("#modeStatusOpen", state.file ? "Klar" : "Välj fil", state.file ? "pass" : "waiting");
+  const sourceStatus = sourceAnalysisStatus();
+  set("#modeStatusAnalyze",
+    state.analysisStatus === "running" ? "Analys pågår" : state.analysis ? `Analys klar, ${sourceStatus.state === "pass" ? "inga stoppfynd" : sourceStatus.state === "stop" ? "stoppfynd finns" : "granskning krävs"}` : "Inte analyserad",
+    state.analysisStatus === "running" ? "running" : state.analysis ? sourceStatus.state : "waiting");
+  set("#modeStatusTrim",
+    !state.analysis ? "Väntar" : "Redigera urval",
+    !state.analysis ? "waiting" : "review");
+  const preflightStatus = preflightAnalysisStatus();
+  set("#modeStatusPreflight",
+    preflightStatus.label,
+    preflightStatus.state);
+  set("#modeStatusExport",
+    state.exportStatus === "running" ? "Pågår" : state.verifiedExport ? "Verifierad" : state.analysis ? "Inte exporterad" : "Väntar",
+    state.exportStatus === "running" ? "running" : state.verifiedExport ? "pass" : state.analysis ? "review" : "waiting");
+}
+
 function setMode(mode, options = {}) {
-  if (!["open", "analyze", "trim", "export"].includes(mode)) return;
+  if (!["open", "analyze", "trim", "preflight", "export"].includes(mode)) return;
   if (!state.trimEditor.applied && mode !== "trim") {
     showToast("Lås trimfönstret och tillämpa det, eller återgå till det aktiva urvalet, innan du lämnar trimsteget.", "error", 7000);
     return;
@@ -855,7 +881,7 @@ function setMode(mode, options = {}) {
   }
   state.mode = mode;
   $$("[data-panel]").forEach((panel) => panel.classList.toggle("is-visible", panel.dataset.panel === mode));
-  const order = ["open", "analyze", "trim", "export"];
+  const order = ["open", "analyze", "trim", "preflight", "export"];
   const activeIndex = order.indexOf(mode);
   $$(".mode-tab").forEach((tab) => {
     const index = order.indexOf(tab.dataset.mode);
@@ -865,6 +891,7 @@ function setMode(mode, options = {}) {
     else tab.removeAttribute("aria-current");
   });
   if (mode === "analyze" || mode === "trim") scheduleCanvasRender();
+  if (mode === "preflight") renderPreflightPanel();
   if (mode === "export") updateExportSummary();
   if (!options.silent) {
     window.scrollTo({ top: 0, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
@@ -1267,6 +1294,8 @@ function requestRegionAnalysis() {
   syncAnalysisExchangeAvailability();
   if (elements.regionMeasureStatus) elements.regionMeasureStatus.textContent = "Beräknar exakt urval";
   elements.cancelRegion.hidden = false;
+  renderPreflightPanel();
+  emitState("region-analysis-started");
   analysisWorker.postMessage({ type: "analyze-region", jobId, file: state.file, options: regionOptions() });
 }
 
@@ -1283,6 +1312,7 @@ function applyRegionResult(result) {
   renderLocalPeakWorkshop(peak === null ? "Beräkningen är klar, men True Peak saknas." : `Exporturvalet är beräknat till ${formatDecimal(peak, 2)} dBTP.`);
   renderCanvasTextAlternative();
   renderDeepMeasurements();
+  renderPreflightPanel();
   updateProjectedMetrics();
   updateExportSummary();
   renderPublicationCard();
@@ -1429,7 +1459,6 @@ function renderCanvasTextAlternative() {
     elements.canvasTextContent.innerHTML = "<p>Analysera filen för en navigerbar textöversikt.</p>";
     return;
   }
-  const channels = Array.isArray(summary.channels) ? summary.channels : [];
   const markerRows = [...state.markers].sort((a, b) => a.seconds - b.seconds).map((marker) => `<li><button type="button" data-text-marker="${escapeHtml(marker.id)}">${formatTime(marker.seconds, false)}: ${escapeHtml(marker.text)}</button><span>${escapeHtml(marker.detail || "")}</span></li>`).join("") || "<li>Inga markörer</li>";
   const accessibleValue = (value, unit) => {
     const number = finite(value);
@@ -1454,13 +1483,139 @@ function renderAnalysisSummary() {
   renderDeepMeasurements();
   renderFloatOverrangeMap();
   renderAssessmentReflection();
+  renderAnalysisModuleBoard();
   renderFullAnalysis();
   updateExportRecommendation();
 }
 
+const MODULE_STATUS = Object.freeze({
+  waiting: { label: "Inte analyserad", icon: "○" },
+  pass: { label: "Pass", icon: "✓" },
+  review: { label: "Granska", icon: "!" },
+  stop: { label: "Stopp", icon: "×" },
+  unknown: { label: "Kan inte avgöras", icon: "?" },
+  info: { label: "Information", icon: "i" },
+});
+
+function sourceAnalysisStatus() {
+  if (!state.analysis) return { state: "waiting", label: "Inte analyserad", detail: "Källanalysen har inte körts" };
+  const summary = state.analysis.summary || {};
+  const observationIds = new Set(normalizeObservations().map(item => item.id));
+  const nonFinite = finite(summary.nonFiniteSamples) ?? 0;
+  if (nonFinite > 0 || observationIds.has("truncated-data")) {
+    return { state: "stop", label: "Blockerande signalintegritet", detail: `${Number(nonFinite).toLocaleString("sv-SE")} icke ändliga värden eller ofullständigt datablock` };
+  }
+  if (observationIds.has("flat-top")) return { state: "review", label: "Manuell klippgranskning krävs", detail: "En heuristisk platåindikation behöver förstoras och lyssnas på" };
+  return { state: "pass", label: "Pass för integritetstestet", detail: "Datablocket är komplett och inga NaN- eller Infinityvärden hittades" };
+}
+
+function preflightAnalysisStatus() {
+  if (!state.analysis) return { state: "waiting", label: "Väntar", detail: "Källanalysen måste bli klar först" };
+  const sourceIntegrity = sourceAnalysisStatus();
+  if (sourceIntegrity.state === "stop") return { state: "stop", label: "Stopp", detail: `Källans signalintegritet blockerar bearbetad export: ${sourceIntegrity.detail}` };
+  if (state.regionStatus === "running") return { state: "running", label: "Beräknar", detail: "Hela aktuella exporturvalet mäts efter synliga ändringar" };
+  const processed = state.regionAnalysis?.processed?.summary || state.regionAnalysis?.summary || null;
+  if (!processed) return { state: "review", label: "Omberäkning krävs", detail: "Redigeringen saknar en färsk exakt förkontroll" };
+  const processedInvalid = finite(processed.nonFiniteSamples) ?? 0;
+  if (processedInvalid > 0) return { state: "stop", label: "Stopp", detail: `${Number(processedInvalid).toLocaleString("sv-SE")} icke ändliga värden finns i urvalet` };
+  const processedPeak = finite(processed.truePeakEstimateDbtp ?? processed.truePeakDbtp ?? processed.truePeak);
+  if (processedPeak === null) return { state: "review", label: "Kan inte avgöras", detail: "True Peak kunde inte beräknas. Kontrollera signalinnehåll och integritet innan export" };
+  const target = finite(elements.localPeakCeiling?.value) ?? state.series.ceilingDbtp ?? -2;
+  if (processedPeak !== null && processedPeak > target) return { state: "review", label: "Granska leveransmarginal", detail: `True Peak ${analysisMetric(processedPeak, "dBTP", 2)} ligger över den valda orienteringen ${analysisMetric(target, "dBTP", 1)}` };
+  return { state: "pass", label: "Pass för förkontrollen", detail: `Urvalet ligger vid eller under den valda topporienteringen ${analysisMetric(target, "dBTP", 1)}. Slutlig WAV måste fortfarande verifieras` };
+}
+
+function setAnalysisModule(name, stateName, summaryText) {
+  const card = $(`[data-analysis-module="${name}"]`);
+  const status = MODULE_STATUS[stateName] || MODULE_STATUS.info;
+  if (!card) return;
+  card.disabled = !state.analysis;
+  card.dataset.state = stateName;
+  card.querySelector(".module-status i").textContent = status.icon;
+  card.querySelector(".module-status strong").textContent = status.label;
+  card.querySelector("small").textContent = summaryText;
+}
+
+function renderAnalysisModuleBoard() {
+  const fullButton = $("#openFullAnalysisBoardButton");
+  if (fullButton) fullButton.disabled = !state.analysis;
+  if (!state.analysis) {
+    ["integrity", "peaks", "loudness", "dynamics", "stereo", "review"].forEach(name => setAnalysisModule(name, "waiting", "Analysen har inte körts ännu"));
+    return;
+  }
+  const summary = state.analysis.summary || {};
+  const observations = normalizeObservations();
+  const observationIds = new Set(observations.map(item => item.id));
+  const overrange = finite(summary.overrangeSamples) ?? 0;
+  const truePeak = finite(summary.truePeakEstimateDbtp ?? summary.truePeakDbtp ?? summary.truePeak);
+  const integrated = finite(summary.integratedLufs ?? summary.lufsI);
+  const lra = finite(summary.loudnessRangeLu ?? summary.lra);
+  const mono = summary.monoCompatibility || {};
+  const riskRegions = Array.isArray(mono.riskRegions) ? mono.riskRegions.length : Array.isArray(mono.negativeCorrelationRegions) ? mono.negativeCorrelationRegions.length : 0;
+  const unreviewed = state.markers.filter(marker => marker.reviewStatus === "unreviewed").length;
+  const flatTop = observationIds.has("flat-top");
+  const isFloat = /float/i.test(`${state.analysis.format?.encoding || ""} ${state.fileInfo?.encoding || ""}`);
+
+  const integrity = sourceAnalysisStatus();
+  setAnalysisModule("integrity", integrity.state, integrity.detail);
+
+  if (flatTop) setAnalysisModule("peaks", "review", "Möjlig platå hittad. Det är en indikation, inte en säker klippdiagnos");
+  else if (truePeak !== null && truePeak > -2) setAnalysisModule("peaks", "review", `Källans True Peak är ${analysisMetric(truePeak, "dBTP", 2)}. Aktuellt exporturval behöver räknas om mot valt tak`);
+  else if (isFloat && overrange > 0) setAnalysisModule("peaks", "info", `${Number(overrange).toLocaleString("sv-SE")} floatvärden över 0 dBFS är bevarade och är inte i sig klippning`);
+  else setAnalysisModule("peaks", "pass", `Ingen digital begränsning upptäckt i genomfört test. True Peak ${analysisMetric(truePeak, "dBTP", 2)}`);
+
+  const loudnessAssessment = assessLoudnessContext(integrated);
+  setAnalysisModule("loudness", loudnessAssessment.state, `${analysisMetric(integrated, "LUFS", 1)}. ${loudnessAssessment.text}`);
+
+  setAnalysisModule("dynamics", "info", `LRA ${analysisMetric(lra, "LU", 1)}. Bedöm upplevelsen genom lyssning`);
+
+  if (riskRegions > 0) setAnalysisModule("stereo", "review", `${riskRegions} regioner behöver monolyssnas`);
+  else setAnalysisModule("stereo", "pass", `Ingen varaktig monorisk hittades. Kanalbalans ${analysisMetric(summary.channelBalanceDb, "dB", 1)}`);
+
+  if (unreviewed > 0) setAnalysisModule("review", "review", `${unreviewed} markörer återstår att bedöma och lyssna på`);
+  else setAnalysisModule("review", "pass", "Pass för markörkontrollen. Alla registrerade markörer är bedömda");
+}
+
+function openFullAnalysisAt(sectionName = "overview") {
+  renderFullAnalysis();
+  if (typeof elements.fullAnalysisDialog.showModal === "function") elements.fullAnalysisDialog.showModal();
+  else elements.fullAnalysisDialog.setAttribute("open", "");
+  requestAnimationFrame(() => {
+    const section = $(`#analysis-section-${sectionName}`);
+    section?.scrollIntoView({ block: "start", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+    section?.querySelector("h3")?.focus?.({ preventScroll: true });
+  });
+}
+
 function analysisMetric(value, unit, digits = 1) {
   const number = finite(value);
-  return number === null ? "saknas" : `${formatDecimal(number, digits)} ${unit}`;
+  return number === null ? "saknas" : `${formatDecimal(number, digits)}${unit ? ` ${unit}` : ""}`;
+}
+
+function renderPreflightPanel() {
+  const source = state.analysis?.summary || {};
+  const processed = state.regionAnalysis?.processed?.summary || state.regionAnalysis?.summary || null;
+  const sourcePeak = finite(source.truePeakEstimateDbtp ?? source.truePeakDbtp ?? source.truePeak);
+  const sourceLufs = finite(source.integratedLufs ?? source.lufsI);
+  const processedPeak = finite(processed?.truePeakEstimateDbtp ?? processed?.truePeakDbtp ?? processed?.truePeak);
+  const processedLufs = finite(processed?.integratedLufs ?? processed?.lufsI);
+  const setText = (selector, value) => { const node = $(selector); if (node) node.textContent = value; };
+  setText("#preflightSourcePeak", analysisMetric(sourcePeak, "dBTP", 2));
+  setText("#preflightSourceLufs", analysisMetric(sourceLufs, "LUFS", 1));
+  setText("#preflightSelectionPeak", processed ? analysisMetric(processedPeak, "dBTP", 2) : "inte beräknat");
+  setText("#preflightSelectionLufs", processed ? analysisMetric(processedLufs, "LUFS", 1) : "inte beräknat");
+  setText("#preflightProcessStatus", state.regionStatus === "running" ? "Pågår" : processed ? "Förkontroll klar" : state.analysis ? "Inaktuell eller inte körd" : "Väntar på källanalys");
+  const outcome = $("#preflightOutcomeStatus");
+  const detail = $("#preflightOutcomeDetail");
+  if (!outcome || !detail) return;
+  const status = preflightAnalysisStatus();
+  outcome.textContent = status.label;
+  outcome.dataset.state = status.state;
+  detail.textContent = status.detail;
+  const run = $("#runPreflightButton");
+  if (run) run.disabled = !state.analysis || state.regionStatus === "running";
+  const continueButton = $("#preflightContinueButton");
+  if (continueButton) continueButton.disabled = status.state === "stop" || !processed || state.regionStatus === "running";
 }
 
 function renderFullAnalysis() {
@@ -1481,41 +1636,41 @@ function renderFullAnalysis() {
   const truePeak = finite(summary.truePeakEstimateDbtp ?? summary.truePeakDbtp ?? summary.truePeak);
   const integrated = finite(summary.integratedLufs ?? summary.lufsI);
   const lra = finite(summary.loudnessRangeLu ?? summary.lra);
-  const plr = finite(summary.plrLu ?? summary.plr);
+  const plr = finite(summary.plrLu ?? summary.plrEstimateLu ?? summary.plr);
   const overrange = finite(summary.overrangeSamples) ?? 0;
   const nonFinite = finite(summary.nonFiniteSamples) ?? 0;
-  const clipped = finite(summary.clippedSamples) ?? channels.reduce((sum, channel) => sum + (finite(channel.clippedSamples) ?? 0), 0);
   const isFloat = /float/i.test(`${format.encoding || ""} ${state.fileInfo?.encoding || ""}`);
   const possibleFlatTop = observationIds.has("flat-top");
-  const target = -2;
+  const target = clamp(finite(elements.localPeakCeiling?.value) ?? state.series.ceilingDbtp ?? -2, -60, 0);
   const reduction = truePeak === null ? null : Math.min(0, target - truePeak);
-  const loudnessState = integrated === null ? "Kan inte bedömas" : integrated >= -20 && integrated <= -18 ? "Inom seriens arbetsintervall" : integrated < -20 ? "Under seriens arbetsintervall" : "Över seriens arbetsintervall";
-  const importantMarkers = [...state.markers]
-    .filter(marker => marker.machineKind === "float-overrange" || /peak|overrange|clip/i.test(`${marker.type || ""} ${marker.machineKind || ""}`))
-    .sort((a, b) => a.seconds - b.seconds)
-    .slice(0, 16);
+  const loudnessAssessment = assessLoudnessContext(integrated);
+  const loudnessState = loudnessAssessment.text;
+  const sortedMarkers = [...state.markers].sort((a, b) => a.seconds - b.seconds);
+  const technicalMarkers = sortedMarkers.filter(marker => marker.origin !== "user" && !["privacy", "remove", "keep", "chapter"].includes(marker.type)).slice(0, 16);
+  const editorialMarkers = sortedMarkers.filter(marker => marker.origin === "user" || ["privacy", "remove", "keep", "chapter"].includes(marker.type));
   const channelRows = channels.map((channel, index) => `<tr><th>${index === 0 ? "Vänster" : index === 1 ? "Höger" : `Kanal ${index + 1}`}</th><td>${analysisMetric(channel.samplePeakDbfs, "dBFS", 2)}</td><td>${analysisMetric(channel.truePeakEstimateDbtp ?? channel.truePeakDbtp, "dBTP", 2)}</td><td>${analysisMetric(channel.rmsDbfs, "dBFS", 1)}</td><td>${Number(finite(channel.overrangeSamples) ?? 0).toLocaleString("sv-SE")}</td></tr>`).join("");
-  const markerRows = importantMarkers.length ? importantMarkers.map(marker => `<li><button type="button" data-full-analysis-play="${marker.seconds}">${formatTime(marker.seconds, false)}</button><span>${escapeHtml(marker.text || marker.summary || marker.machineKind || marker.type || "Teknisk granskningspunkt")}</span></li>`).join("") : "<li>Inga särskilda toppregioner finns i markörlistan.</li>";
-  const integrityStatus = nonFinite > 0 ? "Blockerande signalfel" : possibleFlatTop || clipped > 0 ? "Manuell klippgranskning krävs" : "Inga blockerande signalfel uppmätta";
+  const markerRows = (markers, emptyText) => markers.length ? markers.map(marker => `<li><button type="button" data-full-analysis-play="${marker.seconds}">${formatTime(marker.seconds, false)}</button><span><strong>${escapeHtml(marker.text || marker.summary || marker.machineKind || marker.type || "Granskningspunkt")}</strong><small>${escapeHtml(marker.type || "markör")} · ${marker.channel ? `kanal ${marker.channel} · ` : ""}${marker.reviewStatus === "unreviewed" ? "ej granskad" : marker.reviewStatus === "false-positive" ? "falsk positiv" : "bekräftad"}</small></span><button class="button button-secondary button-small" type="button" data-full-analysis-marker="${escapeHtml(marker.id)}">Öppna i markörgranskning</button></li>`).join("") : `<li>${emptyText}</li>`;
+  const integrity = sourceAnalysisStatus();
   const nextPeakStep = reduction !== null && reduction < 0
     ? `För ${target} dBTP behövs cirka ${formatDecimal(Math.abs(reduction), 2)} dB sänkning om hela urvalet ändras. Använd hellre lokala stereolänkade gainkurvor när det bara gäller enstaka händelser, och beräkna sedan hela exporturvalet.`
     : "Det finns redan minst 2 dB orienterande toppmarginal. Bevara nivån om lyssningen inte visar ett annat problem.";
   elements.fullAnalysisContent.innerHTML = `
-    <section class="full-analysis-lead"><span class="analysis-verdict">${escapeHtml(integrityStatus)}</span><h3>Helhetsbedömning</h3><p>${escapeHtml(loudnessState)}. True Peak är ${analysisMetric(truePeak, "dBTP", 2)} och källan ${isFloat ? "är float" : "är heltals-PCM"}. ${overrange > 0 ? `${Number(overrange).toLocaleString("sv-SE")} samplingar ligger över 0 dBFS men är bevarade i floatfilen.` : "Ingen float-overrange har uppmätts."}</p></section>
-    <section><h3>Olika typer av toppar och klippning</h3><p class="section-intro">Liknande siffror kan beskriva helt olika fenomen. Därför redovisas de separat.</p><div class="peak-type-table" role="table">
+    <nav class="full-analysis-nav" aria-label="Avsnitt i analysen"><button type="button" data-analysis-section="overview">Helhet</button><button type="button" data-analysis-section="peaks">Toppar</button><button type="button" data-analysis-section="loudness">Ljudstyrka</button><button type="button" data-analysis-section="dynamics">Dynamik</button><button type="button" data-analysis-section="stereo">Stereo och mono</button><button type="button" data-analysis-section="integrity">Signalintegritet</button><button type="button" data-analysis-section="review">Granskning</button></nav>
+    <section class="full-analysis-lead" id="analysis-section-overview"><span class="analysis-verdict" data-state="${integrity.state}">${MODULE_STATUS[integrity.state]?.icon || "i"} ${escapeHtml(integrity.label)}</span><h3 tabindex="-1">Helhetsbedömning av källfilen</h3><p>${escapeHtml(loudnessState)}. True Peak är ${analysisMetric(truePeak, "dBTP", 2)} och källan ${isFloat ? "är float" : "är heltals-PCM"}. ${overrange > 0 ? `${Number(overrange).toLocaleString("sv-SE")} samplingar ligger över 0 dBFS men är bevarade i floatfilen.` : "Ingen float-overrange har uppmätts."}</p></section>
+    <section id="analysis-section-peaks"><h3 tabindex="-1">Olika typer av toppar och klippning</h3><p class="section-intro">Liknande siffror kan beskriva helt olika fenomen. Därför redovisas de separat.</p><div class="peak-type-table" role="table">
       <article><strong>Sample Peak</strong><span>${analysisMetric(samplePeak, "dBFS", 2)}</span><p>Högsta lagrade sampling. Den visar inte vad som kan uppstå mellan samplingarna och bevisar inte ensam klippning.</p></article>
       <article><strong>True Peak</strong><span>${analysisMetric(truePeak, "dBTP", 2)}</span><p>Översamplat estimat av toppen mellan samplingarna. Används för leveransmarginal, men är inte bevis på att ljudet redan är klippt.</p></article>
       <article><strong>Float över 0 dBFS</strong><span>${isFloat ? `${Number(overrange).toLocaleString("sv-SE")} samplingar` : "Inte tillämpligt"}</span><p>Värden över full skala kan finnas bevarade i float. De kan ofta sänkas före PCM-export och är inte automatiskt klippning.</p></article>
-      <article><strong>Digital klippning</strong><span>${possibleFlatTop || clipped > 0 ? "Indikation att granska" : "Ingen tydlig indikation"}</span><p>Fastslås inte av toppvärdet. Platåmönster är bara en heuristik och måste kontrolleras i förstorad vågform och med lyssning.</p></article>
+      <article><strong>Digital klippning</strong><span>${possibleFlatTop ? "Platåindikation att granska" : "Ingen klippindikation hittad av dessa tester"}</span><p>Fastslås inte av toppvärdet. Platåmönster är bara en heuristik och måste kontrolleras i förstorad vågform och med lyssning.</p></article>
       <article><strong>Analog överstyrning</strong><span>Kan inte avgöras säkert</span><p>Mikrofon eller försteg kan ha distorderat innan signalen lagrades. Sänkt gain skapar marginal men reparerar inte sådan skada.</p></article>
-      <article><strong>Exportklippning</strong><span>${truePeak !== null && truePeak > 0 ? "Risk finns" : "Ingen direkt risk uppmätt"}</span><p>Floatvärden över full skala kan kapas vid heltalsexport. Komprimerade format kan också skapa nya toppar, så slutformatet måste verifieras efter kodning.</p></article>
-    </div></section>
-    <section><h3>Ljudstyrka</h3><dl class="analysis-facts"><div><dt>Integrerad loudness</dt><dd>${analysisMetric(integrated, "LUFS", 1)}</dd></div><div><dt>Momentary max</dt><dd>${analysisMetric(summary.momentaryMaxLufs, "LUFS", 1)}</dd></div><div><dt>Short-term max</dt><dd>${analysisMetric(summary.shortTermMaxLufs, "LUFS", 1)}</dd></div><div><dt>Tolkning</dt><dd>${escapeHtml(loudnessState)}</dd></div></dl></section>
-    <section><h3>Dynamik</h3><dl class="analysis-facts"><div><dt>Loudness Range</dt><dd>${analysisMetric(lra, "LU", 1)}</dd></div><div><dt>PLR</dt><dd>${analysisMetric(plr, "LU", 1)}</dd></div><div><dt>RMS</dt><dd>${analysisMetric(summary.rmsDbfs, "dBFS", 1)}</dd></div><div><dt>Crest factor</dt><dd>${analysisMetric(summary.crestFactorDb, "dB", 1)}</dd></div></dl><p>Värdena beskriver nivåspridning och transientmarginal. De avgör inte ensamma om dynamiken känns naturlig.</p></section>
-    <section><h3>Stereo och mono</h3><dl class="analysis-facts"><div><dt>Stereokorrelation</dt><dd>${analysisMetric(summary.stereoCorrelation, "", 2)}</dd></div><div><dt>Kanalbalans</dt><dd>${analysisMetric(summary.channelBalanceDb, "dB", 1)}</dd></div><div><dt>Mono energiskillnad</dt><dd>${analysisMetric(mono.energyDeltaDb, "dB", 1)}</dd></div><div><dt>Negativ korrelation</dt><dd>${analysisMetric(mono.negativeCorrelationPercent, "%", 1)}</dd></div></dl><p>Negativ korrelation i korta regioner är en granskningssignal, inte automatiskt ett fel. Provlyssna i mono.</p></section>
-    <section><h3>Signalintegritet</h3><dl class="analysis-facts"><div><dt>Icke ändliga värden</dt><dd>${Number(nonFinite).toLocaleString("sv-SE")}</dd></div><div><dt>Rapporterade klippta samplingar</dt><dd>${Number(clipped).toLocaleString("sv-SE")}</dd></div><div><dt>Float-overrange</dt><dd>${Number(overrange).toLocaleString("sv-SE")}</dd></div><div><dt>Möjlig platå</dt><dd>${possibleFlatTop ? "Ja, heuristisk indikation" : "Inte hittad"}</dd></div></dl></section>
+      <article><strong>Exportklippning</strong><span>${truePeak !== null && truePeak > 0 ? "Källan behöver marginal före PCM" : "Aktuellt exporturval måste verifieras"}</span><p>Floatvärden över full skala kan kapas vid heltalsexport. Komprimerade format kan också skapa nya toppar, så slutformatet måste verifieras efter kodning.</p></article>
+    </div><div class="full-analysis-actions"><button class="button button-primary" type="button" data-full-action="peak-workshop">Öppna lokal toppverkstad</button><button class="button button-secondary" type="button" data-full-action="peak-study">Studera topparna</button>${overrange > 0 ? '<button class="button button-secondary" type="button" data-full-action="float-regions">Visa floatregioner</button>' : ""}</div></section>
+    <section id="analysis-section-loudness"><h3 tabindex="-1">Ljudstyrka</h3><dl class="analysis-facts"><div><dt>Integrerad loudness</dt><dd>${analysisMetric(integrated, "LUFS", 1)}</dd></div><div><dt>Momentary max</dt><dd>${analysisMetric(summary.momentaryMaxLufs, "LUFS", 1)}</dd></div><div><dt>Short-term max</dt><dd>${analysisMetric(summary.shortTermMaxLufs, "LUFS", 1)}</dd></div><div><dt>Tolkning</dt><dd>${escapeHtml(loudnessState)}</dd></div></dl></section>
+    <section id="analysis-section-dynamics"><h3 tabindex="-1">Dynamik</h3><dl class="analysis-facts"><div><dt>Loudness Range</dt><dd>${analysisMetric(lra, "LU", 1)}</dd></div><div><dt>PLR</dt><dd>${analysisMetric(plr, "LU", 1)}</dd></div><div><dt>RMS</dt><dd>${analysisMetric(summary.rmsDbfs, "dBFS", 1)}</dd></div><div><dt>Crest factor</dt><dd>${analysisMetric(summary.crestFactorDb, "dB", 1)}</dd></div></dl><p>Värdena beskriver nivåspridning och transientmarginal. De har ingen universell godkänd eller underkänd nivå och avgör inte ensamma om dynamiken känns naturlig.</p></section>
+    <section id="analysis-section-stereo"><h3 tabindex="-1">Stereo och mono</h3><dl class="analysis-facts"><div><dt>Stereokorrelation</dt><dd>${analysisMetric(summary.stereoCorrelation, "", 2)}</dd></div><div><dt>Kanalbalans</dt><dd>${analysisMetric(summary.channelBalanceDb, "dB", 1)}</dd></div><div><dt>Mono energiskillnad</dt><dd>${analysisMetric(mono.energyDeltaDb, "dB", 1)}</dd></div><div><dt>Negativ korrelation</dt><dd>${analysisMetric(mono.negativeCorrelationPercent, "%", 1)}</dd></div></dl><p>Negativ korrelation i korta regioner är en granskningssignal, inte automatiskt ett fel. Provlyssna i mono.</p></section>
+    <section id="analysis-section-integrity"><h3 tabindex="-1">Signalintegritet</h3><dl class="analysis-facts"><div><dt>Icke ändliga värden</dt><dd>${Number(nonFinite).toLocaleString("sv-SE")}</dd></div><div><dt>Platåindikationer</dt><dd>${possibleFlatTop ? "Minst en heuristisk indikation" : "Ingen hittad av aktuellt test"}</dd></div><div><dt>Float-overrange</dt><dd>${Number(overrange).toLocaleString("sv-SE")}</dd></div><div><dt>Testets begränsning</dt><dd>Analog överstyrning kan inte uteslutas</dd></div></dl></section>
     <section><h3>Kanaler</h3><div class="analysis-table-wrap"><table><thead><tr><th>Kanal</th><th>Sample Peak</th><th>True Peak</th><th>RMS</th><th>Overrange</th></tr></thead><tbody>${channelRows}</tbody></table></div></section>
-    <section><h3>Viktiga tidsområden</h3><ol class="full-analysis-regions">${markerRows}</ol></section>
+    <section id="analysis-section-review"><h3 tabindex="-1">Viktiga tidsområden och mänsklig granskning</h3><h4>Tekniska fynd</h4><ol class="full-analysis-regions">${markerRows(technicalMarkers, "Inga tekniska markörer finns att visa.")}</ol><h4>Redaktionella och integritetsrelaterade fynd</h4><ol class="full-analysis-regions">${markerRows(editorialMarkers, "Inga egna redaktionella eller integritetsrelaterade markörer finns.")}</ol></section>
     <section><h3>Rekommenderade nästa steg</h3><ol><li>${escapeHtml(nextPeakStep)}</li><li>Provlyssna de högsta topparna kanal för kanal och i stereo. Växla sedan till mono för att kontrollera fasrelaterade förändringar.</li><li>Beräkna det aktuella exporturvalet efter varje nivåändring. Verifiera den färdiga filen efter export.</li><li>Ingen limiter, kompressor eller dold nivåändring ska användas utan ett uttryckligt val.</li></ol></section>
     <section class="analysis-limitations"><h3>Vad analysen inte kan avgöra</h3><p>Den kan inte säkert avgöra om mikrofon eller försteg överstyrdes, om ett naturligt vågformsförlopp ser ut som en platå, om innehållet har ett redaktionellt eller integritetsmässigt problem, eller hur ljudet upplevs. Dessa frågor kräver riktad lyssning och mänsklig bedömning.</p></section>`;
 }
@@ -1791,8 +1946,8 @@ function renderPeakGuide() {
     elements.peakGuideStatus.textContent = "Möjlig klippning, lyssna";
     elements.peakGuideStatus.dataset.state = "review";
   } else if (isFloat && overrange > 0) {
-    elements.peakGuideStatus.textContent = "Floatmarginal bevarad";
-    elements.peakGuideStatus.dataset.state = "float";
+    elements.peakGuideStatus.textContent = "Granska leveransmarginal";
+    elements.peakGuideStatus.dataset.state = "review";
   } else if ((truePeak !== null && truePeak > 0) || (samplePeak !== null && samplePeak > 0)) {
     elements.peakGuideStatus.textContent = "Sänk före PCM-export";
     elements.peakGuideStatus.dataset.state = "warning";
@@ -1862,7 +2017,7 @@ function renderPeakCategories({ analyzed, samplePeak, truePeak, overrange, inval
   }
 
   if (isFloat && overrange > 0) {
-    setPeakCategory("Float", "Uppmätt", "safe", `${Number(overrange).toLocaleString("sv-SE")} samplingar över 0 dBFS är bevarade i floatfilen. De kan sänkas till säker nivå och är inte i sig digital klippning.`);
+    setPeakCategory("Float", "Information", "info", `${Number(overrange).toLocaleString("sv-SE")} samplingar över 0 dBFS är bevarade i floatfilen. De kan sänkas till säker nivå och är inte i sig digital klippning.`);
   } else if (isFloat) {
     setPeakCategory("Float", "Inte uppmätt", "neutral", "Filen är 32 bit float, men analysen hittade inga lagrade samplingar över 0 dBFS.");
   } else {
@@ -1876,7 +2031,7 @@ function renderPeakCategories({ analyzed, samplePeak, truePeak, overrange, inval
   } else if (!isFloat && samplePeak !== null && samplePeak >= -0.01) {
     setPeakCategory("Digital", "Kontrollera", "review", "En PCM topp når full skala. Toppvärdet bevisar inte att ljudet är klippt, men området bör förstoras och lyssnas igenom.");
   } else {
-    setPeakCategory("Digital", "Ingen tydlig indikation", "safe", "Ingen enkel klippindikation hittades. Det utesluter inte kort eller tidigare digital klippning, så kontrollera de högsta topparna vid behov.");
+    setPeakCategory("Digital", "Pass för testet", "safe", "Ingen klippindikation hittades av dessa tester. Det utesluter inte kort, tidigare eller analog överstyrning, så kontrollera de högsta topparna vid behov.");
   }
 
   setPeakCategory("Analog", "Kan inte avgöras", "unknown", "Den färdiga filen kan inte ensam visa säkert om mikrofon, försteg eller omvandlare överbelastades. Lyssna vid topparna efter hård, platt eller sprucken distorsion. Sänkt gain kan inte reparera sådan skada.");
@@ -1884,7 +2039,7 @@ function renderPeakCategories({ analyzed, samplePeak, truePeak, overrange, inval
   if (invalid > 0 || incompleteData) {
     setPeakCategory("Delivery", "Teknisk kontroll krävs", "warning", "Gör ingen bearbetad export innan filintegriteten har kontrollerats. En sample identisk trimning kan ha andra regler än en omräkning.");
   } else if ((isFloat && overrange > 0) || (truePeak !== null && truePeak > 0) || (samplePeak !== null && samplePeak > 0)) {
-    setPeakCategory("Delivery", "Sänk före PCM", "warning", "Topparna kan klippa i uppspelning eller PCM export. Välj tillräcklig negativ gain och låt LjudR beräkna och verifiera det aktuella exporturvalet.");
+    setPeakCategory("Delivery", "Sänk före PCM", "warning", "Vissa uppspelnings-, heltals- eller konverteringsled kan mätta vid den här nivån. Välj tillräcklig negativ gain och låt LjudR beräkna och verifiera det aktuella exporturvalet.");
   } else if (truePeak !== null && truePeak > -1) {
     setPeakCategory("Delivery", "Liten marginal", "review", `True Peak är ${formatDecimal(truePeak, 2)} dBTP. Det är inte bevis på skadat ljud, men en försiktigare toppmarginal kan behövas i nästa led.`);
   } else {
@@ -1977,6 +2132,15 @@ function levelClass(value, bands) {
   if (value <= bands[2]) return { label: "Inom referensområdet", key: "reference" };
   if (value <= bands[3]) return { label: "Ganska hög", key: "high" };
   return { label: "Mycket hög", key: "very-high" };
+}
+
+function assessLoudnessContext(value) {
+  if (state.assessment.purpose === "preservation") return { state: "info", text: "Mätvärde utan publiceringsklassificering av originalet" };
+  const profile = assessmentProfiles[state.assessment.recordingType] || assessmentProfiles.other;
+  if (!profile.bands) return { state: "info", text: "Objektivt mätvärde utan nivåklassificering" };
+  const rating = levelClass(value, profile.bands);
+  if (!rating) return { state: "unknown", text: `Kan inte klassificeras för ${profile.label}` };
+  return { state: rating.key === "reference" ? "pass" : "info", text: `${rating.label} för ${profile.label}. ${profile.reference}` };
 }
 
 function renderAssessmentReflection() {
@@ -2625,6 +2789,9 @@ function calculateSeriesProposal() {
 
 function syncSeriesUi() {
   const proposal = finite(state.series.proposedGainDb);
+  const deliveryCeiling = clamp(finite(state.series.ceilingDbtp) ?? TMH_SERIES_PROFILE.truePeakOrientationDbtp, -60, 0);
+  state.series.ceilingDbtp = deliveryCeiling;
+  if (elements.localPeakCeiling) elements.localPeakCeiling.value = String(deliveryCeiling);
   if (elements.seriesGainValue) elements.seriesGainValue.textContent = proposal === null ? "Inte beräknat" : `${proposal >= 0 ? "+" : ""}${formatDecimal(proposal, 1)} dB globalt`;
   const labels = { preserved: "Bevara oförändrat", calculated: "Beräknat, inte applicerat", previewing: "Provlyssnar, inte applicerat", applied: "Applicerat som synlig global gain" };
   if (elements.seriesStateValue) elements.seriesStateValue.textContent = labels[state.series.status] || labels.preserved;
@@ -2662,6 +2829,10 @@ function applyNegativePeakCeiling(targetValue) {
     return;
   }
   const target = finite(targetValue);
+  if (target !== null) {
+    state.series.ceilingDbtp = target;
+    if (elements.localPeakCeiling) elements.localPeakCeiling.value = String(target);
+  }
   const decision = decisionMeasurement();
   const peak = finite(decision.summary.truePeakEstimateDbtp ?? decision.summary.truePeakDbtp ?? decision.summary.truePeak);
   if (decision.stage === "waiting") {
@@ -2739,6 +2910,10 @@ function updateExportSummary() {
   $("#exportPeakSummary").textContent = localCount
     ? `${localCount} synliga, stereolänkade toppkurvor${state.localPeaks.bypass ? " förbigångna" : ""}`
     : "Ingen dold toppsänkning";
+  if (elements.exportAudio && state.exportStatus !== "running") {
+    const preflight = preflightAnalysisStatus();
+    elements.exportAudio.disabled = !state.regionAnalysis || state.regionStatus !== "complete" || preflight.state === "stop";
+  }
   updateExportRecommendation();
 }
 
@@ -2896,18 +3071,42 @@ function previewEnvelopeBreakpoints(geometry = fadeGeometry()) {
   return [...new Set(points.filter(Number.isFinite))].sort((left, right) => left - right);
 }
 
+function monitorSafetyForPreview() {
+  const sourcePeak = finite(state.analysis?.summary?.truePeakEstimateDbtp ?? state.analysis?.summary?.truePeakDbtp ?? state.analysis?.summary?.samplePeakDbfs);
+  const sourceMode = state.monitoring.previewMode === "source";
+  const editDb = sourceMode || state.monitoring.levelMatched ? 0 : (finite(state.monitoring.previewGainOverride) ?? state.trim.gainDb);
+  const projectedPeak = sourcePeak === null ? null : sourcePeak + editDb;
+  const safetyDb = projectedPeak === null ? 0 : Math.min(0, -3 - projectedPeak);
+  return { editDb, safetyDb, totalDb: editDb + safetyDb, projectedPeak };
+}
+
+function renderMonitorSafetyStatus() {
+  if (!elements.monitorSafetyStatus) return;
+  const safety = monitorSafetyForPreview();
+  if (!state.analysis) {
+    elements.monitorSafetyStatus.textContent = "Säker medhörning: väntar på toppanalys";
+    elements.monitorSafetyStatus.dataset.state = "waiting";
+  } else if (safety.safetyDb < -0.01) {
+    elements.monitorSafetyStatus.textContent = `Säker medhörning: sänkt ${formatDecimal(Math.abs(safety.safetyDb), 1)} dB endast i lyssningen`;
+    elements.monitorSafetyStatus.dataset.state = "active";
+  } else {
+    elements.monitorSafetyStatus.textContent = "Säker medhörning: ingen extra sänkning behövs";
+    elements.monitorSafetyStatus.dataset.state = "pass";
+  }
+}
+
 function schedulePreviewEnvelope(mediaSeconds = finite(elements.audio.currentTime) ?? state.trim.startSeconds) {
   if (!previewGainNode || !audioContext) return;
   const now = audioContext.currentTime;
   const geometry = fadeGeometry();
   const sourceMode = state.monitoring.previewMode === "source";
-  const previewDb = sourceMode || state.monitoring.levelMatched ? 0 : (finite(state.monitoring.previewGainOverride) ?? state.trim.gainDb);
-  const baseGain = 10 ** (previewDb / 20);
+  const monitorSafety = monitorSafetyForPreview();
+  const baseGain = 10 ** (monitorSafety.totalDb / 20);
   const playbackRate = Math.max(0.01, finite(elements.audio.playbackRate) ?? 1);
   const parameter = previewGainNode.gain;
   parameter.cancelScheduledValues(now);
   if (sourceMode) {
-    parameter.setValueAtTime(1, now);
+    parameter.setValueAtTime(baseGain, now);
     return;
   }
   const previewEnvelopeAt = seconds => baseGain
@@ -2931,11 +3130,13 @@ function updateMonitoringGraph() {
   schedulePreviewEnvelope();
   monitorGainNode?.gain.setTargetAtTime(state.monitoring.volume, now, 0.015);
   configureMonitorRouting();
+  renderMonitorSafetyStatus();
   if (!audioContext) elements.audio.volume = state.monitoring.volume;
 }
 
 function monitoringNeedsAudioGraph() {
   return Boolean(audioContext
+    || monitorSafetyForPreview().safetyDb < -0.01
     || state.monitoring.previewMode === "export"
     || state.monitoring.channelMode !== "stereo"
     || state.monitoring.levelMatched
@@ -2955,11 +3156,17 @@ function refreshMonitoringGraph() {
 
 async function startPlayback() {
   if (!state.file) return;
-  const playPromise = elements.audio.play();
-  const graphPromise = monitoringNeedsAudioGraph() ? ensureAudioGraph() : Promise.resolve(false);
-  schedulePreviewEnvelope(elements.audio.currentTime);
   try {
-    await Promise.all([graphPromise, playPromise]);
+    const safetyRequired = monitorSafetyForPreview().safetyDb < -0.01;
+    let graphReady = false;
+    if (monitoringNeedsAudioGraph()) {
+      graphReady = await ensureAudioGraph();
+      if (safetyRequired && !graphReady) {
+        throw new Error("Säker medhörning kunde inte starta. Uppspelningen startades inte för att undvika mättnad i lyssningskedjan.");
+      }
+    }
+    schedulePreviewEnvelope(elements.audio.currentTime);
+    await elements.audio.play();
   } catch (error) {
     setTransportStatus("Uppspelningen kunde inte starta på den här enheten.", "error");
     showToast(`Uppspelningen kunde inte starta: ${error.message}`, "error", 9000);
@@ -4257,7 +4464,7 @@ function exportReport(format) {
 const publicationLabels = Object.freeze({
   duration: "Exakt 20:00 eller dokumenterad avvikelse",
   verifiedWav: "Verifierad WAV är aktuell",
-  markersReviewed: "Inga kritiska markörer är ogranskade",
+  markersReviewed: "Inga kritiska, integritets- eller borttagningsmarkörer är ogranskade",
   fullListen: "Hela exporten är genomlyssnad",
   boundaries: "Början och slutet är kontrollerade",
   stereo: "Stereo är provlyssnat",
@@ -4272,6 +4479,7 @@ function currentPublicationStatus() {
     durationSeconds: selectionDurationSeconds(),
     verifiedCurrent: state.exportStatus === "complete" && Boolean(state.verifiedExport),
     criticalUnreviewed: state.markers.filter(marker => marker.severity === "critical" && marker.reviewStatus === "unreviewed").length,
+    editorialUnreviewed: state.markers.filter(marker => ["privacy", "remove"].includes(marker.type) && marker.reviewStatus === "unreviewed").length,
     metadata: collectMetadata(),
     manual: state.publication.manual,
     exceptionNote: state.publication.exceptionNote,
@@ -4344,6 +4552,15 @@ function startExport() {
     return;
   }
   const selectedProfile = $("input[name='exportProfile']:checked")?.value;
+  const preflight = preflightAnalysisStatus();
+  if (!state.regionAnalysis || state.regionStatus !== "complete") {
+    showToast("Stopp. Exporturvalet har ändrats sedan senaste förkontrollen. Analysera aktuellt exporturval i steg 3.", "error", 9000);
+    return;
+  }
+  if (preflight.state === "stop") {
+    showToast(`Exporten är blockerad: ${preflight.detail}.`, "error", 9000);
+    return;
+  }
   const edited = Math.abs(state.trim.gainDb) > 1e-9 || state.trim.fadeInSeconds > 0 || state.trim.fadeOutSeconds > 0 || activeLocalGainRegions().length > 0;
   if (selectedProfile === "sample-payload-trim" && edited) {
     showToast("Sample-payload-identiskt trimutdrag tillåter inte gain, lokala toppkurvor eller toningar. Välj Redigerad WAV-master eller återställ ingreppen.", "error", 9000);
@@ -4377,7 +4594,7 @@ function startExport() {
         startFrame: state.trim.startFrame,
         endFrame: state.trim.endFrame,
         globalGainDb: state.trim.gainDb,
-        enforceTruePeakCeiling: state.series.status === "applied",
+        enforceTruePeakCeiling: selectedProfile === "edited-wav",
         truePeakCeilingDbtp: state.series.ceilingDbtp,
         fadeInFrames: Math.round(state.trim.fadeInSeconds * sampleRate()),
         fadeOutFrames: Math.round(state.trim.fadeOutSeconds * sampleRate()),
@@ -4582,10 +4799,11 @@ function setExportProfile(profile, options = {}) {
 
 function syncAuditionUi() {
   if (!elements.auditionStatus) return;
-  const preview = state.monitoring.previewMode === "source" ? "Källkontext: inga toningar eller nivåval hörs." : `Exportförhandsvisning: exakt trim, toningar, synlig global gain${activeLocalGainRegions().length ? " och lokala toppkurvor" : ""} hörs.`;
+  const preview = state.monitoring.previewMode === "source" ? "Källkontext: inga exporttoningar eller redigeringsval hörs. Separat säker monitortrim kan vara aktiv." : `Exportförhandsvisning: exakt trim, toningar, synlig global gain${activeLocalGainRegions().length ? " och lokala toppkurvor" : ""} hörs.`;
   const monoSource = (state.analysis?.format?.channels ?? state.fileInfo?.channels) === 1;
   const mode = monoSource ? "Monokällan till båda öron" : { stereo: "Stereo", left: "Vänster till båda öron", right: "Höger till båda öron", mono: "Mono som 0,5 × (L + R)" }[state.monitoring.channelMode];
   elements.auditionStatus.textContent = `${preview} Monitor: ${mode}. Monitorval påverkar aldrig export.`;
+  renderMonitorSafetyStatus();
 }
 
 let waitingServiceWorker = null;
@@ -4970,6 +5188,9 @@ function bindEvents() {
     }
   });
   $$(".mode-tab").forEach((tab) => tab.addEventListener("click", () => setMode(tab.dataset.mode)));
+  $("#runPreflightButton").addEventListener("click", requestRegionAnalysis);
+  $("#preflightBackButton").addEventListener("click", () => setMode("trim"));
+  $("#preflightContinueButton").addEventListener("click", () => setMode("export"));
   $$('[data-mode-link]').forEach((link) => link.addEventListener("click", (event) => { event.preventDefault(); setMode(link.dataset.modeLink); }));
   elements.audioInput.addEventListener("change", () => openAudioFile(elements.audioInput.files?.[0]));
   elements.changeFile.addEventListener("click", () => elements.audioInput.click());
@@ -5062,15 +5283,52 @@ function bindEvents() {
     renderPeakStudy();
   });
   elements.openFullAnalysis.addEventListener("click", () => {
-    renderFullAnalysis();
-    if (typeof elements.fullAnalysisDialog.showModal === "function") elements.fullAnalysisDialog.showModal();
-    else elements.fullAnalysisDialog.setAttribute("open", "");
+    openFullAnalysisAt("overview");
+  });
+  $("#openFullAnalysisBoardButton").addEventListener("click", () => openFullAnalysisAt("overview"));
+  $("#analysisModuleBoard").addEventListener("click", (event) => {
+    const card = event.target.closest("[data-analysis-module]");
+    if (card && !card.disabled) openFullAnalysisAt(card.dataset.analysisModule);
   });
   $("#closeFullAnalysisButton").addEventListener("click", () => elements.fullAnalysisDialog.close());
   elements.fullAnalysisDialog.addEventListener("click", (event) => {
     if (event.target === elements.fullAnalysisDialog) elements.fullAnalysisDialog.close();
   });
   elements.fullAnalysisContent.addEventListener("click", (event) => {
+    const sectionButton = event.target.closest("[data-analysis-section]");
+    if (sectionButton) {
+      const section = $(`#analysis-section-${sectionButton.dataset.analysisSection}`);
+      section?.scrollIntoView({ block: "start", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+      section?.querySelector("h3")?.focus({ preventScroll: true });
+      return;
+    }
+    const actionButton = event.target.closest("[data-full-action]");
+    if (actionButton) {
+      elements.fullAnalysisDialog.close();
+      if (actionButton.dataset.fullAction === "peak-workshop") elements.openLocalPeakWorkshop.click();
+      if (actionButton.dataset.fullAction === "peak-study") elements.openPeakStudy.click();
+      if (actionButton.dataset.fullAction === "float-regions") elements.showFloatPeaks.click();
+      return;
+    }
+    const markerButton = event.target.closest("[data-full-analysis-marker]");
+    if (markerButton) {
+      const markerId = markerButton.dataset.fullAnalysisMarker;
+      state.markerFilter = "all";
+      $$('[data-marker-filter]').forEach((filterButton) => {
+        const active = filterButton.dataset.markerFilter === "all";
+        filterButton.classList.toggle("is-active", active);
+        filterButton.setAttribute("aria-pressed", String(active));
+      });
+      renderMarkers();
+      elements.fullAnalysisDialog.close();
+      setMode("analyze");
+      requestAnimationFrame(() => {
+        const row = elements.markerList.querySelector(`[data-marker-id="${CSS.escape(markerId)}"]`);
+        row?.scrollIntoView({ block: "center", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+        row?.querySelector("[data-marker-review]")?.focus({ preventScroll: true });
+      });
+      return;
+    }
     const button = event.target.closest("[data-full-analysis-play]");
     const seconds = finite(button?.dataset.fullAnalysisPlay);
     if (seconds === null) return;
@@ -5089,6 +5347,16 @@ function bindEvents() {
   elements.addHighestPeakRegion.addEventListener("click", addHighestLocalPeakRegion);
   elements.addAllFloatPeakRegions.addEventListener("click", addAllFloatLocalPeakRegions);
   elements.addPeakAtPlayhead.addEventListener("click", addLocalPeakAtPlayhead);
+  elements.localPeakCeiling.addEventListener("change", () => {
+    state.series.ceilingDbtp = clamp(finite(elements.localPeakCeiling.value) ?? -2, -60, 0);
+    state.regionAnalysis = null;
+    state.regionStatus = "stale";
+    state.verifiedExport = null;
+    state.dirty = true;
+    renderPreflightPanel();
+    updateExportSummary();
+    emitState("delivery-ceiling");
+  });
   elements.undoLocalPeak.addEventListener("click", undoLocalPeakChange);
   elements.redoLocalPeak.addEventListener("click", redoLocalPeakChange);
   elements.clearLocalPeakRegions.addEventListener("click", () => commitLocalPeakRegions([], "Alla lokala gainkurvor togs bort."));
@@ -5102,7 +5370,10 @@ function bindEvents() {
     refreshMonitoringGraph();
     emitState("local-peak-bypass");
   });
-  elements.calculateLocalPeakResult.addEventListener("click", requestRegionAnalysis);
+  elements.calculateLocalPeakResult.addEventListener("click", () => {
+    renderLocalPeakWorkshop("Beräknar hela exporturvalet med aktiva lokala kurvor.");
+    requestRegionAnalysis();
+  });
   elements.openPeakSafety.addEventListener("click", () => {
     setMode("trim");
     requestRegionAnalysis();
@@ -5112,34 +5383,6 @@ function bindEvents() {
     preserveSeries();
     showToast("Originalnivån bevaras. Ingen toppåtgärd har applicerats.");
   });
-  elements.openLocalPeakWorkshop.addEventListener("click", () => {
-    renderLocalPeakWorkshop();
-    if (typeof elements.localPeakWorkshopDialog.showModal === "function") elements.localPeakWorkshopDialog.showModal();
-    else elements.localPeakWorkshopDialog.setAttribute("open", "");
-  });
-  $("#closeLocalPeakWorkshopButton").addEventListener("click", () => elements.localPeakWorkshopDialog.close());
-  elements.localPeakWorkshopDialog.addEventListener("click", event => {
-    if (event.target === elements.localPeakWorkshopDialog) elements.localPeakWorkshopDialog.close();
-  });
-  elements.addHighestPeakRegion.addEventListener("click", addHighestLocalPeakRegion);
-  elements.addAllFloatPeakRegions.addEventListener("click", addAllFloatLocalPeakRegions);
-  elements.addPeakAtPlayhead.addEventListener("click", addLocalPeakAtPlayhead);
-  elements.undoLocalPeak.addEventListener("click", undoLocalPeakChange);
-  elements.redoLocalPeak.addEventListener("click", redoLocalPeakChange);
-  elements.clearLocalPeakRegions.addEventListener("click", () => commitLocalPeakRegions([], "Alla lokala toppkurvor togs bort."));
-  elements.bypassLocalPeaks.addEventListener("change", () => {
-    state.localPeaks.bypass = elements.bypassLocalPeaks.checked;
-    markEditChanged("local-peak-bypass");
-    renderLocalPeakWorkshop();
-    updateExportSummary();
-    refreshMonitoringGraph();
-  });
-  elements.calculateLocalPeakResult.addEventListener("click", () => {
-    requestRegionAnalysis();
-    renderLocalPeakWorkshop("Beräknar hela exporturvalet med aktiva lokala kurvor.");
-  });
-  elements.localPeakRegionList.addEventListener("change", handleLocalPeakListChange);
-  elements.localPeakRegionList.addEventListener("click", handleLocalPeakListAction);
   elements.assessmentActions.addEventListener("click", (event) => {
     const button = event.target.closest("[data-assessment-action]");
     if (!button) return;

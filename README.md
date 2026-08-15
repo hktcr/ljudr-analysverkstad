@@ -27,14 +27,19 @@ RF64 och BW64 avvisas som indata. RF64/BW64-export, flerkanal, AAC, MP3, FLAC, o
 2. Granska signalmått, observationer, markörer och den adaptiva vågformen.
 3. Trimma början och slutet. Toning är frivillig och av från början.
 4. Välj antingen att bevara nivån eller beräkna en frivillig serieorientering.
-5. Prova resultatet innan en global gain används.
-6. Exportera antingen ett sample-payload-identiskt trimutdrag eller en redigerad WAV-master.
-7. Låt appen återöppna och verifiera den faktiskt skrivna WAV-filen.
-8. Spara projekt och rapport för spårbarhet.
+5. Prova resultatet innan global eller lokal gain används.
+6. Kör det separata steget Analysera exporturval. Varje redigering gör denna förkontroll inaktuell.
+7. Exportera antingen ett sample-payload-identiskt trimutdrag eller en redigerad WAV-master.
+8. Låt appen återöppna och verifiera den faktiskt skrivna WAV-filen.
+9. Spara projekt och rapport för spårbarhet.
 
-Toppguiden efter huvudvärdena svarar i ordning på vad som mättes, vad resultatet betyder, om det finns en faktisk eller endast möjlig klippindikation och vad som händer vid export. Fyra synliga diagnoskategorier skiljer räddningsbar floatnivå, möjlig digital klippning, möjlig analog överstyrning och risk vid uppspelning eller export. Analog överstyrning redovisas uttryckligen som något filanalysen inte säkert kan avgöra. Knappar leder till högsta toppen, floatregionerna, valbar negativ global gain och en lokal toppverkstad. Lokala kurvor påverkar vänster och höger kanal lika, kan förbigås för A/B-lyssning och verifieras med en ny analys av hela exporturvalet. Ingen åtgärd appliceras automatiskt.
+Toppguiden efter huvudvärdena svarar i ordning på vad som mättes, vad resultatet betyder, om det finns en faktisk eller endast möjlig klippindikation och vad som händer vid export. Fyra synliga diagnoskategorier skiljer bevarad floatnivå, möjlig digital klippning, möjlig analog överstyrning och risk vid uppspelning eller export. Analog överstyrning redovisas uttryckligen som något filanalysen inte säkert kan avgöra. Knappar leder till högsta toppen, visade floatregioner, valbar negativ global gain och en lokal toppverkstad. Lokala kurvor påverkar vänster och höger kanal lika, kan förbigås för A/B-lyssning och verifieras med en ny analys av hela exporturvalet. Ingen åtgärd appliceras automatiskt.
 
-Knappen Öppna fullständig analys visar en rullbar helskärmsgenomgång av topparter, loudness, dynamik, stereo och mono, signalintegritet, kanalvärden, viktiga tidsområden, rekommenderade nästa steg och analysens uttryckliga begränsningar.
+Efter toppanalysen använder uppspelningen en separat säker monitortrim om den valda käll- eller exportförhandsvisningen annars kan överskrida -3 dBTP. Sänkningen visas i spelaren, påverkar aldrig analys eller export och hindrar lyssningskedjans mättnad från att förväxlas med skada i inspelningen. Om den säkra monitorgrafen inte kan starta stoppas uppspelningen.
+
+Efter analysen visar en kompakt modulöversikt status för fil och signalintegritet, toppar, loudness, dynamik, stereo och mono samt mänsklig granskning. Pass betyder bara att det namngivna maskinella testet är uppfyllt. Granska betyder att lyssning eller ett mänskligt beslut återstår. Stopp används endast när data eller ett uttryckligt leveranskrav blockerar fortsatt bearbetning. Information och Kan inte avgöras hålls separata från felstatus. Betydelsen visas alltid med text och symbol, inte enbart med färg.
+
+Knappen Expandera hela analysen visar en rullbar helskärmsgenomgång av topparter, loudness, dynamik, stereo och mono, signalintegritet, kanalvärden, viktiga tidsområden, rekommenderade nästa steg och analysens uttryckliga begränsningar. Den interna avsnittsnavigeringen leder direkt från varje kompakt statuskort till rätt evidens.
 
 Det aktuella A/B-fönstret ligger kvar synligt genom analys, trimning och export. Fönstret är låst från början. Efter ett uttryckligt upplåsningsval kan det placeras med finger, penna, mus, knappar eller tangentbord och provlyssnas med bibehållen längd. Det låses sedan för slutlig lyssning. Först ett separat val gör A/B till aktivt trimurval och tar bort omgivande ljud vid export. Tidslinjen kan expanderas och visa vågform, loudness, sample peak, stereokorrelation och markörer som separata lager.
 

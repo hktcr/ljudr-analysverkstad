@@ -46,20 +46,24 @@
       </header>
 
       <nav class="mode-nav" aria-label="Arbetsflöde">
-        <button type="button" class="mode-tab is-active" data-mode="open" aria-current="step">
-          <span class="step-number">1</span><span>Öppna</span>
+        <button type="button" class="mode-tab is-active is-prestage" data-mode="open" aria-current="step">
+          <span class="step-number">Fil</span><span><strong>Källfil</strong><small id="modeStatusOpen">Välj fil</small></span>
         </button>
         <span class="step-line" aria-hidden="true"></span>
         <button type="button" class="mode-tab" data-mode="analyze" disabled>
-          <span class="step-number">2</span><span>Analysera</span>
+          <span class="step-number">1</span><span><strong>Källanalys</strong><small id="modeStatusAnalyze">Inte analyserad</small></span>
         </button>
         <span class="step-line" aria-hidden="true"></span>
         <button type="button" class="mode-tab" data-mode="trim" disabled>
-          <span class="step-number">3</span><span>Trimma och lyssna</span>
+          <span class="step-number">2</span><span><strong>Granska och redigera</strong><small id="modeStatusTrim">Väntar</small></span>
+        </button>
+        <span class="step-line" aria-hidden="true"></span>
+        <button type="button" class="mode-tab" data-mode="preflight" disabled>
+          <span class="step-number">3</span><span><strong>Analysera exporturval</strong><small id="modeStatusPreflight">Väntar</small></span>
         </button>
         <span class="step-line" aria-hidden="true"></span>
         <button type="button" class="mode-tab" data-mode="export" disabled>
-          <span class="step-number">4</span><span>Exportera</span>
+          <span class="step-number">4</span><span><strong>Exportera och verifiera</strong><small id="modeStatusExport">Väntar</small></span>
         </button>
       </nav>
 
@@ -114,7 +118,7 @@
             <span class="transport-status" id="transportStatus" role="status" aria-live="polite">Välj en WAV-fil</span>
           </div>
         </div>
-        <label class="volume-control"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4Zm11.5.5a4 4 0 0 1 0 5l1.5 1.3a6 6 0 0 0 0-7.6l-1.5 1.3Zm2.8-2.5a8 8 0 0 1 0 10l1.5 1.3a10 10 0 0 0 0-12.6L18.3 7Z"/></svg><span class="visually-hidden">Medhörningsvolym</span><input id="monitorVolume" type="range" min="0" max="1" step="0.01" value="0.8"></label>
+        <div class="monitor-controls"><output id="monitorSafetyStatus" class="monitor-safety-status" role="status">Säker medhörning: väntar på toppanalys</output><label class="volume-control"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4Zm11.5.5a4 4 0 0 1 0 5l1.5 1.3a6 6 0 0 0 0-7.6l-1.5 1.3Zm2.8-2.5a8 8 0 0 1 0 10l1.5 1.3a10 10 0 0 0 0-12.6L18.3 7Z"/></svg><span class="visually-hidden">Medhörningsvolym</span><input id="monitorVolume" type="range" min="0" max="1" step="0.01" value="0.8"></label></div>
         <audio id="audioPlayer" preload="metadata"></audio>
       </section>
 
@@ -132,7 +136,7 @@
               </div>
               <dl class="hero-capabilities" aria-label="Verktygets huvudfunktioner">
                 <div><dt>Objektiv mätning</dt><dd>LUFS, True Peak, LRA, PLR och stereodata</dd></div>
-                <div><dt>Varsam redigering</dt><dd>Trimning, linjära toningar och konstant global gain</dd></div>
+                <div><dt>Varsam redigering</dt><dd>Trimning, linjära toningar, global gain och synliga stereolänkade lokala gainkurvor</dd></div>
                 <div><dt>Spårbart flöde</dt><dd>Projekt, rapport och ljudfritt analysunderlag</dd></div>
               </dl>
             </div>
@@ -169,7 +173,7 @@
             <div class="workspace-main">
               <div class="section-heading">
                 <div>
-                  <span class="eyebrow">Steg 2</span>
+                  <span class="eyebrow">Steg 1</span>
                   <h1 id="analyzeTitle">Analysera inspelningen</h1>
                   <p>Mätvärden beskriver signalen. De avgör inte hur ett ljudlandskap ska låta.</p>
                 </div>
@@ -251,6 +255,21 @@
                   </div>
                 </section>
               </article>
+
+              <section class="analysis-module-board" id="analysisModuleBoard" aria-labelledby="analysisModuleBoardTitle">
+                <div class="module-board-heading">
+                  <div><span class="eyebrow">Snabböversikt</span><h2 id="analysisModuleBoardTitle">Vad behöver din uppmärksamhet?</h2><p>Varje status bygger på ett avgränsat test. Öppna en modul för mätvärden, förklaring och nästa steg.</p></div>
+                  <button class="button button-primary" id="openFullAnalysisBoardButton" type="button" disabled>Expandera hela analysen</button>
+                </div>
+                <div class="analysis-module-grid">
+                  <button class="analysis-module-card" type="button" data-analysis-module="integrity" data-state="waiting" disabled><span class="module-status"><i aria-hidden="true">○</i><strong>Inte analyserad</strong></span><span><b>Fil och signalintegritet</b><small>Filstruktur och ogiltiga signalvärden</small></span><em>Detaljer</em></button>
+                  <button class="analysis-module-card" type="button" data-analysis-module="peaks" data-state="waiting" disabled><span class="module-status"><i aria-hidden="true">○</i><strong>Inte analyserad</strong></span><span><b>Toppar och klippning</b><small>Sample Peak, True Peak och float</small></span><em>Detaljer</em></button>
+                  <button class="analysis-module-card" type="button" data-analysis-module="loudness" data-state="waiting" disabled><span class="module-status"><i aria-hidden="true">○</i><strong>Inte analyserad</strong></span><span><b>Ljudstyrka</b><small>LUFS och vald arbetsorientering</small></span><em>Detaljer</em></button>
+                  <button class="analysis-module-card" type="button" data-analysis-module="dynamics" data-state="waiting" disabled><span class="module-status"><i aria-hidden="true">○</i><strong>Inte analyserad</strong></span><span><b>Dynamik</b><small>LRA, PLR och transientmarginal</small></span><em>Detaljer</em></button>
+                  <button class="analysis-module-card" type="button" data-analysis-module="stereo" data-state="waiting" disabled><span class="module-status"><i aria-hidden="true">○</i><strong>Inte analyserad</strong></span><span><b>Stereo och mono</b><small>Balans, korrelation och monorisk</small></span><em>Detaljer</em></button>
+                  <button class="analysis-module-card" type="button" data-analysis-module="review" data-state="waiting" disabled><span class="module-status"><i aria-hidden="true">○</i><strong>Inte analyserad</strong></span><span><b>Mänsklig granskning</b><small>Markörer, lyssning och redaktionella frågor</small></span><em>Detaljer</em></button>
+                </div>
+              </section>
 
               <section class="measurement-chain" aria-label="Mätkedja">
                 <article class="chain-card is-ready"><span>1</span><div><strong>Källfil</strong><small id="sourceMeasureStatus">Väntar på analys</small></div></article>
@@ -335,7 +354,7 @@
                 <section class="peak-category-section" aria-labelledby="peakCategoryTitle">
                   <div class="peak-category-heading"><h3 id="peakCategoryTitle">Vilken sorts topp handlar det om?</h3><p>Kategorierna hålls isär eftersom de har olika evidens, risk och åtgärd.</p></div>
                   <div class="peak-category-grid">
-                    <article data-category="float"><header><strong>Räddningsbar floatnivå</strong><span id="peakCategoryFloatStatus">Väntar</span></header><p id="peakCategoryFloatText">Analysera filen för att söka efter bevarade samplingar över 0 dBFS.</p></article>
+                    <article data-category="float"><header><strong>Bevarad floatnivå</strong><span id="peakCategoryFloatStatus">Väntar</span></header><p id="peakCategoryFloatText">Analysera filen för att söka efter bevarade samplingar över 0 dBFS.</p></article>
                     <article data-category="digital"><header><strong>Möjlig digital klippning</strong><span id="peakCategoryDigitalStatus">Väntar</span></header><p id="peakCategoryDigitalText">LjudR söker efter signalmönster som kan tyda på att lagrade toppar redan har kapats.</p></article>
                     <article data-category="analog"><header><strong>Möjlig analog överstyrning</strong><span id="peakCategoryAnalogStatus">Väntar</span></header><p id="peakCategoryAnalogText">Mikrofon, försteg eller omvandlare kan ha överbelastats innan ljudet lagrades.</p></article>
                     <article data-category="delivery"><header><strong>Risk vid uppspelning eller export</strong><span id="peakCategoryDeliveryStatus">Väntar</span></header><p id="peakCategoryDeliveryText">True Peak och format avgör om mer marginal behövs i nästa led.</p></article>
@@ -507,7 +526,7 @@
           <div class="workspace-grid">
             <div class="workspace-main">
               <div class="section-heading">
-                <div><span class="eyebrow">Steg 3</span><h1 id="trimTitle">Trimma och lyssna</h1><p>Trimma början och slutet och gör endast globala nivåval. Ingen lokal nivåjustering görs.</p></div>
+                <div><span class="eyebrow">Steg 2</span><h1 id="trimTitle">Granska, redigera och lyssna</h1><p>Trimma början och slutet, välj global gain eller skapa uttryckliga stereolänkade lokala gainkurvor för enstaka händelser.</p></div>
                 <span class="read-only-pill"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h12v16H6V4Zm2 2v12h8V6H8Z"/></svg>Originalet påverkas inte</span>
               </div>
 
@@ -688,11 +707,34 @@
           </div>
         </section>
 
+        <section class="mode-panel" data-panel="preflight" aria-labelledby="preflightTitle">
+          <div class="preflight-workspace">
+            <div class="section-heading">
+              <div><span class="eyebrow">Steg 3</span><h1 id="preflightTitle">Analysera aktuellt exporturval</h1><p>Källanalysen och exporturvalet hålls isär. Varje trimning, toning eller gainändring gör urvalsresultatet inaktuellt tills du kör denna kontroll igen.</p></div>
+            </div>
+            <section class="preflight-card" aria-labelledby="preflightStatusTitle">
+              <div><span class="eyebrow">Exakt förkontroll</span><h2 id="preflightStatusTitle">Beräkning och utfall</h2></div>
+              <div class="preflight-status-grid">
+                <article><span>Beräkning</span><strong id="preflightProcessStatus">Inte körd</strong><small>Hela aktuella exporturvalet analyseras efter synliga ändringar.</small></article>
+                <article><span>Utfall</span><strong id="preflightOutcomeStatus">Väntar</strong><small id="preflightOutcomeDetail">Kör förkontrollen för ett avgränsat resultat.</small></article>
+              </div>
+              <div class="preflight-comparison" aria-label="Källa jämfört med exporturval">
+                <div><span>Källans True Peak</span><strong id="preflightSourcePeak">saknas</strong></div>
+                <div><span>Exporturvalets True Peak</span><strong id="preflightSelectionPeak">inte beräknat</strong></div>
+                <div><span>Källans loudness</span><strong id="preflightSourceLufs">saknas</strong></div>
+                <div><span>Exporturvalets loudness</span><strong id="preflightSelectionLufs">inte beräknat</strong></div>
+              </div>
+              <div class="preflight-actions"><button class="button button-primary" id="runPreflightButton" type="button">Analysera aktuellt exporturval</button><button class="button button-secondary" id="preflightBackButton" type="button">Tillbaka till redigering</button><button class="button button-secondary" id="preflightContinueButton" type="button" disabled>Fortsätt till export</button></div>
+              <p class="fine-print">Förkontrollen är inte samma sak som verifiering. Den färdiga WAV-filen återöppnas och mäts först efter export.</p>
+            </section>
+          </div>
+        </section>
+
         <section class="mode-panel" data-panel="export" aria-labelledby="exportTitle">
           <div class="workspace-grid export-workspace">
             <div class="workspace-main">
               <div class="section-heading">
-                <div><span class="eyebrow">Steg 4</span><h1 id="exportTitle">Exportera</h1><p>Granska vad som ändras och välj en fil för nästa steg i arbetet.</p></div>
+                <div><span class="eyebrow">Steg 4</span><h1 id="exportTitle">Exportera och verifiera</h1><p>Granska vad som ändras, skriv filen och låt verktyget återöppna och mäta den faktiska WAV-filen.</p></div>
               </div>
 
               <article class="export-summary-card">
@@ -723,7 +765,7 @@
                   <input type="radio" name="exportProfile" value="edited-wav">
                   <span class="radio-visual"></span>
                   <span class="profile-icon profile-violet"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v10.3a4 4 0 1 0 2 3.46V8h5V3h-7Z"/></svg></span>
-                  <span class="profile-copy"><span class="profile-title"><strong>Redigerad WAV-master</strong></span><small>Tillåter uttryckliga kanttoningar och en bekräftad global gain. Alla ingrepp redovisas.</small><span class="profile-tags"><i>WAV</i><i>Redigerad</i></span></span>
+                  <span class="profile-copy"><span class="profile-title"><strong>Redigerad WAV-master</strong></span><small>Tillåter uttryckliga kanttoningar, bekräftad global gain och synliga stereolänkade lokala gainkurvor. Alla ingrepp redovisas.</small><span class="profile-tags"><i>WAV</i><i>Redigerad</i></span></span>
                 </label><button class="info-dot profile-info" type="button" data-help-topic="distribution-export" aria-label="Om redigerad WAV-master">i</button></div>
               </fieldset>
 
@@ -909,7 +951,7 @@
             </div>
             <div class="local-peak-actions">
               <button class="button button-primary" id="addHighestPeakRegionButton" type="button">Skapa runt högsta toppen</button>
-              <button class="button button-secondary" id="addAllFloatPeakRegionsButton" type="button">Skapa för alla floatregioner</button>
+                  <button class="button button-secondary" id="addAllFloatPeakRegionsButton" type="button">Skapa för visade floatregioner</button>
               <button class="button button-secondary" id="addPeakAtPlayheadButton" type="button">Skapa vid spelhuvudet</button>
             </div>
             <p class="fine-print">Automatiska förslag utgår från tillgängliga toppmått och måste verifieras genom ny True Peakberäkning.</p>

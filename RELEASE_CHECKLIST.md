@@ -8,6 +8,7 @@ Status: offentlig valideringskandidat. Inte produktionsverifierad 1.0.
 - [x] EBU Loudness Test Set v5.0: 68 av 68 krav för 62 relevanta filer.
 - [x] ITU-R BS.2217-2: 19 av 19 relevanta filer inom +/-0,1 LKFS.
 - [x] Syntaxkontroll och `git diff --check` godkända för rc.14.
+- [x] Virtuell expertpanel med fem field recorder-perspektiv gav PASS efter slutgrind: natur/soundscape, extremväder/hög SPL, dokumentär/intervju, stad/event under tidspress samt leverans/arkiv/tillgänglighet.
 - [x] Pagespaket innehåller 20 filer: 19 uttryckligen tillåtna resurser plus hashbundet buildmanifest.
 - [x] Samtliga 20 publika resurser ger HTTP 200 från lokal server.
 - [x] Inga spårade ljudfiler, rapporter, projekt, uppenbara hemligheter eller U+2013 hittas.

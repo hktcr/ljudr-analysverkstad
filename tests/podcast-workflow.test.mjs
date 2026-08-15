@@ -50,6 +50,15 @@ test("publiceringskortet använder mjuka spärrar och dokumenterad längdavvikel
   const blocked = publicationStatus({ durationSeconds: 1200, verifiedCurrent: false, metadata: {} });
   assert.equal(blocked.status, "review-required");
   assert.ok(blocked.incomplete.includes("verifiedWav"));
+  const privacyBlocked = publicationStatus({
+    durationSeconds: 1200,
+    verifiedCurrent: true,
+    editorialUnreviewed: 1,
+    metadata: { title: "Plats", episode: "8", place: "Stockholm" },
+    manual: { fullListen: true, boundaries: true, stereo: true, mono: true, privacy: true, archiveSaved: true },
+  });
+  assert.equal(privacyBlocked.status, "review-required");
+  assert.ok(privacyBlocked.incomplete.includes("markersReviewed"));
 });
 
 test("handoff binder avsnittsmetadata till verifierad masterhash", () => {

@@ -47,6 +47,11 @@ Maskinläsbar status finns i `validation-manifest.json`. Manifestet binder testi
 - redaktionell seriekontext och cue sheet valideras separat från objektiva mätmarkörer
 - mono fold-down, varaktig negativ korrelation och deterministiskt samplad spektral orientering provas utan automatisk korrigering
 - toppguiden skiljer float overrange, leveransmarginal och heuristisk klippindikation samt leder till lyssning eller uttryckliga globala gainval utan automatisk bearbetning
+- analysöversikten visar sex avgränsade statusmoduler med text, symbol och färg; full evidens, metod, begränsningar och nästa steg öppnas i en gemensam helskärmsvy
+- float overrange visas som information, avsaknad av klippindikation formuleras som resultatet av genomförda tester och manuell redaktionell granskning kan inte bli automatiskt Pass
+- säker monitortrim sänker endast lyssningsvägen till orienterande -3 dBTP och uppspelningen stoppas om den behövs men monitorgrafen inte kan starta
+- ett eget steg analyserar aktuellt exporturval, visar beräkning separat från utfall och blir uttryckligen inaktuellt efter varje redigering
+- ogranskade privacy- och remove-markörer blockerar publiceringsstatus även om den generella integritetsrutan är markerad
 - fullständig analysvy skiljer uppmätta fakta, tolkning, begränsningar och nästa kontroll samt länkar redovisade tidsområden till uppspelning
 - lokala toppkurvor är stereolänkade, använder minsta envelopp vid överlapp, ingår i medhörning, regionsanalys, projekt, rapport och export samt gör sample-payload-identisk profil otillgänglig
 - publiceringskort, verifierad masterhash, avsnittsmanifest och rapportbaserad serieöversikt har fixerade regressionstester

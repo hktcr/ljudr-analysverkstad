@@ -4,6 +4,8 @@
 
 LjudR skiljer mellan signalmätning, teknisk observation och konstnärligt beslut. Låg loudness, hög dynamik eller en plötslig topp är inte automatiskt ett fel. Verktyget ändrar aldrig ljud när det analyseras och använder ingen AI.
 
+Gränssnittets statusar är avgränsade till det namngivna testet och aktuellt signalsteg. **Pass** betyder att ett uttryckligt mätbart kriterium är uppfyllt, inte att ljudet är felfritt. **Granska** kräver lyssning eller mänskligt beslut. **Stopp** reserveras för otillförlitliga data eller brott mot ett valt hårt exportkrav. **Information** beskriver ett fynd utan egen felstatus. **Kan inte avgöras** används när filanalysen saknar tillräcklig evidens. Källfil, beräknat exporturval och verifierad exportfil får aldrig blandas i samma beslut.
+
 ## Tre mätstadier
 
 1. **Källfil** är blockvis analys av originalets samples.
@@ -30,7 +32,7 @@ True Peak-tid redovisas med kanal och tidskonvention. FIR-filtrets gruppfördrö
 
 ## Editkedja
 
-Trimgränser lagras som heltalsbildrutor i intervallet `[startFrame,endFrame)`. Fade är avstängd från början och linjär i amplitud. Vid överlapp används den lägsta av de två envelopperna. Global gain är statisk över urvalet. Lokala toppkurvor är linjära i amplitud, stereolänkade och använder den starkaste sänkningen när de överlappar, så sänkningar staplas inte. Preview A spelar källans valda utsnitt. Preview B spelar samma utsnitt med valda fades, global gain och aktiva lokala kurvor. Stereo, Vänster, Höger, Mono, medhörningsvolym och level match är monitorfunktioner och påverkar aldrig export eller mätvärden.
+Trimgränser lagras som heltalsbildrutor i intervallet `[startFrame,endFrame)`. Fade är avstängd från början och linjär i amplitud. Vid överlapp används den lägsta av de två envelopperna. Global gain är statisk över urvalet. Lokala toppkurvor är linjära i amplitud, stereolänkade och använder den starkaste sänkningen när de överlappar, så sänkningar staplas inte. Preview A spelar källans valda utsnitt. Preview B spelar samma utsnitt med valda fades, global gain och aktiva lokala kurvor. En separat säker monitortrim håller den uppskattade lyssningstoppen vid eller under -3 dBTP när toppanalys finns. Den visas i gränssnittet, kräver fungerande Web Audio vid aktiv sänkning och påverkar aldrig analys, projektets editkedja eller export. Stereo, Vänster, Höger, Mono, medhörningsvolym och level match är monitorfunktioner och påverkar aldrig export eller mätvärden.
 
 Sample Peak är högsta lagrade sampling. True Peak är ett översamplat estimat av toppen mellan samplingar och används som leveransorientering, inte som bevis på klippning. Float-overrange betyder att värden över 0 dBFS fortfarande är bevarade och kan sänkas före PCM-export. Verklig digital klippning kräver mer evidens än ett toppvärde: en platådetektor är endast heuristisk och måste följas av förstorad vågform och lyssning. Analog överstyrning i mikrofon, försteg eller omvandlare kan inte uteslutas från den färdiga filen och repareras inte av gain. En slutlig PCM- eller kodekexport måste verifieras i sitt faktiska format.
 

@@ -2,9 +2,18 @@
 
 ## 1.0.0-rc.14, 2026-08-15
 
+- gör huvudnavigeringen till en lugn fyrastegsöversikt med synlig status för varje steg
+- samlar källanalysens beslut i sex klickbara moduler och flyttar full evidens, metod och begränsningar till en expanderbar helskärmsvy
+- använder avgränsade statusarna Pass, Granska, Stopp, Information och Kan inte avgöras med text, symbol och färg
+- reserverar Pass för ett uttryckligt genomfört test och låter mänsklig redaktionell och integritetsmässig granskning stå kvar som Granska
+- ger analys av aktuellt exporturval ett eget steg och skiljer beräkningsstatus från tekniskt utfall
+- markerar exporturvalets förkontroll som inaktuell efter redigering i stället för att starta tunga helfilsberäkningar automatiskt
+- inför synlig säker monitortrim för källor och förhandsvisningar som annars kan mätta uppspelningskedjan
+- låter ogranskade integritets- och borttagningsmarkörer blockera publiceringsstatus och visar dem separat i helskärmsanalysen
+- tar bort dubbla händelsekopplingar som kunde skapa två lokala toppkurvor från ett klick
 - samlar toppinformationen i en fyrastegsguide direkt efter analysens huvudvärden
 - skiljer bevarad 32-bitars floatmarginal, True Peak för leverans och möjlig verklig klippning åt
-- visar separata statuskort för räddningsbar floatnivå, möjlig digital klippning, möjlig analog överstyrning och risk vid uppspelning eller export
+- visar separata statuskort för bevarad floatnivå, möjlig digital klippning, möjlig analog överstyrning och risk vid uppspelning eller export
 - visar Sample Peak, True Peak, floatvärden över 0 dBFS och ogiltiga floatvärden i klartext
 - förklarar att float overrange inte bevisar att mikrofon eller försteg var fria från distorsion
 - ger direkta knappar för att spela högsta toppen, visa alla floattoppar, öppna val för -1, -2 eller -3 dBTP och bevara originalnivån

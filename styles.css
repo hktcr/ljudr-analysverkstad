@@ -390,6 +390,33 @@ svg {
   backdrop-filter: blur(16px);
 }
 
+.mode-nav {
+  display: grid;
+  min-height: 88px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.mode-nav .step-line { display: none; }
+
+.mode-tab {
+  width: 100%;
+  min-height: 64px;
+  padding: 10px 12px;
+  justify-content: flex-start;
+  border: 1px solid transparent;
+  white-space: normal;
+  text-align: left;
+}
+
+.mode-tab > span:last-child { display: grid; min-width: 0; gap: 2px; }
+.mode-tab strong { color: currentColor; font-size: .82rem; line-height: 1.2; }
+.mode-tab small { color: var(--ink-faint); font-size: .7rem; font-weight: 650; }
+.mode-tab small[data-state="pass"] { color: var(--positive); }
+.mode-tab small[data-state="review"] { color: #76551b; }
+.mode-tab small[data-state="running"] { color: var(--violet); }
+.mode-tab.is-active { border-color: rgba(49, 95, 139, .24); }
+
 .mode-tab {
   display: inline-flex;
   min-height: 44px;
@@ -421,6 +448,13 @@ svg {
   background: var(--line-strong);
   border-radius: 50%;
   font-size: 0.72rem;
+}
+
+.mode-tab.is-prestage .step-number {
+  width: auto;
+  min-width: 32px;
+  padding: 0 7px;
+  border-radius: 999px;
 }
 
 .mode-tab.is-active .step-number,
@@ -4064,6 +4098,7 @@ body.has-expanded-timeline::before {
 }
 
 .peak-category-grid header span[data-state="safe"] { color: #24654f; background: #e5f7ef; }
+.peak-category-grid header span[data-state="info"] { color: var(--blue); background: var(--blue-soft); }
 .peak-category-grid header span[data-state="review"] { color: #76551b; background: #fff2d2; }
 .peak-category-grid header span[data-state="warning"] { color: #873e33; background: #ffede9; }
 .peak-category-grid header span[data-state="unknown"] { color: #5d517c; background: #f0ecf8; }
@@ -4268,6 +4303,71 @@ body.has-expanded-timeline::before {
 
 .peak-study-limit p { margin: 0; line-height: 1.55; }
 
+.analysis-module-board {
+  display: grid;
+  margin: 16px 0;
+  padding: 18px;
+  gap: 14px;
+  border: 1px solid rgba(24, 34, 54, .1);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-small);
+}
+
+[data-panel="analyze"] .workspace-main { display: flex; flex-direction: column; }
+[data-panel="analyze"] .assessment-context { order: -5; }
+[data-panel="analyze"] .analysis-module-board { order: -4; }
+[data-panel="analyze"] .assessment-reflection { order: -3; }
+[data-panel="analyze"] .timeline-card { order: -2; }
+#openFullAnalysisButton { display: none; }
+
+.module-board-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+}
+.module-board-heading h2,
+.module-board-heading p { margin: 0; }
+.module-board-heading p { max-width: 720px; color: var(--ink-muted); }
+.analysis-module-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+.analysis-module-card {
+  display: grid;
+  min-height: 104px;
+  padding: 13px;
+  grid-template-columns: 112px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-left: 5px solid var(--line-strong);
+  border-radius: 12px;
+  color: var(--ink);
+  background: #fff;
+  text-align: left;
+}
+.analysis-module-card:hover:not(:disabled) { border-color: rgba(49, 95, 139, .4); background: #f8fbfd; }
+.analysis-module-card[data-state="pass"] { border-left-color: var(--positive); }
+.analysis-module-card[data-state="review"] { border-left-color: #be802a; }
+.analysis-module-card[data-state="stop"] { border-left-color: var(--danger); }
+.analysis-module-card[data-state="info"] { border-left-color: var(--blue); }
+.analysis-module-card[data-state="unknown"] { border-left-color: var(--violet); }
+.module-status { display: inline-flex; align-items: center; gap: 7px; font-size: .76rem; }
+.module-status i { display: grid; width: 26px; height: 26px; place-items: center; border: 2px solid currentColor; border-radius: 50%; font-style: normal; font-weight: 900; }
+.analysis-module-card[data-state="pass"] .module-status { color: var(--positive); }
+.analysis-module-card[data-state="review"] .module-status { color: #76551b; }
+.analysis-module-card[data-state="stop"] .module-status { color: var(--danger); }
+.analysis-module-card[data-state="info"] .module-status { color: var(--blue); }
+.analysis-module-card[data-state="unknown"] .module-status { color: var(--violet); }
+.analysis-module-card > span:nth-child(2) { display: grid; gap: 4px; min-width: 0; }
+.analysis-module-card b { font-size: .92rem; }
+.analysis-module-card small { color: var(--ink-muted); line-height: 1.35; }
+.analysis-module-card em { color: var(--blue); font-size: .75rem; font-style: normal; font-weight: 800; }
+
+/* Grundvyn visar beslut. Evidens och pedagogik ligger i helskärmsanalysen. */
+[data-panel="analyze"] > .workspace-grid > .workspace-main > .measurement-chain,
+[data-panel="analyze"] > .workspace-grid > .workspace-main > .metric-grid,
+[data-panel="analyze"] > .workspace-grid > .workspace-main > .peak-guide { display: none; }
+
 .full-analysis-dialog,
 .local-peak-dialog {
   width: min(1180px, calc(100vw - 32px));
@@ -4302,6 +4402,20 @@ body.has-expanded-timeline::before {
   overscroll-behavior: contain;
 }
 
+.full-analysis-nav {
+  position: sticky;
+  z-index: 3;
+  top: -22px;
+  display: flex;
+  overflow-x: auto;
+  padding: 10px 0;
+  gap: 6px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+.full-analysis-nav button { min-height: 42px; padding: 7px 10px; flex: 0 0 auto; border: 1px solid var(--line); border-radius: 999px; color: var(--blue); background: #fff; font: inherit; font-size: .78rem; font-weight: 750; }
+.full-analysis-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+
 .full-analysis-content > section,
 .local-peak-content > section {
   padding: 18px;
@@ -4318,6 +4432,30 @@ body.has-expanded-timeline::before {
 .section-intro { color: var(--ink-muted); }
 .full-analysis-lead { border-left: 5px solid var(--blue) !important; background: #f7fbff !important; }
 .analysis-verdict { display: inline-block; margin-bottom: 8px; padding: 5px 9px; border-radius: 999px; color: #255f4c; background: #e5f7ef; font-size: .75rem; font-weight: 800; }
+.analysis-verdict[data-state="review"] { color: #76551b; background: #fff2d2; }
+.analysis-verdict[data-state="stop"] { color: #873e33; background: #ffede9; }
+.analysis-verdict[data-state="unknown"] { color: #5d517c; background: #f0ecf8; }
+
+.monitor-controls { display: grid; justify-items: end; gap: 4px; }
+.monitor-safety-status { max-width: 250px; color: var(--ink-faint); font-size: .62rem; line-height: 1.25; text-align: right; }
+.monitor-safety-status[data-state="active"] { color: #76551b; font-weight: 750; }
+.monitor-safety-status[data-state="pass"] { color: var(--positive); }
+
+.preflight-workspace { width: min(1040px, 100%); margin: 0 auto; }
+.preflight-card { display: grid; padding: clamp(18px, 3vw, 30px); gap: 20px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow-small); }
+.preflight-card h2 { margin: 2px 0 0; }
+.preflight-status-grid,
+.preflight-comparison { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.preflight-status-grid article,
+.preflight-comparison > div { display: grid; padding: 14px; gap: 4px; border: 1px solid var(--line); border-radius: 12px; background: #f8f9f8; }
+.preflight-status-grid span,
+.preflight-comparison span { color: var(--ink-faint); font-size: .68rem; font-weight: 750; text-transform: uppercase; letter-spacing: .035em; }
+.preflight-status-grid strong,
+.preflight-comparison strong { font-size: 1rem; font-variant-numeric: tabular-nums; }
+#preflightOutcomeStatus[data-state="pass"] { color: var(--positive); }
+#preflightOutcomeStatus[data-state="stop"] { color: var(--danger); }
+#preflightOutcomeStatus[data-state="running"] { color: var(--violet); }
+.preflight-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 
 .peak-type-table {
   display: grid;
@@ -4453,4 +4591,43 @@ body.has-expanded-timeline::before {
   .local-peak-actions .button,
   .local-peak-card-actions .button { width: 100%; }
   .local-peak-history .switch-row { width: 100%; margin-left: 0; }
+  .module-board-heading { align-items: stretch; flex-direction: column; }
+  .analysis-module-grid { grid-template-columns: 1fr; }
+  .analysis-module-card { min-height: 112px; grid-template-columns: 1fr auto; }
+  .analysis-module-card .module-status { grid-column: 1 / -1; }
+  .full-analysis-actions .button { width: 100%; }
+}
+
+@media (min-width: 721px) and (max-width: 1100px) {
+  .mode-nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 900px) {
+  .analysis-module-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 720px) {
+  .mode-nav {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow: visible;
+  }
+
+  .mode-tab {
+    min-width: 0;
+    min-height: 62px;
+    padding: 9px;
+    justify-content: flex-start;
+    white-space: normal;
+  }
+
+  .mode-tab > span:last-child {
+    display: grid;
+  }
+
+  .monitor-controls { justify-items: stretch; }
+  .monitor-safety-status { max-width: none; text-align: left; }
+  .preflight-status-grid,
+  .preflight-comparison { grid-template-columns: 1fr; }
+  .preflight-actions .button { width: 100%; }
 }
