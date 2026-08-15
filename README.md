@@ -1,6 +1,6 @@
 # LjudR Analysverkstad
 
-LjudR är ett lokalt och icke destruktivt verktyg för analys och varsam redigering av fältinspelningar och ljudlandskap. Version `1.0.0-rc.9` är en offentlig valideringskandidat, inte en produktionsverifierad 1.0.
+LjudR är ett lokalt och icke destruktivt verktyg för analys och varsam redigering av fältinspelningar och ljudlandskap. Version `1.0.0-rc.10` är en offentlig valideringskandidat, inte en produktionsverifierad 1.0.
 
 ## Integritet och princip
 
@@ -32,7 +32,7 @@ RF64 och BW64 avvisas som indata. RF64/BW64-export, flerkanal, AAC, MP3, FLAC, o
 7. Låt appen återöppna och verifiera den faktiskt skrivna WAV-filen.
 8. Spara projekt och rapport för spårbarhet.
 
-Det aktuella A/B-fönstret ligger kvar synligt genom analys, trimning och export. Hela fönstret kan flyttas med bibehållen längd via dragning, knappar eller tangentbord. Tidslinjen kan expanderas och visa vågform, loudness, sample peak, stereokorrelation och markörer som separata lager.
+Det aktuella A/B-fönstret ligger kvar synligt genom analys, trimning och export. Fönstret är låst från början. Efter ett uttryckligt upplåsningsval kan det placeras med finger, penna, mus, knappar eller tangentbord och provlyssnas med bibehållen längd. Det låses sedan för slutlig lyssning. Först ett separat val gör A/B till aktivt trimurval och tar bort omgivande ljud vid export. Tidslinjen kan expanderas och visa vågform, loudness, sample peak, stereokorrelation och markörer som separata lager.
 
 Rapporten skiljer strikt mellan:
 
@@ -82,7 +82,7 @@ Se [valideringsplanen](docs/VALIDATION.md), [metoden](docs/METHOD.md), [gAIa-fl�
 
 ## Releaseport
 
-`1.0.0-rc.9` får publiceras som valideringskandidat. Versionsnumret `1.0.0` är förbjudet tills hela den fixerade testsuiten, EBU 68/68, ITU 19/19 och den fysiska iPad-matrisen är godkända. Matrisen omfattar en 15 till 20 minuter lång stereo float32/96 kHz-fil nära 1 GB i både Safari och installerad PWA, inklusive kopiera och klistra in flödet, export, Filer-handoff, bakgrund/återgång, quota, avbrott, OPFS-städning, offline och uppdatering.
+`1.0.0-rc.10` får publiceras som valideringskandidat. Versionsnumret `1.0.0` är förbjudet tills hela den fixerade testsuiten, EBU 68/68, ITU 19/19 och den fysiska iPad-matrisen är godkända. Matrisen omfattar en 15 till 20 minuter lång stereo float32/96 kHz-fil nära 1 GB i både Safari och installerad PWA, inklusive kopiera och klistra in flödet, export, Filer-handoff, bakgrund/återgång, quota, avbrott, OPFS-städning, offline och uppdatering.
 
 ## Lokal utveckling
 

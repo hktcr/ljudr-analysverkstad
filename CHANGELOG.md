@@ -1,5 +1,13 @@
 # Ändringslogg
 
+## 1.0.0-rc.10, 2026-08-15
+
+- inför ett uttryckligt låst och upplåst läge för trimfönstret
+- låter finger, penna, mus och tangentbord placera A/B utan att trimningen tillämpas direkt
+- behåller full provlyssning medan fönstret placeras och efter att det låsts
+- kräver ett separat val för att trimma bort allt utanför A/B
+- låter ett tillfälligt fönster återgå till det senast aktiva trimurvalet
+
 ## 1.0.0-rc.9, 2026-08-15
 
 - visar aktuellt A/B-trimfönster genom analys, trimning och export

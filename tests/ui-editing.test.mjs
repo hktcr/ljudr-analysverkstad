@@ -29,6 +29,18 @@ test("trimfönstret har 20 minuter som redigerbart standardvärde", () => {
   assert.match(app, /const windowLength = Math\.min\(selectionDurationSeconds\(\), sourceDuration\)/);
   assert.match(app, /function fitTrimSelection\(\)/);
   assert.match(app, /function toggleTimelineExpansion\(cardId/);
+  assert.match(html, /id="toggleTrimEditorButton"[^>]*>Lås upp trimfönstret/);
+  assert.match(html, /id="applyTrimSelectionButton"[^>]*disabled>Trimma bort utanför A\/B/);
+  assert.match(html, /id="revertTrimSelectionButton"[^>]*disabled>Återgå till aktivt urval/);
+  assert.match(app, /trimEditor:\s*\{\s*unlocked:\s*false,\s*applied:\s*true/);
+  assert.match(app, /function markTrimCandidateChanged/);
+  assert.match(app, /function applyTrimSelection/);
+  assert.match(app, /function revertTrimSelection/);
+  assert.match(app, /if \(!state\.trimEditor\.unlocked\) return false/);
+  assert.match(app, /state\.trimEditor\.applied = true;[\s\S]*markEditChanged\("trim-selection-applied"\)/);
+  assert.match(app, /Tillämpa trimfönstret eller återgå till det aktiva urvalet före export/);
+  assert.match(css, /\.trim-editor-state\.is-unlocked/);
+  assert.match(css, /\.trim-timeline-card\.is-trim-unlocked/);
 });
 
 test("toningar är valfria, flexibla och har stora iPad-reglage", () => {

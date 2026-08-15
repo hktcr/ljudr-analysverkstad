@@ -1815,6 +1815,29 @@ svg {
   min-height: 380px;
 }
 
+.trim-editor-mode {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  padding: 14px 16px;
+  align-items: center;
+  background: #eef4f3;
+  border-bottom: 1px solid #cbdedb;
+}
+
+.trim-editor-mode-copy { display: flex; align-items: center; gap: 12px; }
+.trim-editor-mode-copy > div { display: grid; gap: 3px; }
+.trim-editor-mode h2 { margin: 0; font-size: .96rem; }
+.trim-editor-mode p { margin: 0; color: var(--ink-muted); font-size: .72rem; line-height: 1.45; }
+.trim-editor-state { flex: 0 0 auto; padding: 6px 9px; color: #234d47; background: #d8ebe7; border: 1px solid #a9cec7; border-radius: 999px; font-size: .66rem; font-weight: 800; }
+.trim-editor-state.is-unlocked { color: #64440a; background: #fff0c4; border-color: #ddbd66; }
+.trim-editor-state.is-pending { color: #693929; background: #ffe0d5; border-color: #e4aa94; }
+.trim-editor-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.trim-editor-actions .button { min-height: 48px; }
+.trim-timeline-card.is-trim-unlocked .canvas-wrap-trim { box-shadow: inset 0 0 0 3px #e2ab47; cursor: grab; }
+.trim-timeline-card.is-trim-unlocked .canvas-wrap-trim:active { cursor: grabbing; }
+.trim-timeline-card:not(.is-trim-unlocked) .canvas-wrap-trim { cursor: default; }
+
 .trim-timeline-card .timeline-canvas {
   height: 380px;
 }
@@ -3137,6 +3160,9 @@ body.has-expanded-timeline::before {
   }
 
   .trim-window-shift { grid-template-columns: repeat(3, 1fr); }
+  .trim-editor-mode { grid-template-columns: 1fr; }
+  .trim-editor-mode-copy { align-items: flex-start; flex-direction: column; }
+  .trim-editor-actions { display: grid; grid-template-columns: 1fr; }
   .trim-hud-actions .icon-button { min-width: 52px; }
 
   .time-axis {

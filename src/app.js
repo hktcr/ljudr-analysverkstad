@@ -37,6 +37,12 @@ const state = {
     gainDb: 0,
   },
   trimWindowSeconds: 20 * 60,
+  trimEditor: {
+    unlocked: false,
+    applied: true,
+    appliedStartSeconds: 0,
+    appliedEndSeconds: 0,
+  },
   series: { status: "preserved", proposedGainDb: null, profileId: TMH_SERIES_PROFILE.id, profileVersion: TMH_SERIES_PROFILE.version, targetLufs: TMH_SERIES_PROFILE.targetLufs, rangeMinLufs: TMH_SERIES_PROFILE.rangeMinLufs, rangeMaxLufs: TMH_SERIES_PROFILE.rangeMaxLufs, ceilingDbtp: TMH_SERIES_PROFILE.truePeakOrientationDbtp },
   spectralDiagnostics: null,
   publication: {
@@ -235,6 +241,11 @@ const elements = {
   trimEndLabel: $("#trimEndLabel"),
   trimWindowDurationInput: $("#trimWindowDurationInput"),
   trimWindowStatus: $("#trimWindowStatus"),
+  trimEditorState: $("#trimEditorState"),
+  trimEditorDescription: $("#trimEditorModeDescription"),
+  toggleTrimEditor: $("#toggleTrimEditorButton"),
+  applyTrimSelection: $("#applyTrimSelectionButton"),
+  revertTrimSelection: $("#revertTrimSelectionButton"),
   trimHudRange: $("#trimHudRange"),
   trimHudDuration: $("#trimHudDuration"),
   trimHudMoveLeft: $("#trimHudMoveLeft"),
@@ -754,6 +765,7 @@ function emitState(reason) {
       analysisStatus: state.analysisStatus,
       exportStatus: state.exportStatus,
       trim: { ...state.trim },
+      trimEditor: { ...state.trimEditor },
       series: { ...state.series },
       regionAnalysis: state.regionAnalysis,
       verifiedExport: state.verifiedExport,
@@ -767,6 +779,10 @@ function emitState(reason) {
 
 function setMode(mode, options = {}) {
   if (!["open", "analyze", "trim", "export"].includes(mode)) return;
+  if (!state.trimEditor.applied && mode !== "trim") {
+    showToast("Lås trimfönstret och tillämpa det, eller återgå till det aktiva urvalet, innan du lämnar trimsteget.", "error", 7000);
+    return;
+  }
   if (mode !== "open" && !state.file) {
     showToast("Välj först en ljudfil.");
     return;
@@ -873,6 +889,7 @@ async function openAudioFile(file) {
   state.markers = [];
   state.trim.startSeconds = 0;
   state.trim.startFrame = 0;
+  state.trimEditor = { unlocked: false, applied: true, appliedStartSeconds: 0, appliedEndSeconds: 0 };
   state.trim.gainDb = 0;
   state.trim.fadeInSeconds = 0;
   state.trim.fadeOutSeconds = 0;
@@ -902,6 +919,7 @@ async function openAudioFile(file) {
   const duration = durationSeconds();
   state.trim.endSeconds = duration;
   state.trim.endFrame = toFrame(duration);
+  state.trimEditor.appliedEndSeconds = duration;
   state.view.startSeconds = 0;
   state.view.endSeconds = duration;
   elements.fileTechnical.textContent = technicalDescription();
@@ -1093,6 +1111,10 @@ function applyAnalysisResult(result) {
   } else {
     state.trim.endSeconds = clamp(state.trim.endSeconds, state.trim.startSeconds, duration);
     state.trim.endFrame = toFrame(state.trim.endSeconds);
+  }
+  if (state.trimEditor.applied) {
+    state.trimEditor.appliedStartSeconds = state.trim.startSeconds;
+    state.trimEditor.appliedEndSeconds = state.trim.endSeconds;
   }
   state.view.startSeconds = 0;
   state.view.endSeconds = duration;
@@ -1411,6 +1433,10 @@ function updateExportRecommendation() {
     elements.exportRecommendationText.textContent = "Öppna och analysera en fil för en rekommendation före export.";
     return;
   }
+  if (!state.trimEditor.applied) {
+    elements.exportRecommendationText.textContent = "Det placerade A/B-fönstret är inte tillämpat. Lås det och välj om allt utanför ska trimmas bort.";
+    return;
+  }
   const changes = [];
   const trimmed = state.trim.startFrame > 0 || state.trim.endFrame < toFrame(durationSeconds());
   if (trimmed) changes.push("trimning");
@@ -1543,6 +1569,126 @@ function renderMarkers() {
   scheduleCanvasRender();
 }
 
+function syncTrimEditorUi() {
+  if (!elements.trimEditorState) return;
+  const unlocked = Boolean(state.trimEditor.unlocked);
+  const pending = !state.trimEditor.applied;
+  const stateText = unlocked ? "Upplåst för placering" : pending ? "Låst, inte tillämpat" : "Låst och aktivt";
+  elements.trimEditorState.textContent = stateText;
+  elements.trimEditorState.className = `trim-editor-state ${unlocked ? "is-unlocked" : pending ? "is-pending" : "is-locked"}`;
+  elements.trimEditorDescription.textContent = unlocked
+    ? "Flytta A, B eller hela fönstret. Alla lyssningskontroller är tillgängliga. Lås fönstret när placeringen känns rätt."
+    : pending
+      ? "Fönstret är låst för provlyssning. Välj Trimma bort utanför A/B för att använda det, eller återgå till det aktiva urvalet."
+      : "Lås upp fönstret för att flytta A och B med finger, penna, mus eller tangentbord. Inget nytt trimurval används förrän du bekräftar det.";
+  elements.toggleTrimEditor.disabled = !state.file;
+  elements.toggleTrimEditor.setAttribute("aria-pressed", String(unlocked));
+  elements.toggleTrimEditor.textContent = unlocked ? "Lås trimfönstret" : pending ? "Lås upp igen" : "Lås upp trimfönstret";
+  elements.applyTrimSelection.disabled = unlocked || !pending;
+  elements.revertTrimSelection.disabled = !pending;
+  $("#trimTimelineCard")?.classList.toggle("is-trim-unlocked", unlocked);
+  if ($("#trimCanvasInstructions")) {
+    $("#trimCanvasInstructions").textContent = unlocked
+      ? "Dra A eller B för att ändra längden. Dra inne i fönstret för att flytta båda gränserna. Alt + vänster- eller högerpil flyttar hela fönstret."
+      : pending
+        ? "Fönstret är låst för provlyssning men ännu inte tillämpat som trimurval."
+        : "Fönstret är låst. Lås upp det för att dra A, B eller hela det markerade området.";
+  }
+  const editingControls = [
+    elements.trimWindowDurationInput,
+    $("#applyWindowFromStartButton"), $("#applyWindowAtPlayheadButton"), $("#applyWindowToEndButton"),
+    $("#centerWindowAtPlayheadButton"), elements.trimStartInput, elements.trimEndInput,
+    $("#setStartAtPlayhead"), $("#setEndAtPlayhead"), $("#resetTrimButton"),
+    ...$$('[data-move-window]'), ...$$('[data-nudge]'),
+  ];
+  editingControls.forEach(control => { if (control) control.disabled = !unlocked; });
+  const processingControls = [
+    elements.fadeInToggle, elements.fadeInNumber, elements.fadeInRange,
+    elements.fadeOutToggle, elements.fadeOutNumber, elements.fadeOutRange,
+    elements.gainNumber, elements.gainRange, $("#resetGainButton"),
+    elements.calculateSeries, elements.previewSeries, elements.applySeries, elements.preserveSeries,
+    ...$$('[data-fade-preset]'),
+  ];
+  processingControls.forEach(control => {
+    if (control && (unlocked || pending)) control.disabled = true;
+  });
+  if (!unlocked && !pending) {
+    elements.gainNumber.disabled = false;
+    elements.gainRange.disabled = false;
+    $("#resetGainButton").disabled = false;
+  }
+}
+
+function markTrimCandidateChanged(message = "Trimfönstret har flyttats men är ännu inte tillämpat.") {
+  state.trimEditor.applied = false;
+  state.dirty = true;
+  if (elements.regionMeasureStatus) elements.regionMeasureStatus.textContent = "Väntar på att trimfönstret tillämpas";
+  syncTrimEditorUi();
+  syncTrimHud();
+  updateProjectedMetrics();
+  updateExportRecommendation();
+  syncTrimWindowUi(message);
+  emitState("trim-candidate-changed");
+}
+
+function toggleTrimEditor() {
+  if (!state.file) return;
+  state.trimEditor.unlocked = !state.trimEditor.unlocked;
+  if (state.trimEditor.unlocked) stopPlayback();
+  if (!state.trimEditor.unlocked && state.trimEditor.applied) {
+    syncFadeUi();
+    syncSeriesUi();
+  }
+  syncTrimEditorUi();
+  scheduleCanvasRender();
+  showToast(state.trimEditor.unlocked
+    ? "Trimfönstret är upplåst. Dra med finger, penna eller mus och provlyssna med kontrollerna."
+    : state.trimEditor.applied
+      ? "Trimfönstret är låst."
+      : "Trimfönstret är låst för provlyssning. Det är ännu inte tillämpat.");
+}
+
+function requireTrimEditorUnlocked() {
+  if (state.trimEditor.unlocked) return true;
+  showToast("Lås upp trimfönstret först.", "error");
+  elements.toggleTrimEditor?.focus();
+  return false;
+}
+
+function applyTrimSelection() {
+  if (state.trimEditor.unlocked) {
+    showToast("Lås trimfönstret innan du tillämpar urvalet.", "error");
+    return;
+  }
+  if (state.trimEditor.applied) return;
+  state.trim.startFrame = toFrame(state.trim.startSeconds);
+  state.trim.endFrame = toFrame(state.trim.endSeconds);
+  state.trimEditor.appliedStartSeconds = state.trim.startSeconds;
+  state.trimEditor.appliedEndSeconds = state.trim.endSeconds;
+  state.trimEditor.applied = true;
+  invalidateSeriesProposal();
+  markEditChanged("trim-selection-applied");
+  syncTrimUi({ emit: false });
+  syncTrimEditorUi();
+  syncTrimWindowUi(`Aktivt trimurval: ${formatTime(state.trim.startSeconds)} till ${formatTime(state.trim.endSeconds)}. Vid export tas allt utanför bort.`);
+  showToast("A/B är nu aktivt trimurval. Originalfilen ändras inte.");
+  emitState("trim-selection-applied");
+}
+
+function revertTrimSelection() {
+  if (state.trimEditor.applied) return;
+  stopPlayback();
+  state.trim.startSeconds = state.trimEditor.appliedStartSeconds;
+  state.trim.endSeconds = state.trimEditor.appliedEndSeconds || durationSeconds();
+  state.trimEditor.unlocked = false;
+  state.trimEditor.applied = true;
+  syncTrimUi({ emit: false });
+  syncTrimEditorUi();
+  syncTrimWindowUi("Det senast aktiva trimurvalet har återställts.");
+  showToast("Det tillfälliga trimfönstret återställdes.");
+  emitState("trim-candidate-reverted");
+}
+
 function syncTrimUi({ emit = true } = {}) {
   const duration = durationSeconds();
   state.trim.startSeconds = clamp(state.trim.startSeconds, 0, Math.max(0, duration));
@@ -1559,6 +1705,7 @@ function syncTrimUi({ emit = true } = {}) {
   syncFadeUi();
   syncSeriesUi();
   updateExportSummary();
+  syncTrimEditorUi();
   syncTrimHud();
   scheduleCanvasRender();
   if (emit) emitState("trim");
@@ -1576,14 +1723,16 @@ function syncTrimHud() {
   const verifiedDuration = finite(state.verifiedExport?.format?.durationSeconds ?? state.verifiedExport?.durationSeconds ?? state.verifiedExport?.summary?.durationSeconds);
   elements.trimHudDuration.textContent = !hasFile
     ? "Ingen källfil"
+    : !state.trimEditor.applied
+      ? `${formatTime(selectedDuration)} placerat · inte tillämpat`
     : state.exportStatus === "complete" && verifiedDuration !== null
       ? `${formatTime(selectedDuration)} valt · verifierad fil 00:00.000 till ${formatTime(verifiedDuration)}`
       : wholeSource
         ? `Hela källfilen · mållängd ${formatTime(state.trimWindowSeconds)}`
         : `${formatTime(selectedDuration)} valt · mållängd ${formatTime(state.trimWindowSeconds)}`;
   const movable = hasFile && selectedDuration < sourceDuration - 1 / Math.max(1, sampleRate());
-  elements.trimHudMoveLeft.disabled = !movable || state.trim.startSeconds <= 0;
-  elements.trimHudMoveRight.disabled = !movable || state.trim.endSeconds >= sourceDuration;
+  elements.trimHudMoveLeft.disabled = !state.trimEditor.unlocked || !movable || state.trim.startSeconds <= 0;
+  elements.trimHudMoveRight.disabled = !state.trimEditor.unlocked || !movable || state.trim.endSeconds >= sourceDuration;
   if (elements.exportSelectionMapping) {
     elements.exportSelectionMapping.textContent = !hasFile
       ? "Källan är ännu inte vald"
@@ -1622,7 +1771,8 @@ function updateTrimWindowDuration(value) {
   return true;
 }
 
-function setTrimWindowPosition(startSeconds, { commit = true, reason = "trim-window-moved" } = {}) {
+function setTrimWindowPosition(startSeconds, { commit = true } = {}) {
+  if (!state.trimEditor.unlocked) return false;
   const sourceDuration = durationSeconds();
   const windowLength = Math.min(selectionDurationSeconds(), sourceDuration);
   if (!(sourceDuration > 0) || !(windowLength > 0)) return false;
@@ -1632,9 +1782,7 @@ function setTrimWindowPosition(startSeconds, { commit = true, reason = "trim-win
   state.trim.endSeconds = start + windowLength;
   syncTrimUi({ emit: false });
   if (commit) {
-    invalidateSeriesProposal();
-    markEditChanged(reason);
-    syncTrimWindowUi(`Trimfönstret flyttades till ${formatTime(start)} till ${formatTime(start + windowLength)}.`);
+    markTrimCandidateChanged(`Trimfönstret placerades vid ${formatTime(start)} till ${formatTime(start + windowLength)}. Lås och provlyssna innan det tillämpas.`);
   }
   return true;
 }
@@ -1651,6 +1799,7 @@ function centerTrimWindowAt(seconds, { commit = true } = {}) {
 }
 
 function resizeTrimWindowToTarget() {
+  if (!requireTrimEditorUnlocked()) return;
   const sourceDuration = durationSeconds();
   if (!(sourceDuration > 0)) return;
   const windowLength = Math.min(state.trimWindowSeconds, sourceDuration);
@@ -1660,12 +1809,11 @@ function resizeTrimWindowToTarget() {
   state.trim.startSeconds = clamp(currentCenter - windowLength / 2, 0, Math.max(0, sourceDuration - windowLength));
   state.trim.endSeconds = state.trim.startSeconds + windowLength;
   syncTrimUi({ emit: false });
-  invalidateSeriesProposal();
-  markEditChanged("trim-window-duration-applied");
-  syncTrimWindowUi(`Trimfönstret är ${formatTime(windowLength)} från ${formatTime(state.trim.startSeconds)} till ${formatTime(state.trim.endSeconds)}.`);
+  markTrimCandidateChanged(`Trimfönstret är ${formatTime(windowLength)} från ${formatTime(state.trim.startSeconds)} till ${formatTime(state.trim.endSeconds)}. Lås det när placeringen känns rätt.`);
 }
 
 function applyTrimWindow(anchor) {
+  if (!requireTrimEditorUnlocked()) return;
   if (!updateTrimWindowDuration(elements.trimWindowDurationInput.value)) return;
   const sourceDuration = durationSeconds();
   if (sourceDuration <= 0) {
@@ -1685,24 +1833,22 @@ function applyTrimWindow(anchor) {
   }
   state.trim.startSeconds = start;
   state.trim.endSeconds = start + windowLength;
-  syncTrimUi();
-  invalidateSeriesProposal();
-  markEditChanged("trim-window-applied");
-  syncTrimWindowUi(state.trimWindowSeconds > sourceDuration
+  syncTrimUi({ emit: false });
+  markTrimCandidateChanged(state.trimWindowSeconds > sourceDuration
     ? `Källan är kortare än mållängden. Hela ${formatTime(sourceDuration)} valdes.`
-    : `Trimfönstret är ${formatTime(windowLength)} från ${formatTime(start)} till ${formatTime(start + windowLength)}.`);
+    : `Trimfönstret är ${formatTime(windowLength)} från ${formatTime(start)} till ${formatTime(start + windowLength)}. Lås det när placeringen känns rätt.`);
 }
 
 function setBoundary(boundary, seconds) {
+  if (!requireTrimEditorUnlocked()) return;
   const duration = durationSeconds();
   if (boundary === "start") {
     state.trim.startSeconds = clamp(seconds, 0, Math.max(0, state.trim.endSeconds - 1 / sampleRate()));
   } else {
     state.trim.endSeconds = clamp(seconds, Math.min(duration, state.trim.startSeconds + 1 / sampleRate()), duration);
   }
-  syncTrimUi();
-  invalidateSeriesProposal();
-  markEditChanged("trim-boundary");
+  syncTrimUi({ emit: false });
+  markTrimCandidateChanged(`${boundary === "start" ? "A" : "B"} flyttades. Lås och provlyssna innan trimurvalet tillämpas.`);
 }
 
 function selectionDurationSeconds() {
@@ -1839,6 +1985,12 @@ function updateGain(value, options = {}) {
 }
 
 function updateProjectedMetrics() {
+  if (!state.trimEditor.applied) {
+    elements.projectedLufs.textContent = "väntar på trimval";
+    elements.projectedPeak.textContent = "väntar på trimval";
+    elements.gainNotice.hidden = true;
+    return;
+  }
   const decision = decisionMeasurement();
   const summary = decision.summary;
   const lufs = finite(summary.integratedLufs ?? summary.lufsI);
@@ -2974,6 +3126,10 @@ function projectSettings() {
 
 async function saveProjectFile() {
   if (!state.file) return;
+  if (!state.trimEditor.applied) {
+    showToast("Tillämpa trimfönstret eller återgå till det aktiva urvalet innan projektet sparas.", "error", 7000);
+    return;
+  }
   if (!state.analysis?.sourceIdentity) {
     showToast("Kör källanalysen först så att projektet kan bindas till filens fulla lokala SHA-256.", "error", 8000);
     return;
@@ -3058,6 +3214,12 @@ async function applyPendingProjectToFile() {
   state.trim.gainDb = finite(edit.globalGainDb ?? edit.gainDb) ?? 0;
   state.trim.fadeInSeconds = toSeconds(edit.fadeInFrames || 0);
   state.trim.fadeOutSeconds = toSeconds(edit.fadeOutFrames || 0);
+  state.trimEditor = {
+    unlocked: false,
+    applied: true,
+    appliedStartSeconds: state.trim.startSeconds,
+    appliedEndSeconds: state.trim.endSeconds,
+  };
   state.exportProfile = edit.profile || (Math.abs(state.trim.gainDb) > 1e-9 || state.trim.fadeInSeconds > 0 || state.trim.fadeOutSeconds > 0 ? "edited-wav" : "sample-payload-trim");
   const profileRadio = $(`input[name='exportProfile'][value='${state.exportProfile}']`);
   if (profileRadio) profileRadio.checked = true;
@@ -3289,6 +3451,10 @@ async function importSeriesReports(files) {
 
 function startExport() {
   if (!state.file || state.exportStatus === "running") return;
+  if (!state.trimEditor.applied) {
+    showToast("Tillämpa trimfönstret eller återgå till det aktiva urvalet före export.", "error", 7000);
+    return;
+  }
   const selectedProfile = $("input[name='exportProfile']:checked")?.value;
   const edited = Math.abs(state.trim.gainDb) > 1e-9 || state.trim.fadeInSeconds > 0 || state.trim.fadeOutSeconds > 0;
   if (selectedProfile === "sample-payload-trim" && edited) {
@@ -3961,6 +4127,18 @@ function bindEvents() {
 
   bindTimelineGestures(elements.analysisCanvas);
   elements.trimCanvas.addEventListener("pointerdown", (event) => {
+    if (!state.trimEditor.unlocked) {
+      trimGesture = {
+        pointerId: event.pointerId,
+        target: null,
+        startX: event.clientX,
+        startTime: canvasTimeFromPointer(elements.trimCanvas, event),
+        startBoundary: state.trim.startSeconds,
+        endBoundary: state.trim.endSeconds,
+        moved: false,
+      };
+      return;
+    }
     activeTrimHandle = findTrimHandle(elements.trimCanvas, event);
     if (activeTrimHandle) elements.trimCanvas.setPointerCapture(event.pointerId);
     trimGesture = {
@@ -4001,9 +4179,7 @@ function bindEvents() {
     }
     if (cancelled) return;
     if (gesture.moved && gesture.target) {
-      invalidateSeriesProposal();
-      markEditChanged(gesture.target === "window" ? "trim-window-dragged" : "trim-boundary-dragged");
-      syncTrimWindowUi(`Trimfönstret är ${formatTime(selectionDurationSeconds())} från ${formatTime(state.trim.startSeconds)} till ${formatTime(state.trim.endSeconds)}.`);
+      markTrimCandidateChanged(`Trimfönstret är ${formatTime(selectionDurationSeconds())} från ${formatTime(state.trim.startSeconds)} till ${formatTime(state.trim.endSeconds)}. Lås det när placeringen känns rätt.`);
       return;
     }
     state.playback.currentSeconds = canvasTimeFromPointer(elements.trimCanvas, event);
@@ -4016,8 +4192,12 @@ function bindEvents() {
   elements.trimCanvas.addEventListener("keydown", event => {
     const step = event.shiftKey ? 10 : 1;
     if (["ArrowLeft", "ArrowRight", "+", "=", "-", "0", "Home"].includes(event.key)) event.preventDefault();
-    if (event.altKey && event.key === "ArrowLeft") moveTrimWindow(-step);
-    else if (event.altKey && event.key === "ArrowRight") moveTrimWindow(step);
+    if (event.altKey && event.key === "ArrowLeft") {
+      if (requireTrimEditorUnlocked()) moveTrimWindow(-step);
+    }
+    else if (event.altKey && event.key === "ArrowRight") {
+      if (requireTrimEditorUnlocked()) moveTrimWindow(step);
+    }
     else if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
       state.playback.currentSeconds = clamp(state.playback.currentSeconds + (event.key === "ArrowLeft" ? -step : step), 0, durationSeconds());
       elements.audio.currentTime = state.playback.currentSeconds;
@@ -4160,6 +4340,10 @@ function bindEvents() {
     emitState("monitor-mode");
   }));
 
+  elements.toggleTrimEditor.addEventListener("click", toggleTrimEditor);
+  elements.applyTrimSelection.addEventListener("click", applyTrimSelection);
+  elements.revertTrimSelection.addEventListener("click", revertTrimSelection);
+
   elements.trimStartInput.addEventListener("change", () => {
     const value = parseTime(elements.trimStartInput.value);
     if (value === null) showToast("Starttiden kunde inte tolkas.", "error");
@@ -4190,11 +4374,11 @@ function bindEvents() {
   }));
   $$("[data-preview-boundary]").forEach((button) => button.addEventListener("click", () => previewBoundary(button.dataset.previewBoundary)));
   $("#resetTrimButton").addEventListener("click", () => {
+    if (!requireTrimEditorUnlocked()) return;
     state.trim.startSeconds = 0;
     state.trim.endSeconds = durationSeconds();
-    syncTrimUi();
-    invalidateSeriesProposal();
-    markEditChanged("trim-reset");
+    syncTrimUi({ emit: false });
+    markTrimCandidateChanged("Hela källfilen är placerad i fönstret. Lås och tillämpa om det ska bli det aktiva urvalet.");
   });
   elements.fadeInToggle.addEventListener("change", () => updateFade("in", elements.fadeInNumber.value, elements.fadeInToggle.checked));
   elements.fadeOutToggle.addEventListener("change", () => updateFade("out", elements.fadeOutNumber.value, elements.fadeOutToggle.checked));
