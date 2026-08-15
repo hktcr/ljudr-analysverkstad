@@ -1,6 +1,6 @@
 # LjudR Analysverkstad
 
-LjudR är ett lokalt och icke destruktivt verktyg för analys och varsam redigering av fältinspelningar och ljudlandskap. Version `1.0.0-rc.4` är en offentlig valideringskandidat, inte en produktionsverifierad 1.0.
+LjudR är ett lokalt och icke destruktivt verktyg för analys och varsam redigering av fältinspelningar och ljudlandskap. Version `1.0.0-rc.5` är en offentlig valideringskandidat, inte en produktionsverifierad 1.0.
 
 ## Integritet och princip
 
@@ -64,6 +64,12 @@ Projektfilen kan behålla privata exakta koordinater. Publika rapporter följer 
 
 Stora exporter kan använda webbläsarens privata lokala filsystem, OPFS. En partiell arbetsfil stängs och raderas vid fel eller avbrott. En slutförd fil behålls lokalt när webbläsaren inte kan bekräfta att filen verkligen sparats till Filer. Appen listar därför slutförda arbetsfiler med status, storlek och tid. De kan hämtas igen eller rensas uttryckligen.
 
+## Offline och uppdateringar
+
+När nät finns hämtar service workern navigering och versionsbundna programresurser från nätet först. Den lokala versionscachen används som reserv om nätåtkomsten misslyckas. Appen kontrollerar en ny service worker vid start, när nätet återkommer och när appen blir synlig efter bakgrundsläge. En väntande version aktiveras automatiskt endast när inget osparat arbete eller workerjobb pågår. Annars visas uppdateringspanelen och omladdning skjuts upp tills användarens arbete är säkert. Versionsnumret står direkt i HTML och kan därför läsas även om JavaScript inte startar.
+
+Offline kan appen endast använda den senast fullständigt cachade versionen. Ingen webbapp kan hämta en ännu opublicerad eller nätberoende uppdatering utan fungerande anslutning.
+
 ## Mätstatus
 
 Mätmotorn är kontrollerad mot den relevanta filbaserade mono/stereo-delen av EBU Loudness Test Set v5.0: 68 av 68 krav för 62 filer. Samtliga 19 relevanta mono/stereo-filer i ITU-R BS.2217-2 klaras inom rapportens tolerans på +/-0,1 LKFS. Detta är verifiering inom dokumenterad scope, inte extern produktcertifiering eller garanti för varje signal eller leveranskedja.
@@ -72,7 +78,7 @@ Se [valideringsplanen](docs/VALIDATION.md), [metoden](docs/METHOD.md), [gAIa-fl�
 
 ## Releaseport
 
-`1.0.0-rc.4` får publiceras som valideringskandidat. Versionsnumret `1.0.0` är förbjudet tills hela den fixerade testsuiten, EBU 68/68, ITU 19/19 och den fysiska iPad-matrisen är godkända. Matrisen omfattar en 15 till 20 minuter lång stereo float32/96 kHz-fil nära 1 GB i både Safari och installerad PWA, inklusive analysunderlag och guidanceimport, export, Filer-handoff, bakgrund/återgång, quota, avbrott, OPFS-städning, offline och uppdatering.
+`1.0.0-rc.5` får publiceras som valideringskandidat. Versionsnumret `1.0.0` är förbjudet tills hela den fixerade testsuiten, EBU 68/68, ITU 19/19 och den fysiska iPad-matrisen är godkända. Matrisen omfattar en 15 till 20 minuter lång stereo float32/96 kHz-fil nära 1 GB i både Safari och installerad PWA, inklusive analysunderlag och guidanceimport, export, Filer-handoff, bakgrund/återgång, quota, avbrott, OPFS-städning, offline och uppdatering.
 
 ## Lokal utveckling
 

@@ -1,4 +1,4 @@
-const CACHE_NAME = "ljudr-shell-v1.0.0-rc.4";
+const CACHE_NAME = "ljudr-shell-v1.0.0-rc.5";
 const SHELL = [
   "./",
   "./index.html",
@@ -38,13 +38,21 @@ self.addEventListener("fetch", event => {
   if (event.request.method !== "GET") return;
   const url = new URL(event.request.url);
   if (url.origin !== self.location.origin) return;
-  event.respondWith(
-    caches.match(event.request).then(cached => cached || fetch(event.request).then(response => {
-      if (response.ok && response.type === "basic") {
-        const copy = response.clone();
-        caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy));
+  const shellRequest = SHELL.some(path => new URL(path, self.registration.scope).pathname === url.pathname);
+  if (event.request.mode !== "navigate" && !shellRequest) return;
+  event.respondWith((async () => {
+    const cache = await caches.open(CACHE_NAME);
+    try {
+      const response = await fetch(event.request, { cache: "no-store" });
+      if (response.ok && response.type === "basic" && (event.request.mode === "navigate" || shellRequest)) {
+        await cache.put(event.request.mode === "navigate" ? new Request(new URL("./", self.registration.scope)) : event.request, response.clone());
       }
       return response;
-    }))
-  );
+    } catch (error) {
+      const cached = await cache.match(event.request)
+        || (event.request.mode === "navigate" ? await cache.match(new URL("./", self.registration.scope)) : null);
+      if (cached) return cached;
+      throw error;
+    }
+  })());
 });

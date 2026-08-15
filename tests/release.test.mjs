@@ -103,12 +103,21 @@ test("ignore-reglerna skyddar ljud och lokala rapporter oavsett normalt skiftlä
   assert.match(ignore, /_site\//);
 });
 
-test("PWA-uppdatering väntar på uttryckligt användarval", async () => {
-  const [worker, app] = await Promise.all([read("sw.js"), read("src/app.js")]);
+test("PWA hämtar nätversionen först och aktiverar uppdatering endast i säkert läge", async () => {
+  const [worker, app, html] = await Promise.all([read("sw.js"), read("src/app.js"), read("index.html")]);
   assert.match(worker, /data\?\.type === "SKIP_WAITING"/);
   assert.doesNotMatch(worker.split('self.addEventListener("message"')[0], /self\.skipWaiting\(\)/);
+  assert.match(worker, /await fetch\(event\.request, \{ cache: "no-store" \}\)/);
+  assert.match(worker, /event\.request\.mode !== "navigate" && !shellRequest/);
+  assert.doesNotMatch(worker, /cached\s*\|\|\s*fetch/);
   assert.match(app, /waitingServiceWorker/);
   assert.match(app, /hasUnsafeUpdateState/);
+  assert.match(app, /updateViaCache: "none"/);
+  assert.match(app, /serviceWorkerRegistration\.update\(\)/);
+  assert.match(app, /visibilitychange/);
+  assert.match(app, /maybeActivateWaitingUpdate/);
+  assert.match(app, /reloadWhenSafe/);
+  assert.match(html, /id="appVersion"[^>]*>v1\.0\.0-rc\.5</);
 });
 
 test("den fixerade testinventeringen matchar exakt releasekällan", async () => {

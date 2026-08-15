@@ -1,6 +1,6 @@
 {
   "schema": "se.gaia.ljudr.test-inventory/1",
-  "release": "1.0.0-rc.4",
+  "release": "1.0.0-rc.5",
   "files": {
     "analysis-exchange.test.mjs": [
       "kanonisk JSON är nyckelordningsoberoende och digest stabil",
@@ -68,13 +68,17 @@
       "rapporten har tre semantiska sektioner och renderar nästlade objekt",
       "koordinatpolicy är dold, avrundad eller exakt genom aktivt val"
     ],
+    "pwa-update.test.mjs": [
+      "service workern prioriterar nätet och uppdaterar versionscachen",
+      "service workern använder endast aktuell versionscache som offlinefallback"
+    ],
     "release.test.mjs": [
       "releaseversionen är konsekvent i motorer, projekt och PWA-cache",
       "Pages använder separata jobb och actions pinnade till full SHA",
       "webbpaketet innehåller exakt den uttryckliga tillåtelselistan",
       "buildmanifestet binder varje publik fil till releasecommit och SHA-256",
       "ignore-reglerna skyddar ljud och lokala rapporter oavsett normalt skiftläge",
-      "PWA-uppdatering väntar på uttryckligt användarval",
+      "PWA hämtar nätversionen först och aktiverar uppdatering endast i säkert läge",
       "den fixerade testinventeringen matchar exakt releasekällan"
     ],
     "sha256.test.mjs": [
@@ -125,5 +129,5 @@
       "Ren trimning bevarar PCM32 exakt"
     ]
   },
-  "total": 94
+  "total": 96
 }

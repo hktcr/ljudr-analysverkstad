@@ -1,8 +1,8 @@
-# Valideringsplan för 1.0.0-rc.4
+# Valideringsplan för 1.0.0-rc.5
 
 ## Status
 
-`1.0.0-rc.4` är en offentlig valideringskandidat. Den får inte beskrivas som produktionsverifierad 1.0.
+`1.0.0-rc.5` är en offentlig valideringskandidat. Den får inte beskrivas som produktionsverifierad 1.0.
 
 Loudnessmotorn klarar hela den relevanta filbaserade mono/stereo-delen av EBU Loudness Test Set v5.0: 68 av 68 krav för 62 filer. Den klarar även samtliga 19 relevanta mono/stereo-filer i ITU-R BS.2217-2 inom +/-0,1 LKFS. EBU:s flerkanalsfall och uttryckliga live-mätarfall ligger utanför verktygets filbaserade mono/stereo-scope. Resultaten är verifiering inom dokumenterad scope, inte produktcertifiering.
 
@@ -32,7 +32,7 @@ Maskinläsbar status finns i `validation-manifest.json`. Manifestet binder testi
 - full SHA-256 som källidentitet; ändring i filens mitt måste upptäckas
 - koordinatpolicy Dold/Avrundad/Exakt
 - semantisk HTML/JSON utan `[object Object]` och med HTML-escaping
-- PWA-resurser, cacheversionsbyte och update-UX kontrolleras statiskt; faktisk offlinekörning ingår i den fysiska matrisen
+- PWA-resurser, nät först för appskal, cachefallback, cacheversionsbyte och säker update-UX kontrolleras automatiskt; faktisk offlinekörning och uppgradering i Chrome på iPad ingår i den fysiska matrisen
 - canvasens textmotsvarighet och tangentbordskontrakt kontrolleras statiskt; VoiceOver och faktisk tangentbordsoperation ingår i den manuella matrisen
 - Minimal exchange saknar ljud, samples, waveform, spektrum, kontinuerlig tidsserie, full källhash, filnamn, fria markertexter och koordinater
 - Temporal diagnostik följer minsta intervall, högst 720 segment, tillåtna programmått och deterministisk aggregering

@@ -1,5 +1,14 @@
 # Ändringslogg
 
+## 1.0.0-rc.5, 2026-08-15
+
+- hämtar navigering och versionsbundna programresurser från nätet först när nät finns
+- använder den versionsbundna cachen enbart som reserv vid nätfel eller offlinearbete
+- registrerar service workern med `updateViaCache: "none"` och kontrollerar uppdatering vid start, återgång och återanslutning
+- aktiverar en väntande uppdatering automatiskt endast när inget osparat arbete eller workerjobb pågår
+- skjuter upp omladdning tills arbetet är säkert om en ny worker tar kontroll under pågående arbete
+- skriver versionsnumret direkt i HTML så att det syns även om JavaScript inte startar
+
 ## 1.0.0-rc.4, 2026-08-15
 
 - exporterar ljudfritt analysunderlag enligt `se.gaia.ljudr.analysis-exchange/1`

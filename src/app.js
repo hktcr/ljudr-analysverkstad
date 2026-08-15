@@ -655,6 +655,7 @@ function emitState(reason) {
       assessment: { ...state.assessment },
     },
   }));
+  if (reloadWhenSafe && !hasUnsafeUpdateState()) location.reload();
 }
 
 function setMode(mode, options = {}) {
@@ -2935,6 +2936,9 @@ function syncAuditionUi() {
 }
 
 let waitingServiceWorker = null;
+let serviceWorkerRegistration = null;
+let updateCheckPromise = null;
+let reloadWhenSafe = false;
 
 function hasUnsafeUpdateState() {
   return state.dirty || Object.values(state.jobs).some(Boolean);
@@ -2948,17 +2952,34 @@ function applyWaitingUpdate() {
   waitingServiceWorker?.postMessage({ type: "SKIP_WAITING" });
 }
 
+function maybeActivateWaitingUpdate() {
+  if (!waitingServiceWorker || hasUnsafeUpdateState()) return false;
+  waitingServiceWorker.postMessage({ type: "SKIP_WAITING" });
+  return true;
+}
+
+async function checkForAppUpdate() {
+  if (!serviceWorkerRegistration || !navigator.onLine) return;
+  if (updateCheckPromise) return updateCheckPromise;
+  updateCheckPromise = serviceWorkerRegistration.update()
+    .catch(() => {})
+    .finally(() => { updateCheckPromise = null; });
+  return updateCheckPromise;
+}
+
 function watchServiceWorkerRegistration(registration) {
+  serviceWorkerRegistration = registration;
   const showWaiting = (worker) => {
     if (!worker) return;
     waitingServiceWorker = worker;
-    elements.updateBanner.hidden = false;
+    if (!maybeActivateWaitingUpdate()) elements.updateBanner.hidden = false;
   };
   showWaiting(registration.waiting);
   registration.addEventListener("updatefound", () => {
-    const worker = registration.installing;
-    worker?.addEventListener("statechange", () => { if (worker.state === "installed" && navigator.serviceWorker.controller) showWaiting(worker); });
+      const worker = registration.installing;
+      worker?.addEventListener("statechange", () => { if (worker.state === "installed" && navigator.serviceWorker.controller) showWaiting(worker); });
   });
+  checkForAppUpdate();
 }
 
 function updateCapabilities(analysisAvailable = state.capabilities.analysis, exportAvailable = state.capabilities.export) {
@@ -3509,6 +3530,10 @@ function bindEvents() {
 
   window.addEventListener("resize", scheduleCanvasRender, { passive: true });
   window.addEventListener("orientationchange", scheduleCanvasRender, { passive: true });
+  window.addEventListener("online", checkForAppUpdate);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") checkForAppUpdate();
+  });
   window.addEventListener("pagehide", () => {
     if (activeDownloadUrl) URL.revokeObjectURL(activeDownloadUrl);
     activeDownloadUrl = null;
@@ -3549,8 +3574,18 @@ async function initialize() {
   await loadAnalysisExchangeTools();
   if (state.capabilities.opfs && state.capabilities.workers) sendStorageCommand("storage-list");
   if ("serviceWorker" in navigator && location.protocol !== "file:") {
-    navigator.serviceWorker.register(new URL("../sw.js", import.meta.url), { scope: "./" }).then(watchServiceWorkerRegistration).catch(() => {});
-    navigator.serviceWorker.addEventListener("controllerchange", () => { if (!hasUnsafeUpdateState()) location.reload(); });
+    const serviceWorkerUrl = new URL("../sw.js", import.meta.url);
+    serviceWorkerUrl.searchParams.set("v", RELEASE.version);
+    navigator.serviceWorker.register(serviceWorkerUrl, { scope: "./", updateViaCache: "none" }).then(watchServiceWorkerRegistration).catch(() => {});
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      waitingServiceWorker = null;
+      if (hasUnsafeUpdateState()) {
+        reloadWhenSafe = true;
+        elements.updateBanner.hidden = false;
+        return;
+      }
+      location.reload();
+    });
   }
   document.documentElement.classList.add("is-ready");
   emitState("ready");
