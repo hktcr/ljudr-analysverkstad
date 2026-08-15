@@ -1,5 +1,14 @@
 # Ändringslogg
 
+## 1.0.0-rc.7, 2026-08-15
+
+- gör kopierbar JSON-text till primärt analysutbyte med gAIa
+- låter vägledning klistras in, valideras och granskas direkt i verktyget
+- behåller JSON-fil som valfri reserv utan automatisk nedladdning
+- lägger till ett redigerbart trimfönster med 20 minuter som standard
+- placerar trimfönstret från startgränsen, runt spelhuvudet eller fram till slutgränsen
+- sparar vald mållängd i projektet
+
 ## 1.0.0-rc.6, 2026-08-15
 
 - förklarar analysens fyra pågående delsteg: filstruktur, signal, sammanställning och källidentitet

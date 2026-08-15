@@ -44,7 +44,7 @@ Standardläget innehåller tekniska sammanfattningar och maskinella observatione
 
 ### Frivillig metadata
 
-Användaren väljer uttryckligen fältgrupper för titel och session, filnamn, plats, anteckningar eller skapare. Fri markörtext exporteras inte i schema 1. En förhandsgranskning visar den exakta JSON-filen före hämtning.
+Användaren väljer uttryckligen fältgrupper för titel och session, filnamn, plats, anteckningar eller skapare. Fri markörtext exporteras inte i schema 1. En förhandsgranskning visar den exakta JSON-texten före kopiering. Vägledning klistras in som text och valideras med samma strikta schema som filimporten.
 
 ### Exakta koordinater
 

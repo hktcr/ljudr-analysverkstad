@@ -1,13 +1,13 @@
-# Releasechecklista för 1.0.0-rc.6
+# Releasechecklista för 1.0.0-rc.7
 
 Status: offentlig valideringskandidat. Inte produktionsverifierad 1.0.
 
 ## Förverifiering 15 augusti 2026
 
-- [x] Fixerad testsuite: 97 av 97 tester, inventering SHA-256 `39d009fe7fa94bd1807f82afa989e3570405fd6bcbcc30cf0bf0d580a3222a87`.
+- [x] Fixerad testsuite: 98 av 98 tester, inventering SHA-256 `6b0af009a60b0fc3c7c687e66eb24c4c7885ae6a234b19c3fd70f84dfcb0def9`.
 - [x] EBU Loudness Test Set v5.0: 68 av 68 krav för 62 relevanta filer.
 - [x] ITU-R BS.2217-2: 19 av 19 relevanta filer inom +/-0,1 LKFS.
-- [x] Syntaxkontroll och `git diff --check` godkända för rc.6.
+- [x] Syntaxkontroll och `git diff --check` godkända för rc.7.
 - [x] Pagespaket innehåller 18 filer: 17 uttryckligen tillåtna resurser plus hashbundet buildmanifest.
 - [x] Samtliga 18 publika resurser ger HTTP 200 från lokal server.
 - [x] Inga spårade ljudfiler, rapporter, projekt, uppenbara hemligheter eller U+2013 hittas.
@@ -16,8 +16,8 @@ Status: offentlig valideringskandidat. Inte produktionsverifierad 1.0.
 ## Lokal kandidat
 
 - [ ] Varje releasefil är avsiktligt inkluderad och det publicerade GitHub-trädet matchar det lokalt beräknade trädet exakt.
-- [x] Versionen `1.0.0-rc.6` är konsekvent i paket, app, workers, projekt, rapport, dokumentation, PWA-cache och validation-manifest.
-- [x] Syntaxkontroll, hela fixerade testsuiten med 97 av 97 och `git diff --check` passerar.
+- [x] Versionen `1.0.0-rc.7` är konsekvent i paket, app, workers, projekt, rapport, dokumentation, PWA-cache och validation-manifest.
+- [x] Syntaxkontroll, hela fixerade testsuiten med 98 av 98 och `git diff --check` passerar.
 - [x] EBU visar 68/68 och ITU visar 19/19 för exakt releasekod.
 - [x] Build skapar endast den uttryckliga allowlisten och `build-manifest.json`.
 - [x] Varje publik fil har SHA-256 i buildmanifestet.
@@ -35,7 +35,7 @@ Status: offentlig valideringskandidat. Inte produktionsverifierad 1.0.
 - [x] OPFS partial tas bort vid fel/cancel; complete listas och rensas uttryckligen.
 - [x] Cache, repo, Pages-artefakt och rapport saknar ljudsamplingar.
 - [x] Minimal exchange saknar ljud, samples, waveform, spektrum, full källhash, filnamn, fria markertexter och koordinater.
-- [x] Preview visar exakt exporterad JSON och export/import initierar ingen nättrafik.
+- [x] Preview visar exakt JSON-text, kopiering och inklistring initierar ingen nättrafik och filformatet finns kvar som reserv.
 - [x] Guidanceimport avvisar fel schema, bundle, digest, källa, edit, evidens, storlek, djup och farliga nycklar.
 - [x] Osignerad guidance märks tydligt och inga råd tillämpas automatiskt.
 - [x] Audit trail binder exchange, guidance, provenance och användarens accept/reject utan att påstå avsändarbevis.
@@ -51,7 +51,7 @@ Status: offentlig valideringskandidat. Inte produktionsverifierad 1.0.
 - [x] Pages använder GitHub Actions.
 - [x] Appskalet använder nät först när nät finns, cache endast som reserv och `updateViaCache: none` för service workern.
 - [x] Automatisk aktivering och omladdning blockeras av osparat arbete eller pågående workerjobb.
-- [ ] Liveversionen på `https://hktcr.github.io/ljudr-analysverkstad/` visar `1.0.0-rc.6` och matchar releasecommitten.
+- [ ] Liveversionen på `https://hktcr.github.io/ljudr-analysverkstad/` visar `1.0.0-rc.7` och matchar releasecommitten.
 
 ## Live smoke
 
@@ -62,15 +62,15 @@ Status: offentlig valideringskandidat. Inte produktionsverifierad 1.0.
 - [ ] Redigerad WAV-master återöppnas och får verifierade signalmått/containerdata.
 - [ ] Projekt sparas, migreras, öppnas och matchas med full källhash.
 - [ ] HTML/JSON innehåller Källfil, Beräknat exporturval och Verifierad exportfil.
-- [ ] Minimal exchange preview och nedladdning är identiska och saknar förbjudna fält.
-- [ ] Matchande guidance importeras som `unreviewed`; felaktig och gammal guidance avvisas.
+- [ ] Minimal exchange preview och kopierad text är identiska och saknar förbjudna fält.
+- [ ] Matchande guidance klistras in som `unreviewed`; felaktig och gammal guidance avvisas.
 - [ ] Accept/reject loggas och faktisk edit kräver ett separat uttryckligt val.
 - [ ] Offline cold start och update från föregående cacheversion.
 - [ ] Inga ljudbytes finns i Cache Storage eller nättrafik.
 
 ## RC-kvitto
 
-- Releaseversion: `1.0.0-rc.6`
+- Releaseversion: `1.0.0-rc.7`
 - Releasecommit: _fylls efter commit_
 - Tree-id: _fylls efter commit_
 - Actions run-id: _fylls efter grön körning_
@@ -78,7 +78,7 @@ Status: offentlig valideringskandidat. Inte produktionsverifierad 1.0.
 - Pages-URL: `https://hktcr.github.io/ljudr-analysverkstad/`
 - Buildmanifest SHA-256: _fylls efter bygg från releasecommit_
 - Livekontroll: _fylls efter publicering_
-- Fixerad testsuite: `97/97`, inventory SHA-256 `39d009fe7fa94bd1807f82afa989e3570405fd6bcbcc30cf0bf0d580a3222a87`
+- Fixerad testsuite: `98/98`, inventory SHA-256 `6b0af009a60b0fc3c7c687e66eb24c4c7885ae6a234b19c3fd70f84dfcb0def9`
 - EBU/ITU: `68/68 respektive 19/19`
 - Validation-manifest SHA-256: `fc6e8f2152bd331ed29e8f3e51437008a29d969c99125a074e9202055b2423c7`
 - Status: `GO för commit och publicering som publik valideringskandidat`; deploy- och livekvitton återstår.

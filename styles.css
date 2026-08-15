@@ -1890,6 +1890,48 @@ svg {
   gap: 14px;
 }
 
+.trim-window-card {
+  display: grid;
+  margin-top: 16px;
+  padding: 17px;
+  grid-template-columns: minmax(220px, .8fr) minmax(360px, 1.2fr);
+  align-items: center;
+  gap: 20px;
+  border: 1px solid #bfd5d0;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #f7fbfa, #edf6f3);
+}
+
+.trim-window-copy h2 {
+  margin: 3px 0 5px;
+  font-size: 1rem;
+}
+
+.trim-window-copy p,
+.trim-window-status {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: .75rem;
+  line-height: 1.45;
+}
+
+.trim-window-controls {
+  display: grid;
+  gap: 8px;
+}
+
+.trim-window-controls .time-input-label {
+  margin: 0;
+  grid-template-columns: 110px minmax(120px, 200px);
+}
+
+.trim-window-actions,
+.exchange-text-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .control-card {
   padding: 17px;
   border-radius: 14px;
@@ -3177,8 +3219,8 @@ svg {
 .analysis-exchange-heading,
 .external-guidance-heading,
 .analysis-exchange-actions,
-.exchange-artifact > div,
-.exchange-artifact {
+.exchange-artifact-heading,
+.exchange-text-actions {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -3218,11 +3260,48 @@ svg {
 }
 
 .exchange-artifact {
+  display: grid;
+  gap: 10px;
   margin-top: 16px;
   padding: 13px 15px;
   border: 1px solid #9bc7b9;
   border-radius: 14px;
   background: #eaf6f1;
+}
+
+.exchange-artifact-heading {
+  justify-content: flex-start;
+}
+
+.exchange-text-label {
+  display: block;
+  margin-top: 12px;
+  color: var(--ink-soft);
+  font-size: .78rem;
+  font-weight: 800;
+}
+
+.exchange-textarea {
+  width: 100%;
+  min-height: 150px;
+  padding: 12px;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #101b2a;
+  color: #d8e8e3;
+  font: .76rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  overflow-wrap: anywhere;
+}
+
+.external-guidance .exchange-textarea {
+  min-height: 120px;
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.exchange-text-actions {
+  justify-content: flex-start;
 }
 
 .exchange-artifact > div > div {
@@ -3519,6 +3598,15 @@ svg {
   .exchange-artifact {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .trim-window-card {
+    grid-template-columns: 1fr;
+  }
+
+  .trim-window-actions .button,
+  .exchange-text-actions .button {
+    width: 100%;
   }
 
   .analysis-exchange-actions .button,

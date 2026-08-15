@@ -10,14 +10,17 @@ const app = await readFile(resolve(root, "src/app.js"), "utf8");
 const css = await readFile(resolve(root, "styles.css"), "utf8");
 
 test("analysutbytet är lokalt, granskat och uttryckligt", () => {
-  assert.match(html, /id="openAnalysisExportButton"[^>]*>Exportera analysunderlag för gAIa/);
+  assert.match(html, /id="openAnalysisExportButton"[^>]*>Skapa analysunderlag för gAIa/);
   assert.match(html, /Appen ansluter inte till gAIa och laddar aldrig upp något automatiskt/);
   assert.match(html, /id="analysisExchangeDialog"/);
   assert.match(html, /id="exchangeJsonPreview"/);
-  assert.match(html, /id="createAnalysisBundleButton"[^>]*>Skapa lokal JSON-fil/);
-  assert.match(html, /id="downloadAnalysisAgainButton"[^>]*>Hämta igen/);
+  assert.match(html, /id="createAnalysisBundleButton"[^>]*>Visa text för kopiering/);
+  assert.match(html, /id="analysisExchangeText"[^>]*readonly/);
+  assert.match(html, /id="copyAnalysisExchangeButton"[^>]*>Kopiera text/);
+  assert.match(html, /id="downloadAnalysisAgainButton"[^>]*>Spara som JSON-fil/);
   assert.match(app, /state\.analysisExchange\.lastBundleBlob/);
-  assert.match(app, /downloadBlob\(blob, preview\.fileName\)/);
+  assert.doesNotMatch(app, /appendAnalysisExchangeAudit\("export"[\s\S]{0,300}downloadBlob\(blob, preview\.fileName\)/);
+  assert.match(app, /writeClipboardText\(elements\.analysisExchangeText\.value/);
 });
 
 test("profilerna följer den låsta integritetspolicyn", () => {
@@ -83,8 +86,11 @@ test("bundle-ID och digest binds lokalt utan källhash i UI-paketet", () => {
 });
 
 test("extern vägledning är separat, osignerad och aldrig autoapplicerad", () => {
-  assert.match(html, /id="importGuidanceButton"[^>]*>Importera vägledning från gAIa/);
-  assert.match(html, /<h3 id="externalGuidanceTitle">Extern vägledning<\/h3>/);
+  assert.match(html, /id="guidanceTextInput"/);
+  assert.match(html, /id="pasteGuidanceButton"[^>]*>Klistra in text/);
+  assert.match(html, /id="processGuidanceTextButton"[^>]*>Granska vägledning/);
+  assert.match(html, /<h3 id="externalGuidanceTitle">Vägledning från gAIa<\/h3>/);
+  assert.match(app, /function importGuidanceText\(text\)/);
   assert.match(app, /gAIa, osignerad, matchad/);
   assert.match(app, /guidanceStatus !== "matched"/);
   assert.match(app, /data-guidance-action="show"/);

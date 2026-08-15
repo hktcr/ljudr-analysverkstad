@@ -26,7 +26,7 @@
           </span>
           <span>
             <strong>LjudR</strong>
-            <small>Analysverkstad <span class="brand-version" id="appVersion" aria-label="Programversion">v1.0.0-rc.6</span></small>
+            <small>Analysverkstad <span class="brand-version" id="appVersion" aria-label="Programversion">v1.0.0-rc.7</span></small>
           </span>
         </a>
 
@@ -343,23 +343,34 @@
 
               <section class="analysis-exchange" id="analysisExchange" aria-labelledby="analysisExchangeTitle">
                 <div class="analysis-exchange-heading">
-                  <div><span class="eyebrow">Frivilligt lokalt utbyte</span><h2 id="analysisExchangeTitle">Analysunderlag för gAIa</h2><p>Skapa en granskad JSON-fil utan ljud. Appen ansluter inte till gAIa och laddar aldrig upp något automatiskt.</p></div>
+                  <div><span class="eyebrow">Frivilligt lokalt utbyte</span><h2 id="analysisExchangeTitle">Analysunderlag för gAIa</h2><p>Skapa granskad JSON-text utan ljud och kopiera den direkt till gAIa. Appen ansluter inte till gAIa och laddar aldrig upp något automatiskt.</p></div>
                   <span class="status-pill" id="exchangeCapabilityStatus">Kontrollerar</span>
                 </div>
                 <div class="analysis-exchange-actions">
-                  <button class="button button-primary" id="openAnalysisExportButton" type="button" disabled>Exportera analysunderlag för gAIa</button>
-                  <button class="button button-secondary" id="importGuidanceButton" type="button" disabled>Importera vägledning från gAIa</button>
+                  <button class="button button-primary" id="openAnalysisExportButton" type="button" disabled>Skapa analysunderlag för gAIa</button>
+                  <button class="button button-secondary" id="importGuidanceButton" type="button" disabled>Läs in vägledningsfil</button>
                   <input id="guidanceFileInput" type="file" accept=".json,application/json" hidden>
                 </div>
                 <p class="exchange-status-line" id="analysisExchangeStatus" role="status" aria-live="polite">Kör källanalysen innan ett underlag skapas.</p>
 
                 <article class="exchange-artifact" id="exchangeArtifact" hidden aria-labelledby="exchangeArtifactTitle">
-                  <div><span class="completion-mark" aria-hidden="true">✓</span><div><strong id="exchangeArtifactTitle">Analysunderlaget är klart</strong><small id="exchangeArtifactDetails"></small><code id="exchangeArtifactDigest"></code></div></div>
-                  <button class="button button-secondary button-small" id="downloadAnalysisAgainButton" type="button">Hämta igen</button>
+                  <div class="exchange-artifact-heading"><span class="completion-mark" aria-hidden="true">✓</span><div><strong id="exchangeArtifactTitle">Analysunderlaget är klart att kopiera</strong><small id="exchangeArtifactDetails"></small><code id="exchangeArtifactDigest"></code></div></div>
+                  <label class="exchange-text-label" for="analysisExchangeText">Text till gAIa</label>
+                  <textarea id="analysisExchangeText" class="exchange-textarea" readonly spellcheck="false" aria-label="Analysunderlag att kopiera till gAIa"></textarea>
+                  <div class="exchange-text-actions">
+                    <button class="button button-primary button-small" id="copyAnalysisExchangeButton" type="button">Kopiera text</button>
+                    <button class="button button-secondary button-small" id="downloadAnalysisAgainButton" type="button">Spara som JSON-fil</button>
+                  </div>
                 </article>
 
                 <section class="external-guidance" id="externalGuidance" aria-labelledby="externalGuidanceTitle">
-                  <div class="external-guidance-heading"><div><h3 id="externalGuidanceTitle">Extern vägledning</h3><p>Importerade råd visas separat och ändrar aldrig ljud eller kontroller automatiskt.</p></div><span class="guidance-origin" id="guidanceOriginStatus">Ingen fil importerad</span></div>
+                  <div class="external-guidance-heading"><div><h3 id="externalGuidanceTitle">Vägledning från gAIa</h3><p>Klistra in JSON-texten från gAIa. Råden visas separat och ändrar aldrig ljud eller kontroller automatiskt.</p></div><span class="guidance-origin" id="guidanceOriginStatus">Ingen text inläst</span></div>
+                  <label class="exchange-text-label" for="guidanceTextInput">Text från gAIa</label>
+                  <textarea id="guidanceTextInput" class="exchange-textarea" spellcheck="false" placeholder="Klistra in vägledningen här"></textarea>
+                  <div class="exchange-text-actions">
+                    <button class="button button-secondary button-small" id="pasteGuidanceButton" type="button" disabled>Klistra in text</button>
+                    <button class="button button-primary button-small" id="processGuidanceTextButton" type="button" disabled>Granska vägledning</button>
+                  </div>
                   <div class="guidance-verification" id="guidanceVerification" role="status">Vägledning måste matcha bundle-ID, analysdigest och den lokalt verifierade källfilen.</div>
                   <ol class="guidance-list" id="guidanceList"><li class="list-placeholder">Inga externa förslag</li></ol>
                 </section>
@@ -439,6 +450,23 @@
                   <label class="volume-control"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4Zm11.5.5a4 4 0 0 1 0 5l1.5 1.3a6 6 0 0 0 0-7.6l-1.5 1.3Zm2.8-2.5a8 8 0 0 1 0 10l1.5 1.3a10 10 0 0 0 0-12.6L18.3 7Z"/></svg><span class="visually-hidden">Medhörningsvolym</span><input id="monitorVolume" type="range" min="0" max="1" step="0.01" value="0.8"></label>
                 </div>
                 <audio id="audioPlayer" preload="metadata"></audio>
+              </article>
+
+              <article class="trim-window-card" aria-labelledby="trimWindowTitle">
+                <div class="trim-window-copy">
+                  <span class="eyebrow">Mållängd</span>
+                  <h2 id="trimWindowTitle">Placera ett exakt trimfönster</h2>
+                  <p>Standard är 20 minuter. Ange en annan längd och placera fönstret från startgränsen, runt spelhuvudet eller fram till slutgränsen.</p>
+                </div>
+                <div class="trim-window-controls">
+                  <label class="time-input-label">Fönsterlängd<input id="trimWindowDurationInput" class="time-input" type="text" inputmode="decimal" value="20:00.000" aria-describedby="trimWindowStatus"></label>
+                  <div class="trim-window-actions" role="group" aria-label="Placera trimfönstret">
+                    <button class="button button-secondary button-small" id="applyWindowFromStartButton" type="button">Från startgräns</button>
+                    <button class="button button-secondary button-small" id="applyWindowAtPlayheadButton" type="button">Runt spelhuvudet</button>
+                    <button class="button button-secondary button-small" id="applyWindowToEndButton" type="button">Till slutgräns</button>
+                  </div>
+                  <p id="trimWindowStatus" class="trim-window-status" role="status" aria-live="polite">Mållängd: 20:00.000</p>
+                </div>
               </article>
 
               <div class="trim-control-grid">
@@ -671,7 +699,7 @@
     <dialog class="exchange-dialog" id="analysisExchangeDialog" aria-labelledby="analysisExchangeDialogTitle">
       <form method="dialog" class="exchange-dialog-shell" id="analysisExchangeForm">
         <div class="dialog-header">
-          <div><span class="eyebrow">Integritetsgranskning</span><h2 id="analysisExchangeDialogTitle">Exportera analysunderlag för gAIa</h2><p>Välj exakt vad den lokala JSON-filen ska innehålla.</p></div>
+          <div><span class="eyebrow">Integritetsgranskning</span><h2 id="analysisExchangeDialogTitle">Skapa analysunderlag för gAIa</h2><p>Välj exakt vad JSON-texten ska innehålla innan den visas för kopiering.</p></div>
           <button class="icon-button" id="closeAnalysisExchangeButton" type="button" aria-label="Stäng exportgranskningen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6.4 5 5.6 5.6L17.6 5 19 6.4 13.4 12l5.6 5.6-1.4 1.4-5.6-5.6L6.4 19 5 17.6l5.6-5.6L5 6.4 6.4 5Z"/></svg></button>
         </div>
         <div class="exchange-dialog-content">
@@ -696,7 +724,7 @@
         <div class="dialog-actions exchange-dialog-actions">
           <button class="button button-quiet" id="cancelAnalysisExchangeButton" type="button">Avbryt</button>
           <button class="button button-secondary" id="refreshAnalysisPreviewButton" type="button">Uppdatera preview</button>
-          <button class="button button-primary" id="createAnalysisBundleButton" type="button">Skapa lokal JSON-fil</button>
+          <button class="button button-primary" id="createAnalysisBundleButton" type="button">Visa text för kopiering</button>
         </div>
       </form>
     </dialog>

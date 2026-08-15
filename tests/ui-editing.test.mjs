@@ -8,6 +8,17 @@ const html = await readFile(resolve(root, "index.html"), "utf8");
 const app = await readFile(resolve(root, "src/app.js"), "utf8");
 const css = await readFile(resolve(root, "styles.css"), "utf8");
 
+test("trimfönstret har 20 minuter som redigerbart standardvärde", () => {
+  assert.match(html, /id="trimWindowDurationInput"[^>]*value="20:00\.000"/);
+  assert.match(html, /id="applyWindowFromStartButton"/);
+  assert.match(html, /id="applyWindowAtPlayheadButton"/);
+  assert.match(html, /id="applyWindowToEndButton"/);
+  assert.match(app, /trimWindowSeconds:\s*20 \* 60/);
+  assert.match(app, /function applyTrimWindow\(anchor\)/);
+  assert.match(app, /Math\.min\(state\.trimWindowSeconds, sourceDuration\)/);
+  assert.match(app, /trimWindowSeconds: state\.trimWindowSeconds/);
+});
+
 test("toningar är valfria, flexibla och har stora iPad-reglage", () => {
   assert.match(html, /id="fadeInToggle"/);
   assert.match(html, /id="fadeOutToggle"/);
