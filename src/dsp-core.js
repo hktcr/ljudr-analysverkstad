@@ -9,7 +9,7 @@ import { decodeSampleAt, inspectWav, parseWavHeader as parseSharedWavHeader } fr
 import { sha256Blob } from "./sha256.js";
 import { localGainFactorAtFrame, normalizeLocalGainRegions } from "./local-gain.js";
 
-export const ENGINE_VERSION = "1.0.0-rc.16";
+export const ENGINE_VERSION = "1.0.0-rc.18";
 
 export const DEFAULT_PEAK_HANDLING = Object.freeze({
   enabled: false,
@@ -1489,6 +1489,109 @@ export async function analyzeSpectralDiagnostics(blob, suppliedOptions = {}, onP
     windows,
     reviewRegions,
     interpretation: "Försiktig, deterministiskt samplad screening av möjlig lågfrekvent störning. Innehåll över 120 Hz vägs in för att minska risken att naturligt vindljud i grenar misstolkas. Inte full spektralanalys, källidentifiering, felbesked eller EQ-rekommendation.",
+  };
+}
+
+function fftMagnitudes(samples) {
+  const size = samples.length;
+  const real = new Float64Array(size);
+  const imaginary = new Float64Array(size);
+  for (let index = 0; index < size; index += 1) {
+    const window = 0.5 - 0.5 * Math.cos((2 * Math.PI * index) / Math.max(1, size - 1));
+    real[index] = (Number.isFinite(samples[index]) ? samples[index] : 0) * window;
+  }
+  for (let index = 1, reversed = 0; index < size; index += 1) {
+    let bit = size >> 1;
+    while (reversed & bit) { reversed ^= bit; bit >>= 1; }
+    reversed ^= bit;
+    if (index < reversed) {
+      const value = real[index]; real[index] = real[reversed]; real[reversed] = value;
+    }
+  }
+  for (let length = 2; length <= size; length <<= 1) {
+    const angle = -2 * Math.PI / length;
+    const stepReal = Math.cos(angle);
+    const stepImaginary = Math.sin(angle);
+    for (let offset = 0; offset < size; offset += length) {
+      let twiddleReal = 1;
+      let twiddleImaginary = 0;
+      for (let index = 0; index < length / 2; index += 1) {
+        const even = offset + index;
+        const odd = even + length / 2;
+        const oddReal = real[odd] * twiddleReal - imaginary[odd] * twiddleImaginary;
+        const oddImaginary = real[odd] * twiddleImaginary + imaginary[odd] * twiddleReal;
+        real[odd] = real[even] - oddReal;
+        imaginary[odd] = imaginary[even] - oddImaginary;
+        real[even] += oddReal;
+        imaginary[even] += oddImaginary;
+        const nextReal = twiddleReal * stepReal - twiddleImaginary * stepImaginary;
+        twiddleImaginary = twiddleReal * stepImaginary + twiddleImaginary * stepReal;
+        twiddleReal = nextReal;
+      }
+    }
+  }
+  const magnitudes = new Float32Array(size / 2);
+  const scale = 4 / size;
+  for (let index = 0; index < magnitudes.length; index += 1) {
+    magnitudes[index] = finiteDb(Math.hypot(real[index], imaginary[index]) * scale, -140);
+  }
+  return magnitudes;
+}
+
+export async function analyzeSpectrogram(blob, suppliedOptions = {}, onProgress = () => {}) {
+  const inspected = await inspectWav(blob);
+  const { format } = inspected;
+  const startFrame = Math.min(inspected.frameCount, Math.max(0, Math.floor(Number(suppliedOptions.startFrame) || 0)));
+  const endFrame = Math.min(inspected.frameCount, Math.max(startFrame, Math.ceil(Number(suppliedOptions.endFrame ?? inspected.frameCount) || 0)));
+  if (endFrame <= startFrame) throw new Error("Spektrogrammet kräver ett ljudintervall.");
+  const fftSizeCandidate = Math.round(Number(suppliedOptions.fftSize) || 4096);
+  const fftSize = [1024, 2048, 4096, 8192].includes(fftSizeCandidate) ? fftSizeCandidate : 4096;
+  const columns = Math.max(32, Math.min(512, Math.round(Number(suppliedOptions.columns) || 320)));
+  const binCount = fftSize / 2;
+  const floorDb = Math.max(-140, Math.min(-40, Number(suppliedOptions.floorDb) || -100));
+  const channels = Math.min(2, format.channels);
+  const channelData = Array.from({ length: channels }, () => new Uint8Array(columns * binCount));
+  const bytesPerSample = format.bitsPerSample / 8;
+  const selectedFrames = endFrame - startFrame;
+  for (let column = 0; column < columns; column += 1) {
+    if (suppliedOptions.shouldCancel?.()) throw new DOMException("Spektrogrammet avbröts.", "AbortError");
+    const center = startFrame + Math.round(((column + 0.5) / columns) * selectedFrames);
+    const frameStart = Math.max(startFrame, Math.min(endFrame - fftSize, center - Math.floor(fftSize / 2)));
+    const readableFrames = Math.max(0, Math.min(fftSize, endFrame - frameStart));
+    const byteStart = inspected.data.dataOffset + frameStart * format.blockAlign;
+    const bytes = new Uint8Array(await blob.slice(byteStart, byteStart + readableFrames * format.blockAlign).arrayBuffer());
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    for (let channel = 0; channel < channels; channel += 1) {
+      const samples = new Float64Array(fftSize);
+      for (let frame = 0; frame < readableFrames; frame += 1) {
+        samples[frame] = decodeSampleAt(view, frame * format.blockAlign + channel * bytesPerSample, format);
+      }
+      const magnitudes = fftMagnitudes(samples);
+      const target = channelData[channel];
+      for (let bin = 0; bin < binCount; bin += 1) {
+        const normalized = Math.max(0, Math.min(1, (magnitudes[bin] - floorDb) / -floorDb));
+        target[column * binCount + bin] = Math.round(normalized * 255);
+      }
+    }
+    if (column % 4 === 0 || column === columns - 1) {
+      onProgress({ phase: "spectrogram", fraction: (column + 1) / columns, message: `Bygger lokal frekvensbild ${column + 1} av ${columns}` });
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+  }
+  return {
+    scope: "local-visible-range",
+    startSeconds: startFrame / format.sampleRate,
+    endSeconds: endFrame / format.sampleRate,
+    sampleRate: format.sampleRate,
+    channels,
+    columns,
+    binCount,
+    fftSize,
+    frequencyResolutionHz: format.sampleRate / fftSize,
+    timeResolutionSeconds: selectedFrames / format.sampleRate / columns,
+    floorDb,
+    windowFunction: "Hann",
+    channelData,
   };
 }
 

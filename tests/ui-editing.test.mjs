@@ -64,7 +64,7 @@ test("trimfönstret har 20 minuter som redigerbart standardvärde", () => {
   assert.match(app, /function applyNegativePeakCeiling/);
   assert.match(app, /const reduction = Math\.min\(0, target - peak\)/);
   assert.match(html, /id="gainNumber"[^>]*min="-60"/);
-  assert.equal((html.match(/data-diagram-action="toggle"/g) || []).length, 2);
+  assert.equal((html.match(/data-diagram-action="toggle"/g) || []).length, 4);
   assert.match(html, /data-diagram-action="play-visible"/);
   assert.match(html, /data-diagram-action="play-selection"/);
   assert.match(app, /\$\$\('\[data-diagram-time\]'\)/);
@@ -93,6 +93,19 @@ test("trimfönstret har 20 minuter som redigerbart standardvärde", () => {
   assert.match(css, /\.peak-guide-grid\s*\{[^}]*grid-template-columns:\s*repeat\(2/s);
   assert.match(css, /\.peak-category-grid\s*\{[^}]*grid-template-columns:\s*repeat\(2/s);
   assert.match(css, /\.peak-study-dialog\s*\{/);
+  for (const id of ["openSpectrogramWorkspaceButton", "spectrogramCard", "runSpectrogramButton", "spectrogramMaxFrequency", "spectrogramFloor", "spectrogramCanvas", "spectrogramStatus"]) assert.match(html, new RegExp(`id="${id}"`));
+  assert.match(app, /function requestSpectrogram\(\)/);
+  assert.match(app, /function drawSpectrogram\(\)/);
+  assert.match(app, /type:\s*"spectrogram"/);
+  assert.match(css, /\.spectrogram-wrap\s*\{/);
+  for (const id of ["undoEditButton", "redoEditButton"]) assert.match(html, new RegExp(`id="${id}"`));
+  assert.match(app, /function recordEditHistory\(/);
+  assert.match(app, /function undoEditChange\(/);
+  assert.match(app, /function redoEditChange\(/);
+  assert.match(html, /LjudR klipper inte mitt i en tagning/);
+  assert.match(html, /Öppna Ferrite-filen som en ny källa i LjudR/i);
+  assert.match(css, /--navy:\s*#021f4c/i);
+  assert.match(css, /--gold:\s*#eb5b08/i);
   for (const id of ["openFullAnalysisButton", "fullAnalysisDialog", "fullAnalysisContent"]) assert.match(html, new RegExp(`id="${id}"`));
   assert.match(app, /function renderFullAnalysis\(\)/);
   assert.match(app, /Olika typer av toppar och klippning/);
@@ -155,7 +168,7 @@ test("iPadflödet har fyra arbetssteg, en huvudåtgärd och fokuserade moduler",
   assert.equal((workflowNav.match(/class="mode-tab" data-mode="(?:analyze|trim|preflight|export)"/g) || []).length, 4);
   assert.match(workflowNav, /data-mode="open"[^>]*hidden/);
   for (const id of ["workflowActionDock", "workflowPrimaryAction", "workspaceModuleDialog", "sessionPlayButton", "sessionSafetyStatus"]) assert.match(html, new RegExp(`id="${id}"`));
-  for (const target of ["assessmentContext", "analysisTimelineCard,canvasTextAlternative", "analysisTimelineCard,canvasTextAlternative,deepMeasurements", "analysisInspector", "trimTimelineCard,trimWindowCard,trimControlGrid", "fadeModule", "gainModule,recommendationWorkbench", "trimAuditionModule,auditionStatus,monitorModule", "metadataModule", "publicationModule"]) assert.match(html, new RegExp(`data-workspace-target="${target}"`));
+  for (const target of ["assessmentContext", "analysisTimelineCard,canvasTextAlternative", "analysisTimelineCard,canvasTextAlternative,deepMeasurements,spectrogramCard", "analysisInspector", "trimTimelineCard,trimWindowCard,trimControlGrid", "fadeModule", "gainModule,recommendationWorkbench", "trimAuditionModule,auditionStatus,monitorModule", "metadataModule", "publicationModule"]) assert.match(html, new RegExp(`data-workspace-target="${target}"`));
   assert.match(html, /data-analysis-module="rumble"/);
   assert.ok(html.indexOf('id="exportAudioButton"') < html.indexOf('id="metadataModule"'), "exportåtgärden ska ligga före metadata i DOM-ordningen");
   assert.equal((html.match(/id="exportAudioButton"/g) || []).length, 1);
@@ -181,10 +194,24 @@ test("iPadflödet har fyra arbetssteg, en huvudåtgärd och fokuserade moduler",
   assert.match(projectRestore, /if \(!monitorSafetyForPreview\(\)\.ready\)/);
   assert.match(projectRestore, /\$\$\('dialog\[open\]'\)/);
   assert.match(projectRestore, /setMode\("analyze"\)/);
+  for (const id of ["fullscreenButton", "analysisCanvas", "trimCanvas", "preflightCanvas"]) assert.match(html, new RegExp(`id="${id}"`));
+  assert.match(html, />Grundkontroll</);
+  assert.match(html, />Lyssna och trimma</);
+  assert.match(html, />Analysera och åtgärda</);
+  assert.equal((html.match(/class="waveform-decision-strip/g) || []).length, 3);
+  assert.match(app, /async function toggleAppFullscreen\(\)/);
+  assert.match(app, /document\.fullscreenElement \|\| document\.webkitFullscreenElement/);
+  assert.match(app, /document\.body\.classList\.add\("app-focus-mode"\)/);
+  assert.match(app, /function renderWaveformDecisionStrips\(\)/);
+  assert.match(app, /processedCanvas[\s\S]*state\.regionAnalysis\?\.processed/);
+  assert.match(app, /context\.strokeStyle = "rgba\(244,92,72,\.98\)"/);
+  assert.match(css, /\[data-panel="analyze"\]\.has-analysis #analysisTimelineCard:not\(\.is-module-open\)/);
+  assert.match(css, /\[data-panel="trim"\] #trimTimelineCard:not\(\.is-module-open\)/);
+  assert.match(css, /\.preflight-waveform \.timeline-canvas/);
 });
 
 test("rumble öppnas med valbar screening, vågform och fyndlager", () => {
-  assert.match(html, /data-analysis-module="rumble"[^>]*data-workspace-target="analysisTimelineCard,canvasTextAlternative,deepMeasurements"/);
+  assert.match(html, /data-analysis-module="rumble"[^>]*data-workspace-target="analysisTimelineCard,canvasTextAlternative,deepMeasurements,spectrogramCard"/);
   assert.match(html, /id="runSpectralDiagnosticsButton"/);
   for (const layer of ["all", "rumble", "float", "mono", "editorial"]) assert.match(html, new RegExp(`data-marker-layer="${layer}"`));
   assert.match(app, /renderPublicationCard\(\);\s*renderSpectralDiagnostics\(\);\s*scheduleCanvasRender\(\);/);

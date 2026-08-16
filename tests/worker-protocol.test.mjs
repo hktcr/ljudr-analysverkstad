@@ -4,9 +4,9 @@ import { readFile } from "node:fs/promises";
 
 const read = path => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("analysworkern har jobId cancel stale-filter och fyra deterministiska operationer", async () => {
+test("analysworkern har jobId cancel stale-filter och fem deterministiska operationer", async () => {
   const source = await read("src/analysis-worker.js");
-  for (const operation of ["analyze", "analyze-region", "waveform-detail", "spectral-diagnostics"]) assert.match(source, new RegExp(`"${operation}"`));
+  for (const operation of ["analyze", "analyze-region", "waveform-detail", "spectral-diagnostics", "spectrogram"]) assert.match(source, new RegExp(`"${operation}"`));
   assert.match(source, /latestByOperation/);
   assert.match(source, /cancelledJobs/);
   assert.match(source, /\{ type, jobId, operation/);

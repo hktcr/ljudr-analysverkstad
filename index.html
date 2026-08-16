@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <meta name="theme-color" content="#13243b">
+    <meta name="theme-color" content="#021f4c">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="LjudR">
@@ -26,7 +26,7 @@
           </span>
           <span>
             <strong>LjudR</strong>
-            <small>Analysverkstad <span class="brand-version" id="appVersion" aria-label="Programversion">v1.0.0-rc.16</span></small>
+            <small>Analysverkstad <span class="brand-version" id="appVersion" aria-label="Programversion">v1.0.0-rc.18</span></small>
           </span>
         </a>
 
@@ -38,6 +38,10 @@
           <button class="button button-quiet header-button" type="button" id="saveProjectButton" disabled>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h12l2 2v16H5V3Zm3 2v5h8V5H8Zm0 9v5h8v-5H8Z"/></svg>
             <span>Spara projekt</span>
+          </button>
+          <button class="button button-quiet header-button" type="button" id="fullscreenButton" aria-pressed="false" title="Visa hela verktyget i fullskärm">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6v2H6v4H4V4Zm10 0h6v6h-2V6h-4V4ZM4 14h2v4h4v2H4v-6Zm14 0h2v6h-6v-2h4v-4Z"/></svg>
+            <span id="fullscreenButtonLabel">Fullskärm</span>
           </button>
           <button class="icon-button" type="button" id="helpButton" aria-label="Öppna hjälp">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 17.5a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Zm0-4.25a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5Zm.12-8.75c-2.06 0-3.3 1.12-3.48 2.96l2.02.23c.11-.92.58-1.37 1.39-1.37.72 0 1.22.4 1.22 1.08 0 .56-.26.89-1.03 1.43-1.08.76-1.36 1.43-1.31 2.72h1.89c-.03-.74.14-1.06.88-1.58 1.1-.78 1.64-1.51 1.64-2.68 0-1.69-1.3-2.79-3.22-2.79Z"/></svg>
@@ -51,15 +55,15 @@
         </button>
         <span class="step-line" aria-hidden="true"></span>
         <button type="button" class="mode-tab" data-mode="analyze" disabled>
-          <span class="step-number">1</span><span><strong>Källanalys</strong><small id="modeStatusAnalyze">Inte analyserad</small></span>
+          <span class="step-number">1</span><span><strong>Grundkontroll</strong><small id="modeStatusAnalyze">Inte förberedd</small></span>
         </button>
         <span class="step-line" aria-hidden="true"></span>
         <button type="button" class="mode-tab" data-mode="trim" disabled>
-          <span class="step-number">2</span><span><strong>Granska och redigera</strong><small id="modeStatusTrim">Väntar</small></span>
+          <span class="step-number">2</span><span><strong>Lyssna och trimma</strong><small id="modeStatusTrim">Väntar</small></span>
         </button>
         <span class="step-line" aria-hidden="true"></span>
         <button type="button" class="mode-tab" data-mode="preflight" disabled>
-          <span class="step-number">3</span><span><strong>Analysera exporturval</strong><small id="modeStatusPreflight">Väntar</small></span>
+          <span class="step-number">3</span><span><strong>Analysera och åtgärda</strong><small id="modeStatusPreflight">Väntar</small></span>
         </button>
         <span class="step-line" aria-hidden="true"></span>
         <button type="button" class="mode-tab" data-mode="export" disabled>
@@ -184,13 +188,13 @@
               <div class="section-heading">
                 <div>
                   <span class="eyebrow">Steg 1</span>
-                  <h1 id="analyzeTitle">Analysera inspelningen</h1>
-                  <p>Mätvärden beskriver signalen. De avgör inte hur ett ljudlandskap ska låta.</p>
+                  <h1 id="analyzeTitle">Grundkontroll före lyssning</h1>
+                  <p>Verktyget läser källan, bygger en tvåkanalig vågform och säkrar medhörningen. Därefter lyssnar du och väljer vilket material som ska behållas.</p>
                 </div>
                 <div class="heading-actions">
                   <button class="button button-primary" type="button" id="analyzeButton">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18h2V9H4v9Zm4 0h2V5H8v13Zm4 0h2v-7h-2v7Zm4 0h2V3h-2v15Zm4 0h2v-4h-2v4Z"/></svg>
-                    Starta analys
+                    Kör grundkontroll
                   </button>
                   <button class="button button-secondary" type="button" id="cancelAnalysisButton" hidden>Avbryt analys</button>
                 </div>
@@ -277,7 +281,7 @@
                   <button class="analysis-module-card" type="button" data-analysis-module="loudness" data-state="waiting" disabled><span class="module-status"><i aria-hidden="true">○</i><strong>Inte analyserad</strong></span><span><b>Ljudstyrka</b><small>LUFS och vald arbetsorientering</small></span><em>Detaljer</em></button>
                   <button class="analysis-module-card" type="button" data-analysis-module="dynamics" data-state="waiting" disabled><span class="module-status"><i aria-hidden="true">○</i><strong>Inte analyserad</strong></span><span><b>Dynamik</b><small>LRA, PLR och transientmarginal</small></span><em>Detaljer</em></button>
                   <button class="analysis-module-card" type="button" data-analysis-module="stereo" data-state="waiting" disabled><span class="module-status"><i aria-hidden="true">○</i><strong>Inte analyserad</strong></span><span><b>Stereo och mono</b><small>Balans, korrelation och monorisk</small></span><em>Detaljer</em></button>
-                  <button class="analysis-module-card" type="button" data-analysis-module="rumble" data-workspace-target="analysisTimelineCard,canvasTextAlternative,deepMeasurements" data-workspace-title="Rumble, 50 Hz och vågform" data-workspace-description="Kör screeningen, se fynden markerade över vågformen och öppna varje område för visning eller lyssning." data-state="waiting" disabled><span class="module-status"><i aria-hidden="true">○</i><strong>Inte analyserad</strong></span><span><b>Rumble och störningar</b><small>Samplad lågfrekvensscreening och 50 Hz</small></span><em>Öppna</em></button>
+                  <button class="analysis-module-card" type="button" data-analysis-module="rumble" data-workspace-target="analysisTimelineCard,canvasTextAlternative,deepMeasurements,spectrogramCard" data-workspace-title="Rumble, 50 Hz, vågform och spektrogram" data-workspace-description="Kör screeningen, se fynden markerade över vågformen, bygg lokal frekvensbild och öppna varje område för visning eller lyssning." data-state="waiting" disabled><span class="module-status"><i aria-hidden="true">○</i><strong>Inte analyserad</strong></span><span><b>Rumble och störningar</b><small>Samplad lågfrekvensscreening, 50 Hz och lokal frekvensbild</small></span><em>Öppna</em></button>
                   <button class="analysis-module-card" type="button" data-analysis-module="review" data-state="waiting" disabled><span class="module-status"><i aria-hidden="true">○</i><strong>Inte analyserad</strong></span><span><b>Mänsklig granskning</b><small>Markörer, lyssning och redaktionella frågor</small></span><em>Detaljer</em></button>
                 </div>
               </section>
@@ -287,7 +291,8 @@
                 <div class="step-module-grid">
                   <button class="step-module-card" type="button" data-workspace-target="assessmentContext" data-workspace-title="Bedömningskontext" data-workspace-description="Välj inspelningstyp och användning. Valet ändrar bara tolkningen, aldrig mätdata eller ljud."><span class="module-symbol" aria-hidden="true">◎</span><span><strong>Bedömningskontext</strong><small id="analysisContextSummary">Lågmält soundscape · publicering</small></span><em>Öppna</em></button>
                   <button class="step-module-card" type="button" data-workspace-target="analysisTimelineCard,canvasTextAlternative" data-workspace-title="Tidslinje och lyssning" data-workspace-description="Vågform, loudness, toppar, stereo och markörer i en fokuserad arbetsyta."><span class="module-symbol" aria-hidden="true">⌁</span><span><strong>Tidslinje och lyssning</strong><small>Studera och spela valda områden</small></span><em>Öppna</em></button>
-                  <button class="step-module-card" id="openMeasurementsWorkspaceButton" type="button" data-workspace-target="analysisTimelineCard,canvasTextAlternative,deepMeasurements" data-workspace-title="Mätvärden, rumble och vågform" data-workspace-description="Objektiva värden, samplad rumble- och 50 Hz-screening samt valbara fyndlager över vågformen."><span class="module-symbol" aria-hidden="true">ƒ</span><span><strong>Mätvärden och rumble</strong><small id="analysisRumbleSummary">Screening inte körd</small></span><em>Öppna</em></button>
+                  <button class="step-module-card" id="openMeasurementsWorkspaceButton" type="button" data-workspace-target="analysisTimelineCard,canvasTextAlternative,deepMeasurements,spectrogramCard" data-workspace-title="Mätvärden, rumble, vågform och spektrogram" data-workspace-description="Objektiva värden, samplad rumble- och 50 Hz-screening, valbara fyndlager och lokal frekvensbild."><span class="module-symbol" aria-hidden="true">ƒ</span><span><strong>Mätvärden och rumble</strong><small id="analysisRumbleSummary">Screening inte körd</small></span><em>Öppna</em></button>
+                  <button class="step-module-card" id="openSpectrogramWorkspaceButton" type="button" data-workspace-target="spectrogramCard" data-workspace-title="Lokalt spektrogram" data-workspace-description="Se frekvensinnehållet över tid i vänster och höger kanal. Vyn skapas lokalt för det synliga tidsområdet och ingår aldrig i analysutbytet."><span class="module-symbol" aria-hidden="true">▥</span><span><strong>Spektrogram</strong><small id="spectrogramModuleSummary">Inte beräknat</small></span><em>Öppna</em></button>
                   <button class="step-module-card" type="button" data-workspace-target="analysisInspector" data-workspace-title="Observationer och markörer" data-workspace-description="Lyssna, filtrera och bedöm tekniska, redaktionella och integritetsrelaterade granskningspunkter."><span class="module-symbol" aria-hidden="true">!</span><span><strong>Granskningskö</strong><small id="analysisReviewSummary">Väntar på analys</small></span><em>Öppna</em></button>
                   <button class="step-module-card" type="button" data-workspace-target="analysisExchange" data-workspace-title="Analysunderlag för gAIa" data-workspace-description="Frivilligt textutbyte utan ljud. Inget kopieras eller tillämpas automatiskt."><span class="module-symbol" aria-hidden="true">{ }</span><span><strong>Analysutbyte</strong><small>JSON, digest och integritetsval</small></span><em>Öppna</em></button>
                 </div>
@@ -330,6 +335,12 @@
                   <button class="marker-layer-chip" type="button" data-marker-layer="mono" aria-pressed="false">Stereo och mono</button>
                   <button class="marker-layer-chip" type="button" data-marker-layer="editorial" aria-pressed="false">Redaktionellt</button>
                 </div>
+                <section class="waveform-decision-strip" aria-label="Toppstatus och nästa åtgärd">
+                  <article data-state="waiting"><span>Källans högsta topp</span><strong data-waveform-source-peak>Inte analyserad</strong><small data-waveform-source-scope>Gäller källfilen</small></article>
+                  <article data-state="waiting"><span>Möjlig befintlig klippning</span><strong data-waveform-clip-status>Kan inte avgöras</strong><small data-waveform-clip-detail>Gain kan inte reparera redan uppkommen distorsion</small></article>
+                  <article data-state="waiting"><span>Leveranstopp</span><strong data-waveform-delivery-status>Exporturvalet är inte beräknat</strong><small data-waveform-delivery-detail>Går från åtgärd till pass först efter ny förkontroll</small></article>
+                  <div class="waveform-next-actions"><span>Vad vill du göra?</span><button class="button button-secondary button-small" type="button" data-waveform-action="lower-all">Sänk hela urvalet till valt tak</button><button class="button button-secondary button-small" type="button" data-waveform-action="local-peak">Åtgärda enstaka topp</button><button class="button button-quiet button-small" type="button" data-waveform-action="preflight">Analysera resultatet</button></div>
+                </section>
                 <div class="canvas-wrap">
                   <canvas id="analysisCanvas" class="timeline-canvas" role="img" aria-label="Tidslinje med separata spår för vänster och höger kanal, loudness, toppnivåer och markörer"></canvas>
                   <div class="canvas-empty" id="analysisCanvasEmpty">
@@ -346,6 +357,24 @@
                 </div>
                 <div class="detail-status" id="detailStatus" role="status"><span class="status-dot"></span><span>Översiktsdata</span><button class="text-button" id="cancelDetailButton" type="button" hidden>Avbryt detaljläsning</button></div>
                 <div class="time-axis" id="analysisTimeAxis" aria-hidden="true"></div>
+              </article>
+
+              <article class="spectrogram-card module-detail-target" id="spectrogramCard" aria-labelledby="spectrogramTitle">
+                <div class="card-toolbar">
+                  <div><span class="eyebrow">Lokal frekvensbild</span><h2 id="spectrogramTitle">Spektrogram för synligt tidsområde</h2><p>Visar frekvensinnehåll över tid. Ljusare färg betyder högre nivå inom den valda skalan.</p></div>
+                  <button class="button button-primary" id="runSpectrogramButton" type="button" disabled>Bygg spektrogram</button>
+                </div>
+                <div class="spectrogram-controls">
+                  <label>Högsta frekvens<select id="spectrogramMaxFrequency"><option value="500">500 Hz, rumble</option><option value="2000">2 kHz</option><option value="12000">12 kHz</option><option value="nyquist" selected>Hela frekvensområdet</option></select></label>
+                  <label>Visningsgolv<select id="spectrogramFloor"><option value="-60">-60 dBFS</option><option value="-80">-80 dBFS</option><option value="-100" selected>-100 dBFS</option></select></label>
+                  <output id="spectrogramStatus" role="status">Välj ett område i vågformen och starta beräkningen.</output>
+                </div>
+                <div class="spectrogram-wrap">
+                  <canvas id="spectrogramCanvas" role="img" aria-label="Spektrogram med separata fält för vänster och höger kanal"></canvas>
+                  <div class="canvas-empty" id="spectrogramEmpty"><span>Spektrogrammet skapas först när du väljer det</span></div>
+                </div>
+                <div class="diagram-transport diagram-transport-dark" aria-label="Provlyssna spektrogrammets område"><button type="button" data-diagram-action="back">-10 s</button><button type="button" data-diagram-action="toggle" class="diagram-play">Spela</button><button type="button" data-diagram-action="forward">+10 s</button><button type="button" data-diagram-action="play-visible">Spela synlig vy</button><output data-diagram-time>00:00.000</output></div>
+                <p class="method-note"><strong>Metod:</strong> Hannfönstrad lokal FFT. Upplösning och tidssteg visas efter beräkning. Spektrogrammet är ett visuellt beslutsunderlag, inte automatisk källidentifiering. Det exporteras aldrig till gAIa.</p>
               </article>
 
               <details class="canvas-text-alternative module-detail-target" id="canvasTextAlternative">
@@ -449,6 +478,7 @@
                         <div><dt><span>Mono fold-down, sample peak</span><button class="info-dot" type="button" data-help-topic="correlation" aria-label="Om mono fold-downs sample peak">i</button></dt><dd id="deepMonoPeak">saknas</dd></div>
                         <div><dt><span>Negativ korrelation</span><button class="info-dot" type="button" data-help-topic="correlation" aria-label="Om varaktigt negativ stereokorrelation">i</button></dt><dd id="deepNegativeCorrelation">saknas</dd></div>
                       </dl>
+                      <p class="method-note"><strong>Avsiktlig avgränsning:</strong> kanalbalansen mäts men LjudR ändrar inte vänster och höger kanal separat. En sådan korrigering förändrar stereoperspektivet och görs därför i ett montageverktyg, följt av en ny analys i LjudR.</p>
                     </section>
                     <section class="measurement-group">
                       <h3>Signalintegritet</h3>
@@ -556,7 +586,7 @@
           <div class="workspace-grid">
             <div class="workspace-main">
               <div class="section-heading">
-                <div><span class="eyebrow">Steg 2</span><h1 id="trimTitle">Granska, redigera och lyssna</h1><p>Trimma början och slutet, välj global gain eller skapa uttryckliga stereolänkade lokala gainkurvor för enstaka händelser.</p></div>
+                <div><span class="eyebrow">Steg 2</span><h1 id="trimTitle">Lyssna och välj material</h1><p>Lyssna igenom, placera A och B och klipp bort allt utanför. Analysera sedan det valda materialet innan du fattar nivå- och toppbeslut.</p></div>
                 <span class="read-only-pill"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h12v16H6V4Zm2 2v12h8V6H8Z"/></svg>Originalet påverkas inte</span>
               </div>
 
@@ -566,7 +596,7 @@
               </section>
 
               <section class="step-module-board" aria-labelledby="editModulesTitle">
-                <div class="step-module-heading"><div><span class="eyebrow">Redigeringsmoduler</span><h2 id="editModulesTitle">En uppgift i taget</h2></div><p>Varje modul öppnas i helskärm. Alla ändringar är synliga, reversibla och gör förkontrollen inaktuell.</p></div>
+                <div class="step-module-heading"><div><span class="eyebrow">Arbetsmoduler</span><h2 id="editModulesTitle">Börja med trimning</h2></div><div class="edit-history-actions" aria-label="Ångra redigering"><button class="button button-quiet button-small" id="undoEditButton" type="button" disabled>Ångra</button><button class="button button-quiet button-small" id="redoEditButton" type="button" disabled>Gör om</button></div><p>Välj och provlyssna A/B först. Nivå, toningar och lokala toppkurvor kan därefter justeras synligt och måste analyseras om.</p></div>
                 <div class="step-module-grid edit-module-grid">
                   <button class="step-module-card" type="button" data-workspace-target="trimTimelineCard,trimWindowCard,trimControlGrid" data-workspace-title="Trimning och exakt A/B" data-workspace-description="Lås upp, placera, provlyssna och tillämpa trimfönstret med samplingsprecisa gränser."><span class="module-symbol" aria-hidden="true">A·B</span><span><strong>Trimning</strong><small id="editTrimModuleSummary">Låst, hela källfilen</small></span><em>Öppna</em></button>
                   <button class="step-module-card" type="button" data-workspace-target="fadeModule" data-workspace-title="Linjära kanttoningar" data-workspace-description="Ställ in uttryckliga in- och uttoningar och provlyssna gränserna."><span class="module-symbol" aria-hidden="true">◿</span><span><strong>Toningar</strong><small id="editFadeModuleSummary">Av</small></span><em>Öppna</em></button>
@@ -599,6 +629,12 @@
                   <button class="legend-chip" type="button" data-track="correlation"><i class="legend-correlation"></i>Stereo och monorisk</button>
                   <button class="legend-chip is-on" type="button" data-track="markers"><i class="legend-markers"></i>Markörer</button>
                 </div>
+                <section class="waveform-decision-strip waveform-edit-strip" aria-label="Toppstatus efter redigering">
+                  <article data-state="waiting"><span>Källans högsta topp</span><strong data-waveform-source-peak>Inte analyserad</strong><small data-waveform-source-scope>Oförändrad referens</small></article>
+                  <article data-state="waiting"><span>Möjlig befintlig klippning</span><strong data-waveform-clip-status>Kan inte avgöras</strong><small data-waveform-clip-detail>Sänkning reparerar inte befintlig distorsion</small></article>
+                  <article data-state="waiting"><span>Aktuellt exporturval</span><strong data-waveform-delivery-status>Omberäkning krävs</strong><small data-waveform-delivery-detail>Visas exakt efter exporturvalsanalys</small></article>
+                  <div class="waveform-next-actions"><span>Nästa säkra åtgärd</span><button class="button button-secondary button-small" type="button" data-waveform-action="lower-all">Sänk hela urvalet till valt tak</button><button class="button button-secondary button-small" type="button" data-waveform-action="local-peak">Åtgärda enstaka topp</button><button class="button button-primary button-small" type="button" data-waveform-action="preflight">Analysera resultatet</button></div>
+                </section>
                 <div class="canvas-wrap canvas-wrap-trim">
                   <canvas id="trimCanvas" class="timeline-canvas" role="img" aria-label="Tidslinje med separata stereospår och trimgränser för början och slut" aria-describedby="trimCanvasInstructions"></canvas>
                   <div class="trim-handle-label trim-start-label" id="trimStartLabel">Start 00:00.000</div>
@@ -766,7 +802,7 @@
         <section class="mode-panel" data-panel="preflight" aria-labelledby="preflightTitle">
           <div class="preflight-workspace">
             <div class="section-heading">
-              <div><span class="eyebrow">Steg 3</span><h1 id="preflightTitle">Analysera aktuellt exporturval</h1><p>Källanalysen och exporturvalet hålls isär. Varje trimning, toning eller gainändring gör urvalsresultatet inaktuellt tills du kör denna kontroll igen.</p></div>
+              <div><span class="eyebrow">Steg 3</span><h1 id="preflightTitle">Analysera, förstå och åtgärda</h1><p>Nu mäts exakt det du har behållit. Bekräfta resultatet eller välj en synlig basal åtgärd. Kör sedan analysen igen tills leveransresultatet är begripligt och säkert.</p></div>
             </div>
             <section class="preflight-card" aria-labelledby="preflightStatusTitle">
               <div><span class="eyebrow">Exakt förkontroll</span><h2 id="preflightStatusTitle">Beräkning och utfall</h2></div>
@@ -780,6 +816,17 @@
                 <div><span>Källans loudness</span><strong id="preflightSourceLufs">saknas</strong></div>
                 <div><span>Exporturvalets loudness</span><strong id="preflightSelectionLufs">inte beräknat</strong></div>
               </div>
+              <section class="preflight-waveform" aria-labelledby="preflightWaveformTitle">
+                <div class="card-toolbar"><div><h3 id="preflightWaveformTitle">Vågform för valt material efter synliga ändringar</h3><span>Vänster och höger kanal · rött markerar nivå över 0 dBFS</span></div><button class="button button-quiet button-small" type="button" data-mode-link="trim">Ändra trim eller nivå</button></div>
+                <section class="waveform-decision-strip" aria-label="Resultat för valt material">
+                  <article data-state="waiting"><span>Källans högsta topp</span><strong data-waveform-source-peak>Inte analyserad</strong><small data-waveform-source-scope>Oförändrad referens</small></article>
+                  <article data-state="waiting"><span>Möjlig befintlig klippning</span><strong data-waveform-clip-status>Kan inte avgöras</strong><small data-waveform-clip-detail>Bedöms separat från leveransnivån</small></article>
+                  <article data-state="waiting"><span>Valt material efter ändringar</span><strong data-waveform-delivery-status>Analysera för att visa resultat</strong><small data-waveform-delivery-detail>Exakt resultat krävs efter varje ändring</small></article>
+                  <div class="waveform-next-actions"><span>Fortsätt härifrån</span><button class="button button-secondary button-small" type="button" data-waveform-action="lower-all">Sänk hela urvalet till valt tak</button><button class="button button-secondary button-small" type="button" data-waveform-action="local-peak">Åtgärda enstaka topp</button><button class="button button-primary button-small" type="button" data-waveform-action="preflight">Analysera igen</button></div>
+                </section>
+                <div class="canvas-wrap"><canvas id="preflightCanvas" class="timeline-canvas" role="img" aria-label="Tvåkanalig vågform för aktuellt exporturval efter trimning, toningar och gain"></canvas><div class="canvas-empty" id="preflightCanvasEmpty"><span>Vågformen visas efter analys av valt material</span></div></div>
+                <div class="diagram-transport diagram-transport-dark" aria-label="Provlyssna valt material"><button type="button" data-diagram-action="back">−10 s</button><button type="button" data-diagram-action="toggle" class="diagram-play">Spela</button><button type="button" data-diagram-action="forward">+10 s</button><button type="button" data-diagram-action="play-selection">Spela A till B</button><output data-diagram-time>00:00.000</output></div>
+              </section>
               <div class="preflight-actions"><button class="button button-primary" id="runPreflightButton" type="button">Analysera aktuellt exporturval</button><button class="button button-secondary" id="preflightBackButton" type="button">Tillbaka till redigering</button><button class="button button-secondary" id="preflightContinueButton" type="button" disabled>Fortsätt till export</button></div>
               <p class="fine-print">Förkontrollen är inte samma sak som verifiering. Den färdiga WAV-filen återöppnas och mäts först efter export.</p>
             </section>
@@ -842,6 +889,12 @@
               </fieldset>
 
               <p class="scope-note"><strong>Separata codecformat och direktpublicering ligger utanför verktyget.</strong> Spotify for Creators kan ta emot den verifierade WAV-mastern direkt. Använd Ferrite när avsnittet behöver interna klipp, montage eller separat codec-export.</p>
+              <details class="ferrite-roundtrip">
+                <summary>Arbetsflöde för interna klipp i Ferrite</summary>
+                <p><strong>LjudR klipper inte mitt i en tagning.</strong> Ett montage skapar en ny ljudkälla som måste analyseras på nytt.</p>
+                <ol><li>Markera hostning, fordon, signaler eller integritetskänsliga avsnitt i LjudR.</li><li>Spara projektet och använd markörernas tider som klippunderlag.</li><li>Gör interna klipp eller montage i Ferrite och exportera en ny WAV.</li><li>Öppna Ferrite-filen som en ny källa i LjudR. Tidigare analys och verifiering gäller inte den nya signalen.</li><li>Kör ny grundkontroll, analys av exporturval och verifierad WAV-export.</li></ol>
+                <p>Originalet och den tidigare LjudR-mastern ska bevaras. Kanalvis gain och interna klipp är uttryckliga montagebeslut.</p>
+              </details>
 
               <section class="step-module-board" aria-labelledby="exportModulesTitle">
                 <div class="step-module-heading"><div><span class="eyebrow">Fördjupning och dokumentation</span><h2 id="exportModulesTitle">Öppna vid behov</h2></div><p>Exportens huvudåtgärd ligger överst. Metadata, publiceringskontroll och rapportarkiv konkurrerar inte med den.</p></div>
@@ -912,7 +965,7 @@
                     <label class="field-label">Latitud<input name="latitude" type="text" inputmode="decimal"></label>
                     <label class="field-label">Longitud<input name="longitude" type="text" inputmode="decimal"></label>
                   </div>
-                  <label class="field-label">Koordinatprecision<select name="coordinatePrecision"><option value="hidden">Dold</option><option value="rounded" selected>Avrundad</option><option value="exact">Exakt</option></select></label>
+                  <label class="field-label">Koordinatprecision<select name="coordinatePrecision"><option value="hidden" selected>Dold</option><option value="rounded">Avrundad</option><option value="exact">Exakt</option></select></label>
                   <label class="field-label">Taggar och ljudkällor<input name="tags" type="text" placeholder="kor, bete, kväll, vind"></label>
                   <label class="field-label">Inspelare och mikrofoner<input name="equipment" type="text"></label>
                   <label class="field-label">Miljö och väder<input name="environment" type="text"></label>

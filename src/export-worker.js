@@ -14,7 +14,7 @@ import {
 import { sha256Blob } from "./sha256.js";
 import { LOCAL_GAIN_POLICY, localGainFactorAtFrame, normalizeLocalGainRegions } from "./local-gain.js";
 
-const ENGINE_VERSION = "1.0.0-rc.16";
+const ENGINE_VERSION = "1.0.0-rc.18";
 const DEFAULT_CHUNK_BYTES = 8 * 1024 * 1024;
 const MEMORY_WARNING_BYTES = 512 * 1024 * 1024;
 const GAIN_EPSILON_DB = 1e-9;

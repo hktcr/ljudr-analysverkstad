@@ -4,7 +4,21 @@ import { basename, resolve } from "node:path";
 import { ENGINE_VERSION, analyzeWav } from "../src/dsp-core.js";
 
 const directory = resolve(process.argv[2] || "validation-fixtures/itu-bs2217");
-const entries = await readdir(directory, { recursive: true, withFileTypes: true });
+let entries;
+try {
+  entries = await readdir(directory, { recursive: true, withFileTypes: true });
+} catch (error) {
+  if (error?.code !== "ENOENT") throw error;
+  console.log(JSON.stringify({
+    engine: "LjudR",
+    engineVersion: ENGINE_VERSION,
+    standard: "ITU-R BS.2217-2",
+    status: "skipped",
+    reason: "Officiella lokala fixtures saknas.",
+    fixtureDirectory: directory,
+  }, null, 2));
+  process.exit(0);
+}
 const files = entries
   .filter(entry => entry.isFile() && /\.wav$/i.test(entry.name))
   .map(entry => resolve(entry.parentPath || entry.path, entry.name));

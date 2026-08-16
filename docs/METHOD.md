@@ -36,6 +36,14 @@ Trimgränser lagras som heltalsbildrutor i intervallet `[startFrame,endFrame)`. 
 
 Sample Peak är högsta lagrade sampling. True Peak är ett översamplat estimat av toppen mellan samplingar och används som leveransorientering, inte som bevis på klippning. Float-overrange betyder att värden över 0 dBFS fortfarande är bevarade och kan sänkas före PCM-export. Verklig digital klippning kräver mer evidens än ett toppvärde: en platådetektor är endast heuristisk och måste följas av förstorad vågform och lyssning. Analog överstyrning i mikrofon, försteg eller omvandlare kan inte uteslutas från den färdiga filen och repareras inte av gain. En slutlig PCM- eller kodekexport måste verifieras i sitt faktiska format.
 
+## Vågform, spektrogram och rumble-screening
+
+Vågformen visar vänster och höger kanal separat och kan kombinera loudness, Sample Peak, stereokorrelation, trimfönster och filtrerade fyndmarkörer på samma tidsaxel. Signal över 0 dBFS markeras som bevarad float-overrange, inte som bevisad klippning. Visad global eller lokal gain är en projektion tills hela exporturvalet har räknats om.
+
+Det lokala spektrogrammet byggs endast på begäran för den synliga tidsregionen. Motorn läser WAV-data lokalt, använder Hann-fönster och en valbar FFT-storlek ur den fixerade mängden 1024, 2048, 4096 eller 8192 sampel. Gränssnittet visar faktisk frekvensupplösning `sampleRate / fftSize` och faktisk tidsstegning för vald region. Spektrogrammet renderas på logaritmisk frekvensaxel med valbart visningsgolv. Det är en visuell analysyta, inte ett kalibrerat mått på bandenergi, artklassificering eller automatisk störningsdiagnos. Spektrumdata exporteras inte i analysutbytet.
+
+Rumble- och 50 Hz-screeningen är en separat heuristik. Den använder enpoliga filter omkring 20 och 120 Hz samt fasta Goertzelpunkter vid 50, 100, 150 och 200 Hz i deterministiskt samplade fönster. Ett enpoligt filter har ungefär 6 dB per oktav och ger därför läckage mellan de beskrivna frekvensområdena. Goertzelpunkterna använder ingen full spektral fönstring och kan påverkas av spektralt läckage och nätfrekvensdrift. Procenttal och 50 Hz-relationsmått ska därför användas för att välja lyssningspunkter och spektrogramregioner, inte som bevis för en viss ljudkälla eller som underlag för automatisk EQ.
+
 ## Exportprofiler
 
 **Sample-payload-identiskt trimutdrag** kopierar ett obrutet sampleintervall utan fade, global eller lokal gain, toppmarginal, omkodning eller formatändring. Identiteten gäller sample-payload, inte hela ombyggda RIFF-filen eller samtliga metadatachunkar.
@@ -43,6 +51,8 @@ Sample Peak är högsta lagrade sampling. True Peak är ett översamplat estimat
 **Redigerad WAV-master** redovisar trim, fades, global gain, varje lokal gainregion och dess överlappspolicy, dither, invalid-float-policy samt varje bevarad, uppdaterad eller borttagen chunk. PCM som räknas om använder TPDF-dither. Formulärmetadata ligger i projekt och rapport om inte en framtida funktion uttryckligen bäddar in och verifierar den i WAV.
 
 Efter skrivning kontrolleras header, chunkgränser, frameCount, format och dataBytes genom den gemensamma parsern. Full filhash och sample-payload-hash har olika betydelse och redovisas separat.
+
+Interna klipp mitt i en tagning ligger utanför LjudR:s editkedja. Det dokumenterade montageflödet är LjudR för markörer och tider, Ferrite för interna klipp, ny WAV-export från Ferrite och därefter ny källanalys samt verifierad export i LjudR. Den återförda filen behandlas som en ny källa och får inte ärva den tidigare filens mätstatus.
 
 ## Format
 

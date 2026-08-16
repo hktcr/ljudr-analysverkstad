@@ -1,6 +1,6 @@
 # LjudR Analysverkstad
 
-LjudR är ett lokalt och icke destruktivt verktyg för analys och varsam redigering av fältinspelningar och ljudlandskap. Version `1.0.0-rc.16` är en offentlig valideringskandidat, inte en produktionsverifierad 1.0.
+LjudR är ett lokalt och icke destruktivt verktyg för analys och varsam redigering av fältinspelningar och ljudlandskap. Version `1.0.0-rc.18` är en offentlig valideringskandidat, inte en produktionsverifierad 1.0.
 
 ## Integritet och princip
 
@@ -23,12 +23,12 @@ RF64 och BW64 avvisas som indata. RF64/BW64-export, flerkanal, AAC, MP3, FLAC, o
 
 ## Arbetsflöde
 
-1. Öppna en lokal WAV och analysera källfilen.
-2. Granska signalmått, observationer, markörer och den adaptiva vågformen.
-3. Trimma början och slutet. Toning är frivillig och av från början.
-4. Välj antingen att bevara nivån eller beräkna en frivillig serieorientering.
-5. Prova resultatet innan global eller lokal gain används.
-6. Kör det separata steget Analysera exporturval. Varje redigering gör denna förkontroll inaktuell.
+1. Öppna en lokal WAV och kör en grundkontroll som bygger stor tvåkanalig vågform och säker medhörning.
+2. Lyssna, placera A och B och klipp bort allt utanför det material som ska användas.
+3. Analysera det valda materialet separat och se resultatet i en ny tvåkanalig vågform.
+4. Granska signalmått, observationer, markörer och relevanta fyndlager över vågformen. Bygg vid behov ett lokalt tvåkanaligt spektrogram för det synliga området.
+5. Bevara nivån eller använd uttrycklig global gain, toningar och synliga lokala toppkurvor.
+6. Analysera det valda materialet igen efter varje signaländring. Leveransstatus blir Pass först efter en färsk omräkning.
 7. Exportera antingen ett sample-payload-identiskt trimutdrag eller en redigerad WAV-master.
 8. Låt appen återöppna och verifiera den faktiskt skrivna WAV-filen.
 9. Spara projekt och rapport för spårbarhet.
@@ -43,6 +43,12 @@ Knappen Expandera hela analysen visar en rullbar helskärmsgenomgång av toppart
 
 Det aktuella A/B-fönstret ligger kvar synligt genom analys, trimning och export. Fönstret är låst från början. Efter ett uttryckligt upplåsningsval kan det placeras med finger, penna, mus, knappar eller tangentbord och provlyssnas med bibehållen längd. Det låses sedan för slutlig lyssning. Först ett separat val gör A/B till aktivt trimurval och tar bort omgivande ljud vid export. Tidslinjen kan expanderas och visa vågform, loudness, sample peak, stereokorrelation och markörer som separata lager.
 
+Trim, kanttoningar och global gain har en gemensam ångra- och gör om-historik. Den lokala toppverkstaden behåller sin egen detaljerade kurvhistorik. Kanalbalans mäts och kan provlyssnas kanalvis, men LjudR gör inte separat automatisk vänster- eller högergain eftersom det skulle förändra stereobilden.
+
+LjudR gör inte interna klipp mitt i en tagning. För att ta bort en bil, hostning eller annan händelse markerar du tiderna i LjudR, gör montaget i Ferrite, exporterar en ny WAV och öppnar den som ny källa i LjudR. Därefter körs grundkontroll, analys av exporturval och verifierad WAV-export på nytt. På så sätt blir Ferrite-filen en tydligt ny källa och verifieringskedjan fortsätter utan att en gammal analys återanvänds.
+
+Spektrogrammet skapas endast på begäran för synligt tidsområde, separat för vänster och höger kanal. Det använder Hann-fönster och visar sin tids- och frekvensupplösning. Vyn lämnar aldrig enheten och ingår inte i gAIa-underlaget. Den är visuell evidens för fortsatt lyssning, inte automatisk identifiering av vind, arter, trafik eller tekniskt fel.
+
 Rapporten skiljer strikt mellan:
 
 - **Källfil**, analys av originalet
@@ -53,7 +59,7 @@ Rapporten skiljer strikt mellan:
 
 LjudR kan skapa ett lokalt JSON-underlag enligt `se.gaia.ljudr.analysis-exchange/2`. Underlaget innehåller tekniska sammanfattningar och maskinella observationer men aldrig ljudsamplingar, vågform, spektrum, binär media eller originalfilens fulla SHA-256. Signalsteget anges som källfil, beräknat exporturval eller verifierad WAV. Twenty Minutes Here-kontexten är ett separat redaktionellt lager. Standardprofilen `Minimal` innehåller ingen kontinuerlig tidsserie och saknar filnamn, fria markörtexter och platskoordinater. Ett redaktionellt cue sheet kräver ett eget aktivt val. Den uttryckliga profilen `Temporal diagnostik` kan lägga till grova programaggregat med minst 5 sekunder per segment och högst 720 segment. Segmenten innehåller sample peak, inte segmentbaserad True Peak, eftersom motorn saknar en verifierad True Peak-tidsserie.
 
-Poddflödet har ett lokalt publiceringskort, serieöversikt från verifierade rapporter och ett kompakt avsnittsmanifest med masterhash. Den frivilliga serieorienteringen är versionsstyrd och är inte en Spotify-standard. Spotify for Creators kan ta emot den verifierade WAV-mastern direkt. Ferrite används fortsatt för montage, interna klipp och separat codec-export.
+Poddflödet har ett lokalt publiceringskort, serieöversikt från verifierade rapporter och ett kompakt avsnittsmanifest med masterhash. Den frivilliga serieorienteringen är versionsstyrd och är inte en Spotify-standard. Spotify for Creators kan ta emot den verifierade WAV-mastern direkt. Ferrite används fortsatt för montage, interna klipp och separat codec-export, följt av ny analys och verifiering i LjudR när filen ska bli masterkälla.
 
 Underlaget visas alltid i sin helhet före kopiering. All frivillig metadata är av från början och väljs fältgrupp för fältgrupp. Exakta koordinater kräver ett uttryckligt exakt integritetsval. LjudR ansluter inte till gAIa eller någon AI-tjänst och behåller `connect-src 'none'`. Användaren kopierar JSON-texten till gAIa och klistrar in vägledningen i verktyget. JSON-fil finns kvar som valfri reserv.
 
@@ -67,7 +73,7 @@ Serien kan använda -19 LUFS-I som redaktionell orientering, intervallet -20 til
 
 Projektformatet har strikt schema och migrering från tidigare schema. Full SHA-256 över hela källfilens bytes är säker identitet. En snabb hash av filkanterna får endast användas som förkontroll. Äldre projekt utan full hash kräver ny analys innan sparad analys kan återanvändas.
 
-Projektfilen kan behålla privata exakta koordinater. Publika rapporter följer ett aktivt val:
+Projektfilen kan behålla privata exakta koordinater. Publika rapporter använder `Dold` som förval och följer därefter ett aktivt val:
 
 - `Dold`: latitud och longitud utelämnas
 - `Avrundad`: tre decimaler, ungefär 110 meter i latitud
@@ -91,7 +97,7 @@ Se [valideringsplanen](docs/VALIDATION.md), [metoden](docs/METHOD.md), [gAIa-fl�
 
 ## Releaseport
 
-`1.0.0-rc.16` får publiceras som valideringskandidat. Versionsnumret `1.0.0` är förbjudet tills hela den fixerade testsuiten, EBU 68/68, ITU 19/19 och den fysiska iPad-matrisen är godkända. Matrisen omfattar en 15 till 20 minuter lång stereo float32/96 kHz-fil nära 1 GB i både Safari och installerad PWA, inklusive kopiera och klistra in flödet, export, Filer-handoff, bakgrund/återgång, quota, avbrott, OPFS-städning, offline och uppdatering.
+`1.0.0-rc.18` får publiceras som valideringskandidat. Versionsnumret `1.0.0` är förbjudet tills hela den fixerade testsuiten, EBU 68/68, ITU 19/19 och den fysiska iPad-matrisen är godkända. Matrisen omfattar en 15 till 20 minuter lång stereo float32/96 kHz-fil nära 1 GB i både Safari och installerad PWA, inklusive kopiera och klistra in flödet, export, Filer-handoff, bakgrund/återgång, quota, avbrott, OPFS-städning, offline och uppdatering.
 
 ## Lokal utveckling
 

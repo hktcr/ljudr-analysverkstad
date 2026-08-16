@@ -1,7 +1,28 @@
 # Ändringslogg
 
-## 1.0.0-rc.16, 2026-08-16
+## 1.0.0-rc.18, 2026-08-16
 
+- byter till ett ljust gränssnitt byggt på seriens faktiska marinblå, orange och benvita identitet
+- leder grundflödet genom Grundkontroll, Lyssna och trimma, Analysera och åtgärda samt Exportera och verifiera
+- lägger till ett lokalt tvåkanaligt spektrogram för synligt tidsområde med Hann-fönster och redovisad tids- och frekvensupplösning
+- behåller vågformen som primär arbetsyta och gör spektrogrammet till valbar kompletterande evidens
+- lägger till gemensam ångra och gör om för trim, kanttoningar och global gain
+- dokumenterar arbetsflödet LjudR till Ferrite till LjudR för interna klipp och ny verifiering
+- förklarar uttryckligen att kanalbalans mäts men inte korrigeras separat i LjudR
+- kompletterar rumblemetoden med filterlutning, spektralt läckage och nätfrekvensdrift som begränsningar
+- gör Dold till standard för koordinater i rapporter
+- låter EBU- och ITU-validatorerna ge ett kontrollerat skipped-resultat när licensierade lokala fixtures saknas
+
+## 1.0.0-rc.17, 2026-08-16
+
+- leder om arbetsflödet till Förbered källan, Lyssna och trimma, Analysera och justera samt Exportera och verifiera
+- gör den stora tvåkanaliga vågformen permanent synlig i både källförberedelse och trimning
+- visar en egen stor tvåkanalig vågform för exakt valt material efter trim, toningar, global gain och lokala toppkurvor
+- lägger till en fullskärmsknapp för hela verktyget med appfokus som reserv när enheten inte tillåter webbsidesfullskärm
+- visar källtopp, möjlig befintlig klippning och leveranstopp som tre separata beslut intill varje central vågform
+- ritar signal över 0 dBFS röd och låter redigeringsvågformen följa synlig global och lokal gain samt toningar
+- ger direkta vägar från vågformen till global sänkning, lokal toppverkstad och ny analys av valt material
+- gör tydligt att en leveranstopp kan gå till Pass efter omräkning men att misstänkt befintlig distorsion inte blir reparerad av gain
 - återaktiverar den uttryckliga rumble- och 50 Hz-screeningen direkt när källanalysen är klar
 - öppnar rumble tillsammans med vågformen i samma fokuserade arbetsyta
 - lägger till valbara markeringslager för alla fynd, rumble och 50 Hz, float över 0 dBFS, stereo och mono samt redaktionella markörer

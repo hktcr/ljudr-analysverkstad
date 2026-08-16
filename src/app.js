@@ -45,6 +45,7 @@ const state = {
     history: [],
     future: [],
   },
+  editHistory: { past: [], future: [], lastReason: null, lastAt: 0 },
   trimEditor: {
     unlocked: false,
     applied: true,
@@ -53,6 +54,7 @@ const state = {
   },
   series: { status: "preserved", proposedGainDb: null, profileId: TMH_SERIES_PROFILE.id, profileVersion: TMH_SERIES_PROFILE.version, targetLufs: TMH_SERIES_PROFILE.targetLufs, rangeMinLufs: TMH_SERIES_PROFILE.rangeMinLufs, rangeMaxLufs: TMH_SERIES_PROFILE.rangeMaxLufs, ceilingDbtp: TMH_SERIES_PROFILE.truePeakOrientationDbtp },
   spectralDiagnostics: null,
+  spectrogram: null,
   publication: {
     manual: { fullListen: false, boundaries: false, stereo: false, mono: false, privacy: false, archiveSaved: false },
     exceptionNote: "",
@@ -91,7 +93,7 @@ const state = {
   },
   markerFilter: "all",
   markers: [],
-  jobs: { analysis: null, region: null, detail: null, spectral: null, export: null, storage: null },
+  jobs: { analysis: null, region: null, detail: null, spectral: null, spectrogram: null, export: null, storage: null },
   storedExports: [],
   analysisExchange: {
     preview: null,
@@ -116,7 +118,7 @@ const state = {
     place: "",
     latitude: "",
     longitude: "",
-    coordinatePrecision: "rounded",
+    coordinatePrecision: "hidden",
     tags: "",
     equipment: "",
     environment: "",
@@ -209,6 +211,8 @@ const ANALYSIS_PHASES = Object.freeze({
 
 const elements = {
   appVersion: $("#appVersion"),
+  fullscreenButton: $("#fullscreenButton"),
+  fullscreenButtonLabel: $("#fullscreenButtonLabel"),
   audioInput: $("#audioFileInput"),
   dropZone: $("#dropZone"),
   fileStrip: $("#fileStrip"),
@@ -231,6 +235,14 @@ const elements = {
   analysisCanvas: $("#analysisCanvas"),
   analysisCanvasEmpty: $("#analysisCanvasEmpty"),
   trimCanvas: $("#trimCanvas"),
+  preflightCanvas: $("#preflightCanvas"),
+  preflightCanvasEmpty: $("#preflightCanvasEmpty"),
+  spectrogramCanvas: $("#spectrogramCanvas"),
+  spectrogramEmpty: $("#spectrogramEmpty"),
+  runSpectrogram: $("#runSpectrogramButton"),
+  spectrogramStatus: $("#spectrogramStatus"),
+  spectrogramMaxFrequency: $("#spectrogramMaxFrequency"),
+  spectrogramFloor: $("#spectrogramFloor"),
   timelineRange: $("#timelineRange"),
   detailStatus: $("#detailStatus"),
   cancelRegion: $("#cancelRegionButton"),
@@ -268,6 +280,8 @@ const elements = {
   trimEditorDescription: $("#trimEditorModeDescription"),
   toggleTrimEditor: $("#toggleTrimEditorButton"),
   applyTrimSelection: $("#applyTrimSelectionButton"),
+  undoEdit: $("#undoEditButton"),
+  redoEdit: $("#redoEditButton"),
   revertTrimSelection: $("#revertTrimSelectionButton"),
   trimHudRange: $("#trimHudRange"),
   trimHudDuration: $("#trimHudDuration"),
@@ -822,6 +836,7 @@ function markEditChanged(reason = "edit") {
   state.jobs.spectral = null;
   state.dirty = true;
   state.spectralDiagnostics = null;
+  state.spectrogram = null;
   state.markers = state.markers.filter(marker => marker.origin !== "spectral-screening");
   state.analysisExchange.preview = null;
   state.analysisExchange.lastBundle = null;
@@ -914,7 +929,84 @@ function renderWorkflowStatus() {
   const analysisPanel = $('[data-panel="analyze"]');
   analysisPanel?.classList.toggle("has-analysis", Boolean(state.analysis));
   renderCompactModuleSummaries();
+  renderWaveformDecisionStrips();
   renderWorkflowActionDock();
+  if (elements.runSpectrogram && !state.jobs.spectrogram) elements.runSpectrogram.disabled = !state.analysis;
+}
+
+function renderWaveformDecisionStrips() {
+  const source = state.analysis?.summary || {};
+  const processed = state.regionAnalysis?.processed?.summary || state.regionAnalysis?.summary || null;
+  const sourcePeak = finite(source.truePeakEstimateDbtp ?? source.truePeakDbtp ?? source.truePeak);
+  const processedPeak = finite(processed?.truePeakEstimateDbtp ?? processed?.truePeakDbtp ?? processed?.truePeak);
+  const target = clamp(finite(state.series.ceilingDbtp) ?? -2, -60, 0);
+  const observationIds = new Set(normalizeObservations().map(item => item.id));
+  const possibleFlatTop = observationIds.has("flat-top");
+  const delivery = preflightAnalysisStatus();
+  $$('[data-waveform-source-peak]').forEach(node => {
+    node.textContent = sourcePeak === null ? "Inte analyserad" : `${formatDecimal(sourcePeak, 2)} dBTP`;
+    node.closest("article").dataset.state = sourcePeak === null ? "waiting" : sourcePeak > target ? "review" : "info";
+  });
+  $$('[data-waveform-source-scope]').forEach(node => {
+    node.textContent = sourcePeak === null ? "Källanalys krävs" : `Källfil, jämförd med leveranstak ${formatDecimal(target, 1)} dBTP`;
+  });
+  $$('[data-waveform-clip-status]').forEach(node => {
+    node.textContent = !state.analysis ? "Kan inte avgöras" : possibleFlatTop ? "Granska möjlig platå" : "Ingen klippindikation i screeningen";
+    node.closest("article").dataset.state = !state.analysis ? "waiting" : possibleFlatTop ? "review" : "pass";
+  });
+  $$('[data-waveform-clip-detail]').forEach(node => {
+    node.textContent = possibleFlatTop
+      ? "Förstora och lyssna. Gain kan inte reparera redan uppkommen distorsion"
+      : "Pass gäller bara rail- och platåscreeningen. Analog överstyrning kan inte uteslutas";
+  });
+  $$('[data-waveform-delivery-status]').forEach(node => {
+    node.textContent = state.regionStatus === "running"
+      ? "Beräknar exporturvalet"
+      : processedPeak === null
+        ? "Omberäkning krävs"
+        : `${formatDecimal(processedPeak, 2)} dBTP · ${delivery.state === "pass" ? "Pass" : delivery.label}`;
+    node.closest("article").dataset.state = state.regionStatus === "running" ? "running" : processedPeak === null ? "review" : delivery.state;
+  });
+  $$('[data-waveform-delivery-detail]').forEach(node => {
+    node.textContent = processedPeak === null
+      ? `Kör exporturvalsanalysen efter trim, gain eller toppkurvor. Mål ${formatDecimal(target, 1)} dBTP`
+      : `${delivery.detail}. Detta säger inget om redan befintlig analog distorsion`;
+  });
+}
+
+function syncFullscreenUi() {
+  const active = Boolean(document.fullscreenElement || document.webkitFullscreenElement || document.body.classList.contains("app-focus-mode"));
+  if (elements.fullscreenButton) elements.fullscreenButton.setAttribute("aria-pressed", String(active));
+  if (elements.fullscreenButtonLabel) elements.fullscreenButtonLabel.textContent = active ? "Avsluta fullskärm" : "Fullskärm";
+  scheduleCanvasRender();
+}
+
+async function toggleAppFullscreen() {
+  const nativeActive = Boolean(document.fullscreenElement || document.webkitFullscreenElement);
+  if (nativeActive) {
+    const exit = document.exitFullscreen || document.webkitExitFullscreen;
+    if (exit) await exit.call(document);
+    document.body.classList.remove("app-focus-mode");
+    syncFullscreenUi();
+    return;
+  }
+  if (document.body.classList.contains("app-focus-mode")) {
+    document.body.classList.remove("app-focus-mode");
+    syncFullscreenUi();
+    return;
+  }
+  const root = document.documentElement;
+  const request = root.requestFullscreen || root.webkitRequestFullscreen;
+  if (request) {
+    try {
+      await request.call(root, { navigationUI: "hide" });
+      syncFullscreenUi();
+      return;
+    } catch {}
+  }
+  document.body.classList.add("app-focus-mode");
+  syncFullscreenUi();
+  showToast("Appens fokusläge är aktivt. Webbläsarens egna kanter kan bara döljas om enheten tillåter webbsidesfullskärm.");
 }
 
 function workflowStepModel() {
@@ -923,15 +1015,15 @@ function workflowStepModel() {
   const playbackSafety = monitorSafetyForPreview();
   if (!state.file || state.mode === "open") return { hidden: true, state: "waiting", action: "none", kicker: "Källfil", headline: "Välj en WAV-fil", detail: "Arbetsflödet börjar när en lokal källfil har öppnats.", label: "Väntar", disabled: true };
   if (state.mode === "analyze") {
-    if (state.analysisStatus === "running") return { state: "running", action: "cancel-analysis", kicker: "Steg 1 av 4 · Källanalys", headline: "Analysen pågår", detail: "Filen mäts blockvis på denna enhet. Du kan avbryta mellan två läsblock.", label: "Avbryt analys", disabled: false };
-    if (!state.analysis) return { state: "review", action: "analyze", kicker: "Steg 1 av 4 · Källanalys", headline: "Förstå källfilen först", detail: "Mät signalintegritet, toppar, loudness, dynamik och stereo innan du redigerar.", label: "Starta källanalys", disabled: false };
-    if (!playbackSafety.ready) return { state: "review", action: "analyze", kicker: "Steg 1 av 4 · Källanalys", headline: "En ny säker källanalys krävs", detail: playbackSafety.reason === "untrusted-analysis" ? "Projektets sparade analys visas som underlag men används inte för medhörningssäkerhet. Kör analysen på denna enhet." : "Ingen ändlig toppnivå kunde verifieras. Kör om analysen innan uppspelning.", label: "Kör ny källanalys", disabled: false };
-    if (sourceStatus.state === "stop") return { state: "stop", action: "open-integrity", kicker: "Steg 1 av 4 · Källanalys", headline: "Blockerande fynd i källan", detail: sourceStatus.detail, label: "Öppna signalintegritet", disabled: false };
-    return { state: sourceStatus.state, action: "to-trim", kicker: "Steg 1 av 4 · Källanalys", headline: sourceStatus.state === "pass" ? "Källanalysen är klar" : "Analysen behöver mänsklig granskning", detail: "Alla mätvärden och begränsningar finns i modulerna. Fortsätt när du är redo att lyssna och redigera.", label: "Fortsätt till granska och redigera", disabled: false };
+    if (state.analysisStatus === "running") return { state: "running", action: "cancel-analysis", kicker: "Steg 1 av 4 · Grundkontroll", headline: "Källan mäts och vågformen byggs", detail: "Filen läses blockvis på denna enhet för säker medhörning och en navigerbar översikt.", label: "Avbryt", disabled: false };
+    if (!state.analysis) return { state: "review", action: "analyze", kicker: "Steg 1 av 4 · Grundkontroll", headline: "Skapa vågform och säker medhörning", detail: "Efter grundkontrollen kan du lyssna och välja A/B innan det valda materialet analyseras separat.", label: "Kör grundkontroll", disabled: false };
+    if (!playbackSafety.ready) return { state: "review", action: "analyze", kicker: "Steg 1 av 4 · Grundkontroll", headline: "En ny säker källkontroll krävs", detail: playbackSafety.reason === "untrusted-analysis" ? "Projektets sparade värden används inte för medhörningssäkerhet. Läs källan på denna enhet." : "Ingen ändlig toppnivå kunde verifieras. Läs om källan innan uppspelning.", label: "Kör grundkontroll igen", disabled: false };
+    if (sourceStatus.state === "stop") return { state: "stop", action: "open-integrity", kicker: "Steg 1 av 4 · Grundkontroll", headline: "Blockerande fynd i källan", detail: sourceStatus.detail, label: "Öppna signalintegritet", disabled: false };
+    return { state: sourceStatus.state, action: "to-trim", kicker: "Steg 1 av 4 · Grundkontroll", headline: "Vågform och säker lyssning är klara", detail: "Lyssna nu, välj trimfönstret och klipp bort allt utanför innan du analyserar det material som ska användas.", label: "Fortsätt till lyssna och trimma", disabled: false };
   }
   if (state.mode === "trim") {
-    if (!state.analysis || !playbackSafety.ready) return { state: "waiting", action: "to-analyze", kicker: "Steg 2 av 4 · Granska och redigera", headline: "Säker källanalys saknas", detail: "Kör en ny källanalys innan du lyssnar eller fattar nivå- och toppbeslut.", label: "Gå till källanalys", disabled: false };
-    if (!state.trimEditor.applied) return { state: "review", action: state.trimEditor.unlocked ? "lock-trim" : "apply-trim", kicker: "Steg 2 av 4 · Granska och redigera", headline: state.trimEditor.unlocked ? "Trimfönstret är upplåst" : "Ett nytt A/B väntar", detail: state.trimEditor.unlocked ? "Lås fönstret efter placering och provlyssning." : "Tillämpa urvalet eller återgå innan du lämnar steget.", label: state.trimEditor.unlocked ? "Lås trimfönstret" : "Tillämpa A/B", disabled: false };
+    if (!state.analysis || !playbackSafety.ready) return { state: "waiting", action: "to-analyze", kicker: "Steg 2 av 4 · Lyssna och trimma", headline: "Säker grundkontroll saknas", detail: "Skapa vågformen och säkra medhörningen innan uppspelning.", label: "Gå till grundkontroll", disabled: false };
+    if (!state.trimEditor.applied) return { state: "review", action: state.trimEditor.unlocked ? "lock-trim" : "apply-trim", kicker: "Steg 2 av 4 · Lyssna och trimma", headline: state.trimEditor.unlocked ? "Trimfönstret är upplåst" : "Ett nytt A/B väntar", detail: state.trimEditor.unlocked ? "Lås fönstret efter placering och provlyssning." : "Klipp bort allt utanför A/B eller återgå innan du går vidare.", label: state.trimEditor.unlocked ? "Lås trimfönstret" : "Klipp bort utanför A/B", disabled: false };
     const freshPreflight = Boolean(state.regionAnalysis && state.regionStatus === "complete");
     const editOutcome = freshPreflight ? preflight.state : "review";
     const editHeadline = !freshPreflight
@@ -941,12 +1033,12 @@ function workflowStepModel() {
         : preflight.state === "stop"
           ? "Exporturvalet kräver åtgärd"
           : "Exporturvalet behöver granskas";
-    return { state: editOutcome, action: "to-preflight", kicker: "Steg 2 av 4 · Granska och redigera", headline: editHeadline, detail: "Trimning, toningar, global gain och lokala kurvor visas i separata moduler.", label: freshPreflight ? "Öppna exporturvalsanalysen" : "Analysera exporturval", disabled: false };
+    return { state: editOutcome, action: "to-preflight", kicker: "Steg 2 av 4 · Lyssna och trimma", headline: editHeadline, detail: "Det valda A/B-materialet analyseras separat. Efter en justering måste analysen köras om.", label: freshPreflight ? "Visa analysen av urvalet" : "Analysera valt material", disabled: false };
   }
   if (state.mode === "preflight") {
-    if (state.regionStatus === "running") return { state: "running", action: "cancel-region", kicker: "Steg 3 av 4 · Förkontroll", headline: "Exporturvalet analyseras", detail: "Hela urvalet räknas om efter alla synliga ändringar.", label: "Avbryt förkontroll", disabled: false };
+    if (state.regionStatus === "running") return { state: "running", action: "cancel-region", kicker: "Steg 3 av 4 · Analysera och åtgärda", headline: "Det valda materialet analyseras", detail: "Hela A/B-urvalet räknas om efter alla synliga ändringar.", label: "Avbryt analys", disabled: false };
     const hasProcessed = Boolean(state.regionAnalysis?.processed?.summary || state.regionAnalysis?.summary);
-    if (!hasProcessed) return { state: "review", action: "run-preflight", kicker: "Steg 3 av 4 · Förkontroll", headline: "En färsk förkontroll krävs", detail: preflight.detail, label: "Analysera aktuellt exporturval", disabled: !state.analysis };
+    if (!hasProcessed) return { state: "review", action: "run-preflight", kicker: "Steg 3 av 4 · Analysera och åtgärda", headline: "Analysera det valda materialet", detail: preflight.detail, label: "Analysera valt material", disabled: !state.analysis };
     if (preflight.state === "pass") return { state: "pass", action: "to-export", kicker: "Steg 3 av 4 · Förkontroll", headline: "Förkontrollen är klar", detail: preflight.detail, label: "Fortsätt till export", disabled: false };
     if (preflight.state !== "stop") return { state: preflight.state, action: "to-export", kicker: "Steg 3 av 4 · Förkontroll", headline: preflight.label, detail: preflight.detail, label: "Fortsätt till exportöversikt", disabled: false };
     return { state: "stop", action: "to-trim", kicker: "Steg 3 av 4 · Förkontroll", headline: preflight.label, detail: preflight.detail, label: "Tillbaka till redigering", disabled: false };
@@ -1184,7 +1276,7 @@ async function openAudioFile(file) {
   analysisWorker = null;
   exportWorker?.terminate();
   exportWorker = null;
-  state.jobs = { analysis: null, region: null, detail: null, spectral: null, export: null, storage: null };
+  state.jobs = { analysis: null, region: null, detail: null, spectral: null, spectrogram: null, export: null, storage: null };
   if (state.fileUrl) URL.revokeObjectURL(state.fileUrl);
   state.file = file;
   state.fileUrl = URL.createObjectURL(file);
@@ -1198,6 +1290,7 @@ async function openAudioFile(file) {
   state.exportStatus = "idle";
   state.lastExportReport = null;
   state.spectralDiagnostics = null;
+  state.spectrogram = null;
   state.publication = {
     manual: { fullListen: false, boundaries: false, stereo: false, mono: false, privacy: false, archiveSaved: false },
     exceptionNote: "",
@@ -1227,6 +1320,8 @@ async function openAudioFile(file) {
   state.trim.fadeInSeconds = 0;
   state.trim.fadeOutSeconds = 0;
   state.localPeaks = { regions: [], bypass: false, history: [], future: [] };
+  state.editHistory = { past: [], future: [], lastReason: null, lastAt: 0 };
+  syncEditHistoryUi();
   state.series = { status: "preserved", proposedGainDb: null, profileId: TMH_SERIES_PROFILE.id, profileVersion: TMH_SERIES_PROFILE.version, targetLufs: TMH_SERIES_PROFILE.targetLufs, rangeMinLufs: TMH_SERIES_PROFILE.rangeMinLufs, rangeMaxLufs: TMH_SERIES_PROFILE.rangeMaxLufs, ceilingDbtp: TMH_SERIES_PROFILE.truePeakOrientationDbtp };
   elements.fileName.textContent = file.name;
   elements.fileTechnical.textContent = `${formatBytes(file.size)} · läser WAVE-rubrik`;
@@ -1329,13 +1424,15 @@ function setDetailStatus(message, busy = false) {
 function handleAnalysisMessage(data = {}) {
   const operation = data.operation === "analyze-region" ? "region"
     : data.operation === "waveform-detail" ? "detail"
-      : data.operation === "spectral-diagnostics" ? "spectral" : "analysis";
+      : data.operation === "spectral-diagnostics" ? "spectral"
+        : data.operation === "spectrogram" ? "spectrogram" : "analysis";
   if (!isCurrentJob(operation, data)) return;
   if (data.type === "progress") {
     if (operation === "analysis") updateAnalysisProgress(data.fraction, data.message || data.phase, false, data.phase);
     else if (operation === "detail" && elements.detailStatus) setDetailStatus(data.message || "Läser detaljdata", true);
     else if (operation === "region" && elements.regionMeasureStatus) elements.regionMeasureStatus.textContent = data.message || "Beräknar exporturval";
     else if (operation === "spectral" && elements.spectralDiagnosticsResult) elements.spectralDiagnosticsResult.innerHTML = `<div><dt>Status</dt><dd>${escapeHtml(data.message || "Samplar lokalt")}</dd></div>`;
+    else if (operation === "spectrogram" && elements.spectrogramStatus) elements.spectrogramStatus.textContent = `${data.message || "Bygger lokal frekvensbild"} · ${Math.round((finite(data.fraction) ?? 0) * 100)} %`;
     return;
   }
   if (data.type === "cancelled") {
@@ -1344,6 +1441,7 @@ function handleAnalysisMessage(data = {}) {
     if (operation === "region") { state.regionStatus = "cancelled"; elements.regionMeasureStatus.textContent = "Beräkningen avbröts"; elements.cancelRegion.hidden = true; renderDeepMeasurements(); updateProjectedMetrics(); }
     if (operation === "detail") setDetailStatus("Detaljläsningen avbröts", false);
     if (operation === "spectral") renderSpectralDiagnostics("Avbruten");
+    if (operation === "spectrogram") { if (elements.spectrogramStatus) elements.spectrogramStatus.textContent = "Beräkningen avbröts."; if (elements.runSpectrogram) elements.runSpectrogram.disabled = !state.analysis; }
     if (operation === "region" || operation === "analysis") syncAnalysisExchangeAvailability();
     return;
   }
@@ -1352,6 +1450,7 @@ function handleAnalysisMessage(data = {}) {
     if (operation === "region") applyRegionResult(result);
     else if (operation === "detail") applyDetailResult(result);
     else if (operation === "spectral") applySpectralDiagnosticsResult(result);
+    else if (operation === "spectrogram") applySpectrogramResult(result);
     else applyAnalysisResult(result);
     return;
   }
@@ -1361,6 +1460,7 @@ function handleAnalysisMessage(data = {}) {
       if (operation === "detail" && elements.detailStatus) setDetailStatus("Detaljdata kunde inte läsas", false);
       if (operation === "region" && elements.regionMeasureStatus) { state.regionStatus = "error"; elements.regionMeasureStatus.textContent = "Beräkningen misslyckades"; elements.cancelRegion.hidden = true; renderDeepMeasurements(); updateProjectedMetrics(); }
       if (operation === "spectral") renderSpectralDiagnostics("Kunde inte beräknas");
+      if (operation === "spectrogram") { if (elements.spectrogramStatus) elements.spectrogramStatus.textContent = data.message || "Spektrogrammet kunde inte beräknas."; if (elements.runSpectrogram) elements.runSpectrogram.disabled = !state.analysis; }
       if (operation === "region") syncAnalysisExchangeAvailability();
       return;
     }
@@ -1379,7 +1479,7 @@ function finishAnalysisJob(message) {
   state.analysisStatus = state.analysis ? "complete" : "idle";
   syncAnalysisExchangeAvailability();
   elements.analyzeButton.disabled = false;
-  elements.analyzeButton.textContent = state.analysis ? "Analysera igen" : "Starta analys";
+  elements.analyzeButton.textContent = state.analysis ? "Kör grundkontroll igen" : "Kör grundkontroll";
   elements.cancelAnalysis.hidden = true;
   elements.cancelAnalysis.disabled = false;
   updateAnalysisProgress(0, message, false, "cancelled");
@@ -1401,6 +1501,9 @@ function startAnalysis() {
     return;
   }
   try {
+    state.spectrogram = null;
+    if (elements.spectrogramEmpty) elements.spectrogramEmpty.hidden = false;
+    if (elements.spectrogramStatus) elements.spectrogramStatus.textContent = "Källan analyseras om. Bygg spektrogrammet efteråt.";
     state.analysisExchange.preview = null;
     state.analysisExchange.lastBundle = null;
     state.analysisExchange.lastBundleBlob = null;
@@ -1474,7 +1577,7 @@ function applyAnalysisResult(result) {
       : "Säker medhörning är redo utan extra sänkning"
     : "Toppnivån kunde inte verifieras. Uppspelningen är låst.", playbackSafety.ready ? "ready" : "warning");
   elements.analyzeButton.disabled = false;
-  elements.analyzeButton.textContent = "Analysera igen";
+  elements.analyzeButton.textContent = "Kör grundkontroll igen";
   updateAnalysisProgress(1, "Analysen är klar", false, "complete");
   window.setTimeout(() => { if (state.analysisStatus === "complete") elements.analysisProgress.hidden = true; }, 1200);
   const suggestions = Array.isArray(result.markersSuggested) ? result.markersSuggested : [];
@@ -1641,6 +1744,134 @@ function renderSpectralDiagnostics(status = null) {
         <div class="diagnostic-region-actions"><button class="button button-secondary button-small" type="button" data-rumble-show="${index}">Visa i vågformen</button><button class="button button-quiet button-small" type="button" data-rumble-play="${index}">Lyssna</button></div>
       </article>`).join("")}`
     : "<p>Inget samplat fönster fick måttlig eller förhöjd sannolikhet. Det utesluter inte rumble mellan de samplade fönstren.</p>";
+}
+
+function requestSpectrogram() {
+  if (!state.file || !state.analysis || !state.capabilities.workers || state.jobs.spectrogram) return;
+  ensureAnalysisWorker();
+  const jobId = nextJobId("spectrogram");
+  state.jobs.spectrogram = jobId;
+  state.spectrogram = null;
+  if (elements.runSpectrogram) elements.runSpectrogram.disabled = true;
+  if (elements.spectrogramEmpty) elements.spectrogramEmpty.hidden = false;
+  if (elements.spectrogramStatus) elements.spectrogramStatus.textContent = "Förbereder lokal frekvensbild.";
+  const startSeconds = clamp(state.view.startSeconds, 0, durationSeconds());
+  const endSeconds = clamp(state.view.endSeconds || durationSeconds(), startSeconds, durationSeconds());
+  const columns = Math.max(96, Math.min(384, Math.round(elements.spectrogramCanvas?.clientWidth || 320)));
+  analysisWorker.postMessage({
+    type: "spectrogram",
+    jobId,
+    file: state.file,
+    options: {
+      startFrame: toFrame(startSeconds),
+      endFrame: toFrame(endSeconds),
+      columns,
+      fftSize: sampleRate() > 96_000 ? 8192 : 4096,
+      floorDb: Number(elements.spectrogramFloor?.value || -100),
+    },
+  });
+  emitState("spectrogram-started");
+}
+
+function applySpectrogramResult(result) {
+  state.jobs.spectrogram = null;
+  state.spectrogram = result;
+  if (elements.runSpectrogram) {
+    elements.runSpectrogram.disabled = false;
+    elements.runSpectrogram.textContent = "Bygg om synligt område";
+  }
+  if (elements.spectrogramEmpty) elements.spectrogramEmpty.hidden = true;
+  const resolution = finite(result?.frequencyResolutionHz);
+  const timeStep = finite(result?.timeResolutionSeconds);
+  if (elements.spectrogramStatus) elements.spectrogramStatus.textContent = `${result.channels} kanal${result.channels === 1 ? "" : "er"} · Hann ${result.fftSize} · ${resolution === null ? "okänd" : `${formatDecimal(resolution, 1)} Hz`} frekvenssteg · ${timeStep === null ? "okänt" : `${formatDecimal(timeStep, timeStep < 1 ? 2 : 1)} s`} tidssteg`;
+  const summary = $("#spectrogramModuleSummary");
+  if (summary) summary.textContent = `${formatTime(result.startSeconds, false)} till ${formatTime(result.endSeconds, false)} · ${formatDecimal(resolution, 1)} Hz steg`;
+  drawSpectrogram();
+  emitState("spectrogram-complete");
+}
+
+function spectrogramColor(value) {
+  const stops = [
+    [1, 22, 54],
+    [2, 31, 76],
+    [7, 63, 130],
+    [154, 58, 0],
+    [235, 91, 8],
+    [246, 226, 185],
+  ];
+  const scaled = Math.max(0, Math.min(1, value / 255)) * (stops.length - 1);
+  const index = Math.min(stops.length - 2, Math.floor(scaled));
+  const mix = scaled - index;
+  return stops[index].map((channel, channelIndex) => Math.round(channel + (stops[index + 1][channelIndex] - channel) * mix));
+}
+
+function drawSpectrogram() {
+  const canvas = elements.spectrogramCanvas;
+  if (!canvas) return;
+  const { context, width, height } = canvasMetrics(canvas);
+  context.clearRect(0, 0, width, height);
+  context.fillStyle = "#011636";
+  context.fillRect(0, 0, width, height);
+  const result = state.spectrogram;
+  if (!result?.channelData?.length) return;
+  const labelWidth = width < 520 ? 52 : 66;
+  const plotWidth = Math.max(1, width - labelWidth - 10);
+  const plotHeight = Math.max(1, height - 30);
+  const gap = result.channels > 1 ? 8 : 0;
+  const channelHeight = (plotHeight - gap * (result.channels - 1)) / result.channels;
+  const nyquist = result.sampleRate / 2;
+  const selectedMax = elements.spectrogramMaxFrequency?.value === "nyquist" ? nyquist : Number(elements.spectrogramMaxFrequency?.value || nyquist);
+  const maximumFrequency = Math.max(40, Math.min(nyquist, selectedMax));
+  const minimumFrequency = Math.min(20, maximumFrequency / 10);
+  const imageHeight = 256;
+  const offscreen = document.createElement("canvas");
+  offscreen.width = result.columns;
+  offscreen.height = imageHeight;
+  const offscreenContext = offscreen.getContext("2d");
+  const image = offscreenContext.createImageData(result.columns, imageHeight);
+  for (let channel = 0; channel < result.channels; channel += 1) {
+    const values = result.channelData[channel];
+    for (let y = 0; y < imageHeight; y += 1) {
+      const ratio = 1 - y / Math.max(1, imageHeight - 1);
+      const frequency = minimumFrequency * (maximumFrequency / minimumFrequency) ** ratio;
+      const bin = Math.max(0, Math.min(result.binCount - 1, Math.round(frequency / nyquist * result.binCount)));
+      for (let x = 0; x < result.columns; x += 1) {
+        const [red, green, blue] = spectrogramColor(values[x * result.binCount + bin] || 0);
+        const offset = (y * result.columns + x) * 4;
+        image.data[offset] = red; image.data[offset + 1] = green; image.data[offset + 2] = blue; image.data[offset + 3] = 255;
+      }
+    }
+    offscreenContext.putImageData(image, 0, 0);
+    const top = channel * (channelHeight + gap);
+    context.imageSmoothingEnabled = true;
+    context.drawImage(offscreen, labelWidth, top, plotWidth, channelHeight);
+    context.fillStyle = "rgba(246,226,185,.94)";
+    context.font = "700 12px ui-sans-serif, sans-serif";
+    context.fillText(result.channels === 1 ? "Mono" : channel === 0 ? "Vänster" : "Höger", 6, top + 18);
+    [maximumFrequency, 1000, 100, 20].filter(value => value <= maximumFrequency && value >= minimumFrequency).forEach(frequency => {
+      const ratio = Math.log(frequency / minimumFrequency) / Math.log(maximumFrequency / minimumFrequency);
+      const y = top + (1 - ratio) * channelHeight;
+      context.strokeStyle = "rgba(246,226,185,.18)";
+      context.beginPath(); context.moveTo(labelWidth, y); context.lineTo(width - 10, y); context.stroke();
+      context.fillStyle = "rgba(246,226,185,.74)";
+      context.font = "11px ui-sans-serif, sans-serif";
+      context.fillText(frequency >= 1000 ? `${formatDecimal(frequency / 1000, frequency % 1000 ? 1 : 0)} kHz` : `${frequency} Hz`, 6, Math.max(top + 31, Math.min(top + channelHeight - 4, y + 4)));
+    });
+  }
+  const start = result.startSeconds;
+  const end = result.endSeconds;
+  const playhead = state.playback.currentSeconds;
+  if (playhead >= start && playhead <= end) {
+    const x = labelWidth + (playhead - start) / Math.max(0.001, end - start) * plotWidth;
+    context.strokeStyle = "rgba(246,226,185,.96)";
+    context.lineWidth = 1;
+    context.beginPath(); context.moveTo(x, 0); context.lineTo(x, plotHeight); context.stroke();
+  }
+  context.fillStyle = "rgba(242,238,225,.8)";
+  context.font = "11px ui-sans-serif, sans-serif";
+  context.fillText(formatTime(start, false), labelWidth, height - 8);
+  const endLabel = formatTime(end, false);
+  context.fillText(endLabel, width - 10 - context.measureText(endLabel).width, height - 8);
 }
 
 function renderFloatOverrangeMap() {
@@ -1886,6 +2117,7 @@ function renderPreflightPanel() {
   const sourceLufs = finite(source.integratedLufs ?? source.lufsI);
   const processedPeak = finite(processed?.truePeakEstimateDbtp ?? processed?.truePeakDbtp ?? processed?.truePeak);
   const processedLufs = finite(processed?.integratedLufs ?? processed?.lufsI);
+  if (elements.preflightCanvasEmpty) elements.preflightCanvasEmpty.hidden = Boolean(processed);
   const setText = (selector, value) => { const node = $(selector); if (node) node.textContent = value; };
   setText("#preflightSourcePeak", analysisMetric(sourcePeak, "dBTP", 2));
   setText("#preflightSourceLufs", analysisMetric(sourceLufs, "LUFS", 1));
@@ -1903,6 +2135,7 @@ function renderPreflightPanel() {
   if (run) run.disabled = !state.analysis || state.regionStatus === "running";
   const continueButton = $("#preflightContinueButton");
   if (continueButton) continueButton.disabled = status.state === "stop" || !processed || state.regionStatus === "running";
+  scheduleCanvasRender();
 }
 
 function renderFullAnalysis() {
@@ -2759,12 +2992,86 @@ function requireTrimEditorUnlocked() {
   return false;
 }
 
+function editSnapshot(overrides = {}) {
+  return {
+    trim: {
+      startSeconds: state.trim.startSeconds,
+      endSeconds: state.trim.endSeconds,
+      startFrame: state.trim.startFrame,
+      endFrame: state.trim.endFrame,
+      fadeInSeconds: state.trim.fadeInSeconds,
+      fadeOutSeconds: state.trim.fadeOutSeconds,
+      gainDb: state.trim.gainDb,
+      ...(overrides.trim || {}),
+    },
+    trimEditor: {
+      unlocked: state.trimEditor.unlocked,
+      applied: state.trimEditor.applied,
+      appliedStartSeconds: state.trimEditor.appliedStartSeconds,
+      appliedEndSeconds: state.trimEditor.appliedEndSeconds,
+      ...(overrides.trimEditor || {}),
+    },
+  };
+}
+
+function syncEditHistoryUi() {
+  if (elements.undoEdit) elements.undoEdit.disabled = !state.editHistory.past.length;
+  if (elements.redoEdit) elements.redoEdit.disabled = !state.editHistory.future.length;
+}
+
+function recordEditHistory(reason, snapshot = editSnapshot(), { coalesce = false } = {}) {
+  const now = performance.now();
+  const sameRun = coalesce && state.editHistory.lastReason === reason && now - state.editHistory.lastAt < 700;
+  if (!sameRun) {
+    const previous = state.editHistory.past.at(-1);
+    if (!previous || JSON.stringify(previous) !== JSON.stringify(snapshot)) {
+      state.editHistory.past.push(snapshot);
+      if (state.editHistory.past.length > 100) state.editHistory.past.shift();
+    }
+    state.editHistory.future = [];
+  }
+  state.editHistory.lastReason = reason;
+  state.editHistory.lastAt = now;
+  syncEditHistoryUi();
+}
+
+function applyEditSnapshot(snapshot, message) {
+  stopPlayback();
+  Object.assign(state.trim, snapshot.trim || {});
+  Object.assign(state.trimEditor, snapshot.trimEditor || {});
+  state.monitoring.previewGainOverride = null;
+  state.monitoring.previewEditOverride = null;
+  invalidateSeriesProposal();
+  markEditChanged("edit-history");
+  syncTrimUi({ emit: false });
+  syncTrimEditorUi();
+  refreshMonitoringGraph();
+  syncEditHistoryUi();
+  showToast(message);
+  emitState("edit-history");
+}
+
+function undoEditChange() {
+  const snapshot = state.editHistory.past.pop();
+  if (!snapshot) return;
+  state.editHistory.future.push(editSnapshot());
+  applyEditSnapshot(snapshot, "Den senaste trim-, tonings- eller gainändringen ångrades.");
+}
+
+function redoEditChange() {
+  const snapshot = state.editHistory.future.pop();
+  if (!snapshot) return;
+  state.editHistory.past.push(editSnapshot());
+  applyEditSnapshot(snapshot, "Redigeringen gjordes om.");
+}
+
 function applyTrimSelection() {
   if (state.trimEditor.unlocked) {
     showToast("Lås trimfönstret innan du tillämpar urvalet.", "error");
     return;
   }
   if (state.trimEditor.applied) return;
+  recordEditHistory("apply-trim");
   state.trim.startFrame = toFrame(state.trim.startSeconds);
   state.trim.endFrame = toFrame(state.trim.endSeconds);
   state.trimEditor.appliedStartSeconds = state.trim.startSeconds;
@@ -2899,6 +3206,7 @@ function setTrimWindowPosition(startSeconds, { commit = true } = {}) {
   if (!(sourceDuration > 0) || !(windowLength > 0)) return false;
   const start = clamp(startSeconds, 0, Math.max(0, sourceDuration - windowLength));
   if (Math.abs(start - state.trim.startSeconds) < 0.5 / Math.max(1, sampleRate())) return false;
+  if (commit) recordEditHistory("move-trim-window");
   state.trim.startSeconds = start;
   state.trim.endSeconds = start + windowLength;
   syncTrimUi({ emit: false });
@@ -2928,6 +3236,7 @@ function resizeTrimWindowToTarget() {
   const currentCenter = selectionDurationSeconds() > 0
     ? (state.trim.startSeconds + state.trim.endSeconds) / 2
     : state.playback.currentSeconds;
+  recordEditHistory("resize-trim-window");
   state.trim.startSeconds = clamp(currentCenter - windowLength / 2, 0, Math.max(0, sourceDuration - windowLength));
   state.trim.endSeconds = state.trim.startSeconds + windowLength;
   syncTrimUi({ emit: false });
@@ -2954,6 +3263,7 @@ function applyTrimWindow(anchor) {
     const center = clamp(elements.audio.currentTime || state.playback.currentSeconds, 0, sourceDuration);
     start = clamp(center - windowLength / 2, 0, Math.max(0, sourceDuration - windowLength));
   }
+  recordEditHistory("place-trim-window");
   state.trim.startSeconds = start;
   state.trim.endSeconds = start + windowLength;
   syncTrimUi({ emit: false });
@@ -2966,6 +3276,7 @@ function applyTrimWindow(anchor) {
 function setBoundary(boundary, seconds) {
   if (!requireTrimEditorUnlocked()) return;
   const duration = durationSeconds();
+  recordEditHistory(`boundary-${boundary}`);
   if (boundary === "start") {
     state.trim.startSeconds = clamp(seconds, 0, Math.max(0, state.trim.endSeconds - 1 / sampleRate()));
   } else {
@@ -3030,6 +3341,7 @@ function updateFade(kind, value, enabled = true) {
   const key = kind === "in" ? "fadeInSeconds" : "fadeOutSeconds";
   const number = kind === "in" ? elements.fadeInNumber : elements.fadeOutNumber;
   const maximum = Math.max(0.01, selectionDurationSeconds() || 60);
+  recordEditHistory(`fade-${kind}`, editSnapshot(), { coalesce: true });
   if (!enabled) {
     if (state.trim[key] > 0) number.dataset.lastValue = String(state.trim[key]);
     state.trim[key] = 0;
@@ -3100,6 +3412,7 @@ function preserveSeries() {
 
 function updateGain(value, options = {}) {
   const gain = clamp(value, -60, 24);
+  if (Math.abs(gain - state.trim.gainDb) > 1e-9) recordEditHistory("global-gain", editSnapshot(), { coalesce: !options.seriesApply && !options.peakApply });
   state.trim.gainDb = Math.round(gain * 10) / 10;
   if (!options.seriesApply) invalidateSeriesProposal();
   elements.gainNumber.value = state.trim.gainDb.toFixed(1);
@@ -3609,11 +3922,14 @@ function drawLineSeries(context, values, xAtIndex, yAtValue, color, width = 1.4)
 function drawTimeline(canvas, trimMode = false) {
   if (!canvas) return;
   const { context, width, height } = canvasMetrics(canvas);
-  const analysis = state.analysis;
-  const fullDuration = Math.max(0.001, durationSeconds());
+  const processedCanvas = canvas === elements.preflightCanvas;
+  const analysis = processedCanvas
+    ? (state.regionAnalysis?.processed || state.regionAnalysis || null)
+    : state.analysis;
+  const fullDuration = Math.max(0.001, processedCanvas ? selectionDurationSeconds() : durationSeconds());
   const compactExport = canvas === elements.exportTrimCanvas;
-  const viewStart = compactExport ? 0 : clamp(state.view.startSeconds, 0, fullDuration);
-  const viewEnd = compactExport ? fullDuration : clamp(state.view.endSeconds || fullDuration, viewStart + 0.001, fullDuration);
+  const viewStart = compactExport || processedCanvas ? 0 : clamp(state.view.startSeconds, 0, fullDuration);
+  const viewEnd = compactExport || processedCanvas ? fullDuration : clamp(state.view.endSeconds || fullDuration, viewStart + 0.001, fullDuration);
   const viewDuration = viewEnd - viewStart;
   const labelWidth = width < 520 ? 44 : 58;
   const plotLeft = labelWidth;
@@ -3624,10 +3940,12 @@ function drawTimeline(canvas, trimMode = false) {
   context.fillStyle = "#0c1728";
   context.fillRect(0, 0, width, height);
 
-  const visibleTracks = compactExport
+  const visibleTracks = processedCanvas
+    ? ["waveform", "peaks"]
+    : compactExport
     ? ["waveform", "markers"]
     : Object.entries(state.view.tracks).filter(([, visible]) => visible).map(([name]) => name);
-  const weights = { waveform: compactExport ? 0.86 : trimMode ? 0.62 : 0.54, loudness: 0.25, peaks: 0.15, correlation: 0.14, markers: compactExport ? 0.14 : 0.08 };
+  const weights = { waveform: processedCanvas ? 0.82 : compactExport ? 0.86 : trimMode ? 0.62 : 0.54, loudness: 0.25, peaks: processedCanvas ? 0.18 : 0.15, correlation: 0.14, markers: compactExport ? 0.14 : 0.08 };
   const totalWeight = visibleTracks.reduce((sum, track) => sum + weights[track], 0) || 1;
   let cursorY = 0;
   const tracks = {};
@@ -3676,6 +3994,12 @@ function drawTimeline(canvas, trimMode = false) {
     const dataStart = detailMatches ? toSeconds(detail.startFrame) : 0;
     const dataEnd = detailMatches ? toSeconds(detail.endFrame) : fullDuration;
     const track = tracks.waveform;
+    const visualEdit = trimMode && state.monitoring.previewMode === "export" && !processedCanvas;
+    const visualGeometry = visualEdit ? fadeGeometry() : null;
+    const globalVisualGain = visualEdit ? 10 ** (state.trim.gainDb / 20) : 1;
+    const visualGainAt = seconds => visualEdit
+      ? globalVisualGain * fadeEnvelopeAt(seconds, visualGeometry) * localGainFactorAtFrame(activeLocalGainRegions(), Math.round(seconds * sampleRate()))
+      : 1;
     const renderChannels = channels.slice(0, 2);
     const channelCount = Math.max(1, renderChannels.length);
     renderChannels.forEach((channel, channelIndex) => {
@@ -3685,8 +4009,8 @@ function drawTimeline(canvas, trimMode = false) {
       const half = laneHeight * 0.39;
       const minSeries = channel.min || [];
       const maxSeries = channel.max || [];
-      const color = channelIndex === 0 ? "rgba(89,151,209,.88)" : "rgba(154,126,207,.78)";
-      context.fillStyle = channelIndex === 0 ? "rgba(89,151,209,.055)" : "rgba(154,126,207,.055)";
+      const color = channelIndex === 0 ? "rgba(246,226,185,.9)" : "rgba(235,91,8,.88)";
+      context.fillStyle = channelIndex === 0 ? "rgba(246,226,185,.055)" : "rgba(235,91,8,.065)";
       context.fillRect(plotLeft, laneTop, plotWidth, laneHeight);
       if (channelIndex > 0) {
         context.strokeStyle = "rgba(255,255,255,.22)";
@@ -3696,9 +4020,10 @@ function drawTimeline(canvas, trimMode = false) {
         context.lineTo(width, laneTop);
         context.stroke();
       }
-      context.fillStyle = channelIndex === 0 ? "rgba(137,196,250,.95)" : "rgba(194,164,238,.95)";
+      context.fillStyle = channelIndex === 0 ? "rgba(246,226,185,.98)" : "rgba(255,156,99,.98)";
       context.font = "800 10px ui-sans-serif, system-ui";
-      context.fillText(channelCount === 1 ? "MONO" : channelIndex === 0 ? "L" : "R", 8, laneTop + 15);
+      const laneLabel = channelCount === 1 ? "MONO" : channelIndex === 0 ? "L" : "R";
+      context.fillText(`${laneLabel}${processedCanvas || visualEdit ? " · VALT" : ""}`, 8, laneTop + 15);
       context.strokeStyle = color;
       context.lineWidth = Math.max(0.7, plotWidth / Math.max(1, bins));
       context.beginPath();
@@ -3708,10 +4033,25 @@ function drawTimeline(canvas, trimMode = false) {
       for (let index = startBin; index < endBin; index += step) {
         const seconds = dataStart + index / Math.max(1, bins - 1) * (dataEnd - dataStart);
         const x = xAtTime(seconds);
-        const minimum = clamp(finite(minSeries[index]) ?? 0, -1.35, 1.35);
-        const maximum = clamp(finite(maxSeries[index]) ?? 0, -1.35, 1.35);
+        const gain = visualGainAt(seconds);
+        const minimum = clamp((finite(minSeries[index]) ?? 0) * gain, -1.35, 1.35);
+        const maximum = clamp((finite(maxSeries[index]) ?? 0) * gain, -1.35, 1.35);
         context.moveTo(x, center - maximum * half);
         context.lineTo(x, center - minimum * half);
+      }
+      context.stroke();
+      context.strokeStyle = "rgba(244,92,72,.98)";
+      context.lineWidth = Math.max(1.2, plotWidth / Math.max(1, bins));
+      context.beginPath();
+      for (let index = startBin; index < endBin; index += step) {
+        const seconds = dataStart + index / Math.max(1, bins - 1) * (dataEnd - dataStart);
+        const gain = visualGainAt(seconds);
+        const minimum = (finite(minSeries[index]) ?? 0) * gain;
+        const maximum = (finite(maxSeries[index]) ?? 0) * gain;
+        if (minimum > -1 && maximum < 1) continue;
+        const x = xAtTime(seconds);
+        context.moveTo(x, center - clamp(maximum, -1.35, 1.35) * half);
+        context.lineTo(x, center - clamp(minimum, -1.35, 1.35) * half);
       }
       context.stroke();
       const sampleChannel = detailMatches ? channel : null;
@@ -3719,7 +4059,8 @@ function drawTimeline(canvas, trimMode = false) {
         context.beginPath();
         Array.from(sampleChannel.samples).forEach((value, sampleIndex) => {
           const x = plotLeft + sampleIndex / Math.max(1, sampleChannel.samples.length - 1) * plotWidth;
-          const y = center - clamp(value, -1.35, 1.35) * half;
+          const seconds = viewStart + sampleIndex / Math.max(1, sampleChannel.samples.length - 1) * viewDuration;
+          const y = center - clamp(value * visualGainAt(seconds), -1.35, 1.35) * half;
           if (sampleIndex) context.lineTo(x, y); else context.moveTo(x, y);
         });
         context.strokeStyle = color;
@@ -3731,6 +4072,15 @@ function drawTimeline(canvas, trimMode = false) {
       context.moveTo(plotLeft, center);
       context.lineTo(plotRight, center);
       context.stroke();
+      context.setLineDash([4, 4]);
+      context.strokeStyle = "rgba(244,92,72,.48)";
+      [1, -1].forEach(rail => {
+        context.beginPath();
+        context.moveTo(plotLeft, center - rail * half);
+        context.lineTo(plotRight, center - rail * half);
+        context.stroke();
+      });
+      context.setLineDash([]);
     });
     if (!renderChannels.length) {
       context.fillStyle = "rgba(255,255,255,.53)";
@@ -3763,9 +4113,9 @@ function drawTimeline(canvas, trimMode = false) {
     context.rect(plotLeft, track.top, plotWidth, track.height);
     context.clip();
     if (count) {
-      drawLineSeries(context, timelines.momentaryLufs, xAtIndex, yAtValue, "rgba(150,115,214,.72)", 1);
-      drawLineSeries(context, timelines.shortTermLufs, xAtIndex, yAtValue, "rgba(67,183,184,.92)", 1.4);
-      drawLineSeries(context, timelines.integratedLufs, xAtIndex, yAtValue, "rgba(226,171,71,.94)", 1.5);
+      drawLineSeries(context, timelines.momentaryLufs, xAtIndex, yAtValue, "rgba(246,226,185,.68)", 1);
+      drawLineSeries(context, timelines.shortTermLufs, xAtIndex, yAtValue, "rgba(89,151,209,.94)", 1.4);
+      drawLineSeries(context, timelines.integratedLufs, xAtIndex, yAtValue, "rgba(235,91,8,.96)", 1.5);
     }
     context.restore();
   }
@@ -3780,7 +4130,7 @@ function drawTimeline(canvas, trimMode = false) {
     context.beginPath();
     context.rect(plotLeft, track.top, plotWidth, track.height);
     context.clip();
-    drawLineSeries(context, timelines.samplePeakDbfs, xAtIndex, yAtValue, "rgba(84,205,197,.92)", 1.2);
+    drawLineSeries(context, timelines.samplePeakDbfs, xAtIndex, yAtValue, "rgba(235,91,8,.96)", 1.2);
     const zeroY = yAtValue(0);
     context.setLineDash([4, 4]);
     context.strokeStyle = "rgba(229,116,88,.65)";
@@ -3788,7 +4138,17 @@ function drawTimeline(canvas, trimMode = false) {
     context.moveTo(plotLeft, zeroY);
     context.lineTo(plotRight, zeroY);
     context.stroke();
+    const deliveryTarget = clamp(finite(state.series.ceilingDbtp) ?? -2, -60, 0);
+    const targetY = yAtValue(deliveryTarget);
+    context.strokeStyle = "rgba(246,226,185,.9)";
+    context.beginPath();
+    context.moveTo(plotLeft, targetY);
+    context.lineTo(plotRight, targetY);
+    context.stroke();
     context.setLineDash([]);
+    context.fillStyle = "rgba(246,226,185,.98)";
+    context.font = "800 9px ui-sans-serif, system-ui";
+    context.fillText(`MÅL ${formatDecimal(deliveryTarget, 1)}`, 7, Math.max(track.top + 12, targetY - 3));
     context.restore();
   }
 
@@ -3825,9 +4185,9 @@ function drawTimeline(canvas, trimMode = false) {
       const endX = xAtTime(marker.endSeconds ?? marker.seconds);
       const floatOverrange = marker.id.startsWith("overrange-") || marker.machineKind === "float-overrange";
       const possibleRumble = marker.machineKind === "possible-low-frequency-disturbance";
-      context.strokeStyle = floatOverrange ? "rgba(217,121,240,.98)" : possibleRumble ? "rgba(94,171,209,.95)" : marker.severity === "critical" ? "rgba(238,91,77,.95)" : marker.severity === "review" ? "rgba(226,171,71,.95)" : "rgba(92,181,190,.9)";
+      context.strokeStyle = floatOverrange ? "rgba(235,91,8,.98)" : possibleRumble ? "rgba(89,151,209,.95)" : marker.severity === "critical" ? "rgba(238,91,77,.95)" : marker.severity === "review" ? "rgba(246,226,185,.95)" : "rgba(118,165,208,.9)";
       if (endX - x > 2) {
-        context.fillStyle = floatOverrange ? "rgba(217,121,240,.2)" : possibleRumble ? "rgba(94,171,209,.16)" : marker.severity === "critical" ? "rgba(238,91,77,.18)" : marker.severity === "review" ? "rgba(226,171,71,.14)" : "rgba(92,181,190,.12)";
+        context.fillStyle = floatOverrange ? "rgba(235,91,8,.2)" : possibleRumble ? "rgba(89,151,209,.16)" : marker.severity === "critical" ? "rgba(238,91,77,.18)" : marker.severity === "review" ? "rgba(246,226,185,.14)" : "rgba(118,165,208,.12)";
         context.fillRect(x, 0, Math.max(2, endX - x), height);
       }
       context.lineWidth = 1;
@@ -3845,7 +4205,7 @@ function drawTimeline(canvas, trimMode = false) {
     });
   }
 
-  if (activeLocalGainRegions().length) {
+  if (!processedCanvas && activeLocalGainRegions().length) {
     context.save();
     context.beginPath();
     context.rect(plotLeft, 0, plotWidth, height);
@@ -3861,9 +4221,9 @@ function drawTimeline(canvas, trimMode = false) {
       const releaseX = xAtTime(releaseStart);
       const endX = xAtTime(end);
       const floorY = height - 10 - Math.min(46, Math.abs(region.gainDb) / 60 * 46);
-      context.fillStyle = "rgba(217,121,240,.10)";
+      context.fillStyle = "rgba(235,91,8,.10)";
       context.fillRect(startX, 0, Math.max(2, endX - startX), height);
-      context.strokeStyle = "rgba(236,166,252,.96)";
+      context.strokeStyle = "rgba(255,156,99,.96)";
       context.lineWidth = 2;
       context.beginPath();
       context.moveTo(startX, height - 10);
@@ -3871,14 +4231,14 @@ function drawTimeline(canvas, trimMode = false) {
       context.lineTo(releaseX, floorY);
       context.lineTo(endX, height - 10);
       context.stroke();
-      context.fillStyle = "rgba(247,213,255,.96)";
+      context.fillStyle = "rgba(246,226,185,.98)";
       context.font = "800 10px ui-sans-serif, system-ui";
       context.fillText(`${formatDecimal(region.gainDb, 1)} dB`, Math.max(plotLeft + 3, attackX + 3), Math.max(12, floorY - 4));
     });
     context.restore();
   }
 
-  const selectionVisible = state.file && (trimMode || compactExport
+  const selectionVisible = !processedCanvas && state.file && (trimMode || compactExport
     || state.trim.startSeconds > 0.0005
     || Math.abs(state.trim.endSeconds - fullDuration) > 0.0005);
   if (selectionVisible) {
@@ -3887,7 +4247,7 @@ function drawTimeline(canvas, trimMode = false) {
     context.fillStyle = trimMode || compactExport ? "rgba(4,10,18,.7)" : "rgba(4,10,18,.48)";
     context.fillRect(plotLeft, 0, Math.max(0, startX - plotLeft), height);
     context.fillRect(endX, 0, Math.max(0, plotRight - endX), height);
-    context.strokeStyle = trimMode ? "rgba(217,239,236,.75)" : "rgba(226,171,71,.92)";
+    context.strokeStyle = trimMode ? "rgba(246,226,185,.78)" : "rgba(235,91,8,.94)";
     context.lineWidth = trimMode ? 1 : 2;
     context.setLineDash(trimMode ? [] : [7, 5]);
     context.strokeRect(Math.max(plotLeft, startX), 1, Math.max(0, Math.min(plotRight, endX) - Math.max(plotLeft, startX)), Math.max(0, height - 2));
@@ -3948,8 +4308,9 @@ function drawTimeline(canvas, trimMode = false) {
     });
   }
 
-  if (state.file && state.playback.currentSeconds >= viewStart && state.playback.currentSeconds <= viewEnd) {
-    const x = xAtTime(state.playback.currentSeconds);
+  const displayedPlayhead = processedCanvas ? state.playback.currentSeconds - state.trim.startSeconds : state.playback.currentSeconds;
+  if (state.file && displayedPlayhead >= viewStart && displayedPlayhead <= viewEnd) {
+    const x = xAtTime(displayedPlayhead);
     context.strokeStyle = "rgba(255,255,255,.88)";
     context.lineWidth = 1;
     context.beginPath();
@@ -3997,7 +4358,9 @@ function scheduleCanvasRender() {
   resizeFrame = requestAnimationFrame(() => {
     drawTimeline(elements.analysisCanvas, false);
     const trimGeometry = drawTimeline(elements.trimCanvas, true);
+    drawTimeline(elements.preflightCanvas, false);
     drawTimeline(elements.exportTrimCanvas, false);
+    drawSpectrogram();
     positionTrimLabels(trimGeometry);
     renderTimeAxis();
     const rangeStart = state.view.startSeconds;
@@ -4653,6 +5016,8 @@ async function applyPendingProjectToFile() {
     history: [],
     future: [],
   };
+  state.editHistory = { past: [], future: [], lastReason: null, lastAt: 0 };
+  syncEditHistoryUi();
   state.trimEditor = {
     unlocked: false,
     applied: true,
@@ -5524,6 +5889,9 @@ function renderHelp(section) {
 }
 
 function bindEvents() {
+  elements.fullscreenButton?.addEventListener("click", toggleAppFullscreen);
+  document.addEventListener("fullscreenchange", syncFullscreenUi);
+  document.addEventListener("webkitfullscreenchange", syncFullscreenUi);
   document.addEventListener("keydown", event => {
     const expanded = $(".timeline-card.is-timeline-expanded");
     if (!expanded) return;
@@ -5563,6 +5931,35 @@ function bindEvents() {
     }
   }));
   $$('[data-open-special="local-peaks"]').forEach((button) => button.addEventListener("click", () => elements.openLocalPeakWorkshop.click()));
+  $$('[data-waveform-action]').forEach(button => button.addEventListener("click", () => {
+    const action = button.dataset.waveformAction;
+    if (action === "local-peak") {
+      if (state.mode !== "trim") setMode("trim");
+      elements.openLocalPeakWorkshop?.click();
+      return;
+    }
+    if (action === "lower-all") {
+      if (state.mode !== "trim") setMode("trim");
+      const editedRadio = $("input[name='exportProfile'][value='edited-wav']");
+      if (editedRadio) editedRadio.checked = true;
+      setExportProfile("edited-wav");
+      applyNegativePeakCeiling(state.series.ceilingDbtp);
+      state.monitoring.previewMode = "export";
+      const exportRadio = $("input[name='previewMode'][value='export']");
+      if (exportRadio) exportRadio.checked = true;
+      syncAuditionUi();
+      scheduleCanvasRender();
+      return;
+    }
+    if (action === "preflight") {
+      if (!state.trimEditor.applied) {
+        showToast("Tillämpa eller återställ trimfönstret innan exporturvalet analyseras.", "error");
+        return;
+      }
+      setMode("preflight");
+      requestRegionAnalysis();
+    }
+  }));
   $("#closeWorkspaceModuleButton")?.addEventListener("click", closeWorkspaceModule);
   elements.workspaceModuleDialog?.addEventListener("close", restoreWorkspaceModule);
   elements.workspaceModuleDialog?.addEventListener("click", (event) => {
@@ -5965,6 +6362,7 @@ function bindEvents() {
     }
     if (cancelled) return;
     if (gesture.moved && gesture.target) {
+      recordEditHistory("drag-trim-window", editSnapshot({ trim: { startSeconds: gesture.startBoundary, endSeconds: gesture.endBoundary, startFrame: toFrame(gesture.startBoundary), endFrame: toFrame(gesture.endBoundary) } }));
       markTrimCandidateChanged(`Trimfönstret är ${formatTime(selectionDurationSeconds())} från ${formatTime(state.trim.startSeconds)} till ${formatTime(state.trim.endSeconds)}. Lås det när placeringen känns rätt.`);
       if (gesture.target === "window") activateTrimAudition();
       return;
@@ -6200,6 +6598,7 @@ function bindEvents() {
   $$("[data-preview-boundary]").forEach((button) => button.addEventListener("click", () => previewBoundary(button.dataset.previewBoundary)));
   $("#resetTrimButton").addEventListener("click", () => {
     if (!requireTrimEditorUnlocked()) return;
+    recordEditHistory("reset-trim-window");
     state.trim.startSeconds = 0;
     state.trim.endSeconds = durationSeconds();
     syncTrimUi({ emit: false });
@@ -6218,6 +6617,8 @@ function bindEvents() {
   elements.gainNumber.addEventListener("change", () => updateGain(elements.gainNumber.value));
   elements.gainRange.addEventListener("input", () => updateGain(elements.gainRange.value));
   $("#resetGainButton").addEventListener("click", () => updateGain(0));
+  elements.undoEdit?.addEventListener("click", undoEditChange);
+  elements.redoEdit?.addEventListener("click", redoEditChange);
   [$("#enableEditedProfileForFadesButton"), $("#enableEditedProfileForGainButton")].forEach((button) => button?.addEventListener("click", () => {
     const editedRadio = $("input[name='exportProfile'][value='edited-wav']");
     if (editedRadio) editedRadio.checked = true;
@@ -6285,6 +6686,25 @@ function bindEvents() {
   elements.storedExportsList.addEventListener("click", handleStoredExportAction);
   elements.clearStoredExports.addEventListener("click", clearStoredExports);
   elements.runSpectralDiagnostics.addEventListener("click", requestSpectralDiagnostics);
+  elements.runSpectrogram?.addEventListener("click", requestSpectrogram);
+  elements.spectrogramMaxFrequency?.addEventListener("change", drawSpectrogram);
+  elements.spectrogramFloor?.addEventListener("change", () => {
+    state.spectrogram = null;
+    if (elements.spectrogramEmpty) elements.spectrogramEmpty.hidden = false;
+    if (elements.spectrogramStatus) elements.spectrogramStatus.textContent = "Visningsgolvet ändrades. Bygg om spektrogrammet för det synliga området.";
+    if (elements.runSpectrogram) elements.runSpectrogram.textContent = "Bygg om synligt område";
+    drawSpectrogram();
+  });
+  elements.spectrogramCanvas?.addEventListener("click", (event) => {
+    const result = state.spectrogram;
+    if (!result) return;
+    const rect = elements.spectrogramCanvas.getBoundingClientRect();
+    const labelWidth = rect.width < 520 ? 52 : 66;
+    const ratio = clamp((event.clientX - rect.left - labelWidth) / Math.max(1, rect.width - labelWidth - 10), 0, 1);
+    const seconds = result.startSeconds + ratio * (result.endSeconds - result.startSeconds);
+    elements.audio.currentTime = seconds;
+    syncPlaybackPosition(seconds);
+  });
   $$('input[name="publicationCheck"]').forEach(input => input.addEventListener("change", () => {
     state.publication.manual[input.value] = input.checked;
     state.dirty = true;

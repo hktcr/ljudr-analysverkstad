@@ -7,6 +7,7 @@ import {
   calculateLoudnessRange,
   FirTruePeakEstimator,
   analyzeRegion,
+  analyzeSpectrogram,
   analyzeSpectralDiagnostics,
   analyzeWaveformDetail,
 } from "../src/dsp-core.js";
@@ -340,4 +341,26 @@ test("spektral diagnostik samplar deterministiskt utan EQ-beslut", async () => {
   assert.match(result.interpretation, /Inte full spektralanalys/);
   assert.match(result.interpretation, /vindljud i grenar/);
   assert.doesNotMatch(JSON.stringify(result), /equaliz|auto.?eq/i);
+});
+
+test("lokalt spektrogram skiljer kanalernas frekvensinnehåll utan nätverk", async () => {
+  const sampleRate = 48000;
+  const frames = Array.from({ length: sampleRate / 2 }, (_, index) => [
+    0.5 * Math.sin(2 * Math.PI * 1000 * index / sampleRate),
+    0.5 * Math.sin(2 * Math.PI * 3000 * index / sampleRate),
+  ]);
+  const result = await analyzeSpectrogram(makeWav({ sampleRate, frames }), {
+    fftSize: 1024,
+    columns: 32,
+    floorDb: -100,
+  });
+  const bin1000 = Math.round(1000 / result.frequencyResolutionHz);
+  const bin3000 = Math.round(3000 / result.frequencyResolutionHz);
+  const averageBin = (channel, bin) => Array.from({ length: result.columns }, (_, column) => channel[column * result.binCount + bin]).reduce((sum, value) => sum + value, 0) / result.columns;
+  assert.equal(result.scope, "local-visible-range");
+  assert.equal(result.windowFunction, "Hann");
+  assert.equal(result.channels, 2);
+  assert.equal(result.channelData[0].length, result.columns * result.binCount);
+  assert.ok(averageBin(result.channelData[0], bin1000) > averageBin(result.channelData[0], bin3000) + 40);
+  assert.ok(averageBin(result.channelData[1], bin3000) > averageBin(result.channelData[1], bin1000) + 40);
 });

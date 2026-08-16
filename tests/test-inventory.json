@@ -1,6 +1,6 @@
 {
   "schema": "se.gaia.ljudr.test-inventory/1",
-  "release": "1.0.0-rc.16",
+  "release": "1.0.0-rc.18",
   "files": {
     "analysis-exchange.test.mjs": [
       "kanonisk JSON är nyckelordningsoberoende och digest stabil",
@@ -38,7 +38,8 @@
       "adaptiv vågformsdetalj ger L och R min max RMS samt sampel vid djup zoom",
       "True Peak får kanal och gruppfördröjningskorrigerad tid",
       "mono fold-down mäts och varaktig negativ korrelation blir navigerbar",
-      "spektral diagnostik samplar deterministiskt utan EQ-beslut"
+      "spektral diagnostik samplar deterministiskt utan EQ-beslut",
+      "lokalt spektrogram skiljer kanalernas frekvensinnehåll utan nätverk"
     ],
     "export.test.mjs": [
       "WAV-parsern läser ett vanligt stereo PCM-huvud",
@@ -148,7 +149,7 @@
       "alla service-workerresurser finns i den lokala MASTER"
     ],
     "worker-protocol.test.mjs": [
-      "analysworkern har jobId cancel stale-filter och fyra deterministiska operationer",
+      "analysworkern har jobId cancel stale-filter och fem deterministiska operationer",
       "exportworkern har samma jobbkontrakt och full OPFS-livscykel"
     ]
   },
@@ -158,5 +159,5 @@
       "Ren trimning bevarar PCM32 exakt"
     ]
   },
-  "total": 121
+  "total": 122
 }
